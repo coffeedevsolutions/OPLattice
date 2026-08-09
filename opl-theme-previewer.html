@@ -1,0 +1,986 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>OPL Theme Previewer</title>
+<style>
+:root{
+  --bg:#14171c; --panel:#1c2128; --panel2:#232a33; --line:#333c47;
+  --fg:#e6edf3; --dim:#8b96a3; --accent:#00aeff; --warn:#e3b341; --err:#f85149; --ok:#3fb950;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--fg);font:13px/1.45 system-ui,-apple-system,Segoe UI,sans-serif;overflow:hidden}
+button,select,input,textarea{font:inherit;color:inherit}
+button{background:var(--panel2);border:1px solid var(--line);border-radius:5px;padding:4px 9px;cursor:pointer}
+button:hover{border-color:var(--accent)}
+button.on{background:var(--accent);border-color:var(--accent);color:#04121c;font-weight:600}
+select,input[type=text],input[type=number]{background:#11151a;border:1px solid var(--line);border-radius:4px;padding:3px 6px}
+input[type=number]{width:76px}
+label{color:var(--dim)}
+h3{margin:0;padding:7px 10px;font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--dim);
+   border-bottom:1px solid var(--line);background:var(--panel2);position:sticky;top:0;z-index:2}
+
+#app{display:grid;grid-template-rows:auto 1fr;height:100%}
+#bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:7px 10px;background:var(--panel);border-bottom:1px solid var(--line)}
+#bar .sep{width:1px;height:20px;background:var(--line);margin:0 2px}
+#bar .grow{flex:1}
+#main{display:grid;grid-template-columns:230px 1fr 330px;min-height:0}
+#left,#right{background:var(--panel);overflow:auto;min-height:0}
+#left{border-right:1px solid var(--line)}
+#right{border-left:1px solid var(--line);display:flex;flex-direction:column}
+#center{display:grid;grid-template-rows:1fr auto;min-height:0;min-width:0}
+#stage{position:relative;overflow:auto;display:grid;place-items:center;background:
+  repeating-conic-gradient(#191d23 0% 25%,#15181d 0% 50%) 50%/16px 16px}
+#stack{position:relative;line-height:0;box-shadow:0 0 0 1px var(--line),0 8px 40px #0008}
+#stack canvas{position:absolute;inset:0;width:100%;height:100%;image-rendering:pixelated}
+#stack canvas:first-child{position:relative}
+#cOverlay{cursor:default}
+
+#tabs{display:flex;gap:4px;padding:6px 10px 0}
+#tabs button{border-bottom-left-radius:0;border-bottom-right-radius:0;padding:4px 12px}
+
+#tree{font-family:var(--mono);font-size:11.5px}
+.el{padding:3px 8px;border-left:3px solid transparent;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.el:hover{background:#ffffff08}
+.el.sel{background:#00aeff22;border-left-color:var(--accent)}
+.el.ghost{color:var(--dim);font-style:italic}
+.el .n{color:var(--dim)}
+.el .b{display:inline-block;margin-left:5px;font-size:9px;padding:0 4px;border-radius:6px;background:#f8514933;color:var(--err)}
+.el .b.w{background:#e3b34133;color:var(--warn)}
+
+#insp{padding:6px 10px 14px}
+.row{display:grid;grid-template-columns:88px 1fr auto;gap:6px;align-items:center;margin:3px 0}
+.row>label{font-size:11.5px;font-family:var(--mono)}
+.row.def>label{opacity:.55}
+.row .rst{visibility:hidden;font-size:10px;padding:1px 5px;background:none;border-color:transparent;color:var(--dim)}
+.row:hover .rst{visibility:visible}
+.row.def .rst{visibility:hidden!important}
+.grp{margin-top:10px;border-top:1px solid var(--line);padding-top:6px}
+.grp>summary{cursor:pointer;color:var(--dim);font-size:11px;text-transform:uppercase;letter-spacing:.07em}
+.hint{color:var(--dim);font-size:11px;margin:4px 0 8px}
+.swatch{display:flex;gap:5px;align-items:center}
+.swatch input[type=color]{width:26px;height:22px;padding:0;border:1px solid var(--line);background:none;border-radius:4px}
+
+#cfg{width:100%;height:100%;min-height:120px;border:0;border-top:1px solid var(--line);background:#0f1216;
+  color:#cdd9e5;font-family:var(--mono);font-size:11.5px;padding:8px 10px;resize:none;outline:none;tab-size:4}
+#cfgWrap{display:grid;grid-template-rows:auto 1fr;min-height:0;height:210px}
+#cfgWrap.big{height:52vh}
+
+#diags{overflow:auto;flex:1;min-height:120px}
+.d{display:grid;grid-template-columns:auto 1fr;gap:7px;padding:5px 9px;border-bottom:1px solid #ffffff0d;cursor:pointer;font-size:11.5px}
+.d:hover{background:#ffffff08}
+.d .ic{font-weight:700;font-size:10px;letter-spacing:.05em}
+.d.error .ic{color:var(--err)} .d.warn .ic{color:var(--warn)} .d.info .ic{color:var(--dim)}
+.d code{font-family:var(--mono);font-size:10.5px;color:var(--dim);display:block;margin-top:2px}
+#memTable{width:100%;border-collapse:collapse;font-size:11px;font-family:var(--mono)}
+#memTable th,#memTable td{text-align:left;padding:2px 9px;border-bottom:1px solid #ffffff0d}
+#memTable td.n{text-align:right}
+.mem-ok{color:var(--ok)} .mem-warn{color:var(--warn)} .mem-err{color:var(--err)}
+
+#drop{position:fixed;inset:0;background:#000c;display:none;place-items:center;z-index:50;font-size:20px;color:var(--accent)}
+#drop.on{display:grid}
+.empty{padding:14px 10px;color:var(--dim);font-size:12px}
+kbd{font-family:var(--mono);font-size:10.5px;background:#0f1216;border:1px solid var(--line);border-radius:3px;padding:0 4px}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="bar">
+    <button id="btnFolder">Open theme folder…</button>
+    <button id="btnLive" title="File System Access API: watch the folder and reload on change">Live reload</button>
+    <button id="btnArt" title="Optional ART folder with &lt;SERIAL&gt;_&lt;PATTERN&gt;.png files">ART folder…</button>
+    <span class="sep"></span>
+    <label>Aspect</label>
+    <button id="btn43" class="on">4:3</button><button id="btn169">16:9</button>
+    <span class="sep"></span>
+    <label>Zoom</label>
+    <select id="zoom">
+      <option value="fit">Fit</option><option value="1">1×</option>
+      <option value="2" selected>2×</option><option value="3">3×</option>
+    </select>
+    <button id="btnSmooth" title="Smooth vs nearest-neighbour upscaling">Smooth</button>
+    <span class="sep"></span>
+    <button id="btnGrid" title="8px grid">Grid</button>
+    <button id="btnSnap" title="Snap drags to 8px">Snap</button>
+    <button id="btnPlasma" class="on" title="Plasma vs flat bg_color fill">Plasma</button>
+    <button id="btnLoad" title="Show the LoadingIcon overlay">Busy icon</button>
+    <span class="grow"></span>
+    <span id="status" style="color:var(--dim)"></span>
+    <button id="btnExport">Export conf_theme.cfg</button>
+    <button id="btnSave" title="Write back to the opened folder" disabled>Save in place</button>
+  </div>
+
+  <div id="main">
+    <div id="left">
+      <h3>Elements</h3>
+      <div id="tree"></div>
+      <h3>Game list</h3>
+      <div id="games" style="font-size:11.5px"></div>
+    </div>
+
+    <div id="center">
+      <div id="stage">
+        <div id="stack">
+          <canvas id="cScreen" width="640" height="480"></canvas>
+          <canvas id="cOverlay" width="640" height="480" tabindex="0"></canvas>
+        </div>
+      </div>
+      <div id="cfgWrap">
+        <h3 style="display:flex;justify-content:space-between;align-items:center">
+          <span>conf_theme.cfg</span>
+          <span><button id="btnBig" style="padding:1px 7px;font-size:10px">Expand</button></span>
+        </h3>
+        <textarea id="cfg" spellcheck="false" placeholder="Open a theme folder, or paste a conf_theme.cfg here."></textarea>
+      </div>
+    </div>
+
+    <div id="right">
+      <div id="tabs"></div>
+      <h3>Inspector</h3>
+      <div id="insp"><div class="empty">Select an element on the canvas or in the list.</div></div>
+      <h3>Validation</h3>
+      <div id="diags"></div>
+      <h3>PS2 art cache estimate</h3>
+      <div id="mem"></div>
+    </div>
+  </div>
+</div>
+<div id="drop">Drop a theme folder</div>
+
+<script>
+"use strict";
+/* =========================================================================
+   OPL Theme Previewer
+   Behaviour is derived from Open-PS2-Loader main @ 3e3f34e (v1.2.0-Beta).
+   Section references like (§6.1) point at docs/THEME-FORMAT.md.
+   ========================================================================= */
+
+// ===== OPL-CORE-BEGIN =====
+// Pure, DOM-free logic: cfg parsing, cfg writing, theme building, validation.
+// tests/run.mjs extracts everything between the CORE markers and imports it,
+// so the tests exercise exactly the code that ships.
+
+/* ---------------------------------------------------------------- constants */
+
+const SCREEN_W = 640, SCREEN_H = 480;          // rmGetScreenExtents (§9)
+const MENU_ITEM_HEIGHT = 19;                    // include/opl.h:222
+const MENU_POS_V = 50, HINT_HEIGHT = 32;        // themes.c:13
+const DECORATOR_SIZE = 20;                      // themes.c:15
+const DIM_UNDEF = -1;
+const ALIGN_NONE = 0, ALIGN_CENTER = 10;        // VCENTER|HCENTER (renderman.h:29)
+const SCALING_NONE = 0, SCALING_RATIO = 1;
+const SIZING_NONE = -1, SIZING_CLIP = 0, SIZING_WRAP = 1;
+const DISPLAY_ALWAYS = 0, DISPLAY_DEFINED = 1, DISPLAY_NEVER = 2;
+const FNT_DEFAULT_SIZE = 17;                    // FNTSYS_DEFAULT_SIZE
+const KEY_MAX = 32, VAL_MAX = 256;              // config.h:131
+const TINT = { r: 0x80, g: 0x80, b: 0x80 };     // gDefaultCol — neutral multiply
+
+// elementsType[] in declaration order (themes.c:62). Case-sensitive.
+const ELEMENT_TYPES = ["AttributeText","StaticText","AttributeImage","GameImage","StaticImage",
+  "Background","MenuIcon","MenuText","ItemsList","ItemIcon","ItemCover","ItemText","HintText",
+  "InfoHintText","LoadingIcon","BdmIndex","GameCountText"];
+
+// Per-type defaults, transcribed from addGUIElem (themes.c:1023-1083) — see §7.
+// `color:'text'` = theme textColor, `color:'tint'` = gDefaultCol.
+const D = (x,y,aligned,width,height,scaled,color,internal,extra) =>
+  ({x,y,aligned,width,height,scaled,color,internal,...(extra||{})});
+const ELEMENT_DEFAULTS = {
+  AttributeText:  D(0,0,ALIGN_CENTER,DIM_UNDEF,DIM_UNDEF,SCALING_RATIO,"text","AttributeText"),
+  StaticText:     D(0,0,ALIGN_CENTER,DIM_UNDEF,DIM_UNDEF,SCALING_RATIO,"text","StaticText"),
+  GameCountText:  D(0,0,ALIGN_CENTER,DIM_UNDEF,DIM_UNDEF,SCALING_RATIO,"text","StaticText"),
+  AttributeImage: D(0,0,ALIGN_CENTER,DIM_UNDEF,DIM_UNDEF,SCALING_RATIO,"tint","AttributeImage",{count:1}),
+  GameImage:      D(0,0,ALIGN_CENTER,DIM_UNDEF,DIM_UNDEF,SCALING_RATIO,"tint","GameImage",{count:1}),
+  StaticImage:    D(0,0,ALIGN_CENTER,DIM_UNDEF,DIM_UNDEF,SCALING_RATIO,"tint","StaticImage"),
+  Background:     D(0,0,ALIGN_NONE,SCREEN_W,SCREEN_H,SCALING_NONE,"tint","Background",{count:1}),
+  MenuIcon:       D(320,400,ALIGN_CENTER,DIM_UNDEF,DIM_UNDEF,SCALING_RATIO,"tint","MenuIcon"),
+  MenuText:       D(320,20,ALIGN_CENTER,200,20,SCALING_RATIO,"text","MenuText"),
+  ItemsList:      D(0,0,ALIGN_NONE,DIM_UNDEF,DIM_UNDEF,SCALING_RATIO,"text","ItemsList"),
+  ItemIcon:       D(0,0,ALIGN_CENTER,64,64,SCALING_RATIO,"tint","GameImage",{pattern:"ICO",count:20}),
+  ItemCover:      D(0,0,ALIGN_CENTER,DIM_UNDEF,DIM_UNDEF,SCALING_RATIO,"tint","GameImage",{pattern:"COV",count:10}),
+  ItemText:       D(0,0,ALIGN_CENTER,DIM_UNDEF,DIM_UNDEF,SCALING_RATIO,"text","ItemText"),
+  HintText:       D(16,-HINT_HEIGHT,ALIGN_NONE,12,20,SCALING_RATIO,"text","HintText"),
+  InfoHintText:   D(16,-HINT_HEIGHT,ALIGN_NONE,12,20,SCALING_RATIO,"text","InfoHintText"),
+  LoadingIcon:    D(-40,-60,ALIGN_CENTER,DIM_UNDEF,DIM_UNDEF,SCALING_RATIO,"tint","LoadingIcon"),
+  BdmIndex:       D(320,355,ALIGN_CENTER,DIM_UNDEF,DIM_UNDEF,SCALING_RATIO,"tint","BdmIndex"),
+};
+// The 2nd ItemsList in a theme is built from different defaults (themes.c:1058).
+const ITEMSLIST_2ND = D(42,42,ALIGN_NONE,400,360,SCALING_RATIO,"text","ItemsList");
+// Injected fallbacks (validateBackgroundElems / validateItemsList).
+const INJECTED_BG = D(0,0,ALIGN_NONE,SCREEN_W,SCREEN_H,SCALING_NONE,"tint","Background",{pattern:"BG",count:1});
+const INJECTED_IL = D(42,42,ALIGN_NONE,373,316,SCALING_RATIO,"text","ItemsList");
+
+const THEME_DEFAULTS = {                        // §8
+  bg_color:      { r:0x28, g:0xC5, b:0xF9 },
+  text_color:    { r:0xFF, g:0xFF, b:0xFF },
+  ui_text_color: { r:0x58, g:0x68, b:0xB4 },
+  sel_text_color:{ r:0x00, g:0xAE, b:0xFF },
+};
+
+// Which keys each cfg type actually reads (§6.6). Used by the inspector and INVALID_ATTR.
+const COMMON_ATTRS = ["enabled","type","x","y","width","height","aligned","scaled","color","font"];
+const OVERLAY_ATTRS = ["overlay","overlay_ulx","overlay_uly","overlay_urx","overlay_ury",
+                       "overlay_llx","overlay_lly","overlay_lrx","overlay_lry"];
+const TYPE_ATTRS = {
+  AttributeText:  ["attribute","title","display","wrap"],
+  StaticText:     ["value","title","display","wrap"],
+  GameCountText:  ["title","display","wrap"],
+  AttributeImage: ["attribute","default",...OVERLAY_ATTRS],
+  GameImage:      ["pattern","count","default",...OVERLAY_ATTRS],
+  StaticImage:    ["default",...OVERLAY_ATTRS],
+  ItemIcon:       ["pattern","count","default",...OVERLAY_ATTRS],
+  ItemCover:      ["pattern","count","default",...OVERLAY_ATTRS],
+  Background:     ["pattern","count","default"],
+  ItemsList:      ["decorator"],
+  MenuIcon:[], MenuText:[], ItemText:[], HintText:[], InfoHintText:[], LoadingIcon:[], BdmIndex:[],
+};
+const REQUIRED_ATTR = {   // missing ⇒ element is built but never draws
+  StaticText:"value", AttributeText:"attribute", AttributeImage:"attribute",
+  GameImage:"pattern", StaticImage:"default",
+};
+
+/* ------------------------------------------------------------ tiny helpers */
+
+const isWS = c => c === " " || c === "\t";
+
+/** atoi(3): leading integer, trailing garbage ignored, non-numeric ⇒ 0 (config.c:342). */
+function atoi(s) {
+  const m = /^[ \t\n\r]*([+-]?\d+)/.exec(s || "");
+  return m ? (parseInt(m[1], 10) | 0) : 0;
+}
+
+/**
+ * strToColor (config.c:30). Returns {r,g,b} plus how it failed, because both
+ * failure modes are silent in OPL: no '#' ⇒ black, short value ⇒ partial.
+ */
+function parseColor(s) {
+  const out = { r:0, g:0, b:0, ok:true, reason:null };
+  if (!s || s[0] !== "#") { out.ok = false; out.reason = "nohash"; return out; }   // §1.5
+  const ch = ["r","g","b"];
+  let n = 0, cnt = 0, digits = 0;
+  for (let i = 1; i < s.length; i++) {
+    const v = parseInt(s[i], 16);
+    if (Number.isNaN(v)) break;                       // stops at the first non-hex digit
+    digits++;
+    if (n < 3) out[ch[n]] = out[ch[n]] * 16 + v;      // C accumulates: color[n] = color[n]*16 + fh
+    if (cnt === 1) { cnt = 0; n++; } else cnt++;
+  }
+  if (digits !== 6) { out.ok = false; out.reason = digits > 6 ? "long" : "short"; }
+  return out;
+}
+const colorToHex = c => "#" + [c.r,c.g,c.b].map(v => v.toString(16).padStart(2,"0").toUpperCase()).join("");
+const byteLen = s => { let n = 0; for (const ch of s) n += ch.codePointAt(0) < 0x80 ? 1 : encodeURIComponent(ch).split("%").length - 1; return n; };
+
+/* ============================================================ 1. cfg-parse */
+
+/**
+ * Parse a conf_theme.cfg into an ordered list of line records plus a key index,
+ * mirroring configReadFileBuffer (config.c:468). Nothing is discarded: comments,
+ * blank lines and malformed lines survive as records so writing is lossless.
+ */
+function parseConfig(text) {
+  const doc = { eol:"\n", trailingNewline:false, hadBOM:false, lines:[], index:new Map(), diags:[] };
+  if (text == null) text = "";
+  if (text.charCodeAt(0) === 0xFEFF) { doc.hadBOM = true; text = text.slice(1); }   // util.c:250
+  doc.eol = /\r\n/.test(text) ? "\r\n" : "\n";
+  if (text.endsWith("\n")) { doc.trailingNewline = true; text = text.replace(/\r?\n$/, ""); }
+
+  const rawLines = text.length === 0 && !doc.trailingNewline ? [] : text.split(/\r?\n/);
+  let prefix = "";
+
+  rawLines.forEach((raw, i) => {
+    const rec = { raw, kind:"other", indent:"", prefix:null, key:null, rawKey:null,
+                  value:null, lineNo:i+1 };
+    let p = 0;
+    while (p < raw.length && isWS(raw[p])) p++;                     // splitAssignment skips WS
+    const eq = raw.indexOf("=");
+
+    if (eq >= 0) {
+      // An assignment at column 0 clears the active prefix (config.c:487).
+      if (!isWS(raw[0])) prefix = "";
+      rec.kind = "assign";
+      rec.indent = raw.slice(0, p);
+      rec.rawKey = raw.slice(p, eq);
+      rec.value = raw.slice(eq + 1);
+      rec.prefix = prefix || null;
+      rec.key = prefix ? prefix + "_" + rec.rawKey : rec.rawKey;
+      if (byteLen(rec.key) >= KEY_MAX)
+        doc.diags.push(dg("warn","KEY_TOO_LONG",`Key "${rec.key}" is ${byteLen(rec.key)} bytes; OPL truncates keys to ${KEY_MAX-1}.`,i+1));
+      if (byteLen(rec.value) >= VAL_MAX)
+        doc.diags.push(dg("warn","VALUE_TOO_LONG",`Value on line ${i+1} is ${byteLen(rec.value)} bytes; OPL truncates values to ${VAL_MAX-1}.`,i+1));
+      if (!doc.index.has(rec.key)) doc.index.set(rec.key, []);
+      doc.index.get(rec.key).push(doc.lines.length);
+    } else {
+      // parsePrefix sees the untrimmed line and requires colon != position 0 (config.c:104).
+      const colon = raw.indexOf(":");
+      if (colon > 0) {
+        rec.kind = "prefix";
+        prefix = raw.slice(0, colon);
+        rec.prefix = prefix;
+        rec.indent = raw.slice(0, p);
+        if (raw.trim()[0] === "#")
+          doc.diags.push(dg("warn","COMMENT_PREFIX",
+            `Line ${i+1} looks like a comment but contains ":", so OPL treats it as a section header and every following indented key is stored under it. Remove the colon.`,i+1));
+        else if (p > 0)
+          doc.diags.push(dg("warn","INDENTED_SECTION",`Section "${prefix}" is indented, so its keys become "${prefix}_…" including the leading whitespace.`,i+1));
+      } else {
+        rec.kind = raw.trim() === "" ? "blank" : "other";
+        // blank/comment lines do NOT clear the prefix (config.c:500)
+      }
+    }
+    doc.lines.push(rec);
+  });
+
+  for (const [key, idxs] of doc.index) {
+    if (idxs.length > 1) {
+      const winner = doc.lines[idxs[idxs.length-1]];
+      doc.diags.push(dg("warn","DUP_KEY",
+        `"${key}" is set ${idxs.length} times (lines ${idxs.map(i=>doc.lines[i].lineNo).join(", ")}). OPL keeps the last value: "${winner.value.trim()}".`,
+        winner.lineNo));
+    }
+  }
+  return doc;
+}
+
+const dg = (severity, code, message, line, element) => ({ severity, code, message, line, element });
+
+/** Effective value of a key: the LAST occurrence wins (§11.4). null when absent. */
+function getStr(doc, key) {
+  const idxs = doc.index.get(key);
+  if (!idxs || !idxs.length) return null;
+  return doc.lines[idxs[idxs.length - 1]].value;
+}
+const hasKey = (doc, key) => doc.index.has(key);
+function getInt(doc, key, dflt) { const v = getStr(doc, key); return v === null ? dflt : atoi(v); }
+
+/**
+ * Every attribute suffix written for an element, whatever its type reads. The
+ * inspector needs this to tell "explicit" from "defaulted", and INVALID_ATTR
+ * needs to see keys the element's own init function never looks at.
+ */
+function keysFor(doc, name) {
+  if (!doc._suffix) {
+    doc._suffix = new Map();
+    for (const key of doc.index.keys()) {
+      const u = key.lastIndexOf("_");
+      if (u <= 0) continue;
+      // "main0_overlay_ulx" belongs to main0, not to main0_overlay.
+      for (let i = key.indexOf("_"); i > 0; i = key.indexOf("_", i + 1)) {
+        const el = key.slice(0, i), suf = key.slice(i + 1);
+        if (!doc._suffix.has(el)) doc._suffix.set(el, new Set());
+        doc._suffix.get(el).add(suf);
+      }
+    }
+  }
+  return doc._suffix.get(name) || new Set();
+}
+
+/* ============================================================ 2. cfg-write */
+
+function writeConfig(doc) {
+  let out = doc.lines.map(l => l.raw).join(doc.eol);
+  if (doc.trailingNewline) out += doc.eol;
+  return (doc.hadBOM ? "﻿" : "") + out;
+}
+
+function reindex(doc) {
+  doc.index = new Map();
+  doc.lines.forEach((l, i) => {
+    if (l.kind !== "assign") return;
+    if (!doc.index.has(l.key)) doc.index.set(l.key, []);
+    doc.index.get(l.key).push(i);
+  });
+  doc.lines.forEach((l, i) => { l.lineNo = i + 1; });
+}
+
+/** Split "main3_x" into ["main3","x"] using the section names actually present. */
+function splitKey(doc, key) {
+  const sections = new Set();
+  for (const l of doc.lines) if (l.prefix) sections.add(l.prefix);
+  let best = null;
+  for (const s of sections)
+    if (key.startsWith(s + "_") && (!best || s.length > best.length)) best = s;
+  if (best) return [best, key.slice(best.length + 1)];
+  const m = /^((?:apps)?(?:Main|Info|main|info|bg|il)\d*)_(.+)$/.exec(key);
+  return m ? [m[1], m[2]] : [null, key];
+}
+
+/**
+ * Set a key, rewriting a single existing line where possible (§3.1). Comments,
+ * ordering, indentation and unknown keys are untouched.
+ */
+function setKey(doc, key, value) {
+  value = String(value);
+  const idxs = doc.index.get(key);
+  if (idxs && idxs.length) {
+    const rec = doc.lines[idxs[idxs.length - 1]];      // edit the winner
+    rec.value = value;
+    rec.raw = rec.indent + rec.rawKey + "=" + value;
+    return doc;
+  }
+  const [section, sub] = splitKey(doc, key);
+
+  // Prefer inserting into an existing "section:" block.
+  if (section) {
+    let last = -1, indent = "\t";
+    for (let i = 0; i < doc.lines.length; i++) {
+      const l = doc.lines[i];
+      if (l.kind === "assign" && l.prefix === section) { last = i; indent = l.indent || "\t"; }
+    }
+    if (last >= 0) {
+      doc.lines.splice(last + 1, 0, mkAssign(indent, sub, value, section, key));
+      reindex(doc); return doc;
+    }
+    // Flat style: main3_type=… with no section header.
+    let flatLast = -1;
+    for (let i = 0; i < doc.lines.length; i++) {
+      const l = doc.lines[i];
+      if (l.kind === "assign" && !l.prefix && l.key.startsWith(section + "_")) flatLast = i;
+    }
+    if (flatLast >= 0) {
+      doc.lines.splice(flatLast + 1, 0, mkAssign("", key, value, null, key));
+      reindex(doc); return doc;
+    }
+    // No trace of the section at all (e.g. an injected default element): start one.
+    const prefersFlat = doc.lines.some(l => l.kind === "assign" && !l.prefix);
+    if (prefersFlat) {
+      doc.lines.push(mkAssign("", key, value, null, key));
+    } else {
+      if (doc.lines.length && doc.lines[doc.lines.length-1].kind !== "blank")
+        doc.lines.push({ raw:"", kind:"blank", indent:"", prefix:null, key:null, rawKey:null, value:null, lineNo:0 });
+      doc.lines.push({ raw:section + ":", kind:"prefix", indent:"", prefix:section, key:null, rawKey:null, value:null, lineNo:0 });
+      doc.lines.push(mkAssign("\t", sub, value, section, key));
+    }
+    reindex(doc); return doc;
+  }
+  doc.lines.push(mkAssign("", key, value, null, key));
+  reindex(doc); return doc;
+}
+
+const mkAssign = (indent, rawKey, value, prefix, key) =>
+  ({ raw: indent + rawKey + "=" + value, kind:"assign", indent, prefix, key, rawKey, value, lineNo:0 });
+
+/** Remove every line defining `key` (configRemoveKey drops all duplicates too). */
+function deleteKey(doc, key) {
+  const idxs = doc.index.get(key);
+  if (!idxs || !idxs.length) return doc;
+  const drop = new Set(idxs);
+  doc.lines = doc.lines.filter((_, i) => !drop.has(i));
+  reindex(doc);
+  return doc;
+}
+
+const cloneDoc = doc => parseConfig(writeConfig(doc));
+
+/* =========================================================== 3. theme-build */
+
+/** POS_MID / DIM_INF are 7-char prefix matches in the C (§6.1). */
+const isPosMid = s => s.startsWith("POS_MID");
+const isDimInf = s => s.startsWith("DIM_INF");
+
+/**
+ * initBasic (themes.c:668): resolve the ten common attributes for one element.
+ */
+function initBasic(doc, name, typeName, def, theme, diags) {
+  const el = {
+    name, typeName, internal: def.internal,
+    posX:0, posY:0, aligned:def.aligned, width:def.width, height:def.height,
+    scaled:def.scaled, font:0, color:null,
+    explicit:new Set(), extended:{}, injected:false, drawable:true, notes:[],
+  };
+  el.explicit = new Set(keysFor(doc, name));   // everything written for this element
+
+  let x = def.x, y = def.y;
+  const sx = getStr(doc, name + "_x");
+  if (sx !== null) x = isPosMid(sx) ? (SCREEN_W >> 1) : atoi(sx);
+  el.posX = x < 0 ? SCREEN_W + x : x;                                   // §6.1 right-edge relative
+  el.rawX = x;
+
+  const sy = getStr(doc, name + "_y");
+  if (sy !== null) y = isPosMid(sy) ? (SCREEN_H >> 1) : atoi(sy);
+  el.posY = y < 0 ? Math.ceil((SCREEN_H + y) * theme.usedHeight / SCREEN_H) : y;
+  el.rawY = y;
+
+  const sw = getStr(doc, name + "_width");
+  if (sw !== null) el.width = isDimInf(sw) ? SCREEN_W : atoi(sw);
+  const sh = getStr(doc, name + "_height");
+  if (sh !== null) el.height = isDimInf(sh) ? SCREEN_H : atoi(sh);
+
+  const sa = getStr(doc, name + "_aligned");
+  if (sa !== null) el.aligned = atoi(sa) === 0 ? ALIGN_NONE : ALIGN_CENTER;
+  const ss = getStr(doc, name + "_scaled");
+  if (ss !== null) el.scaled = atoi(ss) === 0 ? SCALING_NONE : SCALING_RATIO;
+
+  const sc = getStr(doc, name + "_color");
+  if (sc !== null) {
+    const c = parseColor(sc);
+    el.color = { r:c.r, g:c.g, b:c.b };
+    if (!c.ok) colorDiag(diags, doc, name + "_color", sc, c, name);
+  } else {
+    el.color = def.color === "text" ? theme.textColor : TINT;
+  }
+
+  el.font = 0;
+  const sf = getStr(doc, name + "_font");
+  if (sf !== null) { const v = atoi(sf); if (v > 0 && v < 16) el.font = v; }   // font=0 rejected (§6.1)
+  return el;
+}
+
+function colorDiag(diags, doc, key, raw, c, element) {
+  const line = lineOf(doc, key);
+  if (c.reason === "nohash")
+    diags.push(dg("error","COLOR_NO_HASH",`${key}="${raw}" has no leading "#", so OPL parses it as #000000 (black), not as an error.`,line,element));
+  else
+    diags.push(dg("warn","COLOR_MALFORMED",`${key}="${raw}" is not exactly 6 hex digits; OPL reads ${colorToHex(c)}.`,line,element));
+}
+function lineOf(doc, key) {
+  const idxs = doc.index.get(key);
+  return idxs && idxs.length ? doc.lines[idxs[idxs.length-1]].lineNo : undefined;
+}
+
+/** initMutableText (themes.c:99): derives the sizing mode and may rewrite w/h. */
+function initText(doc, name, el, kind, diags) {
+  const t = { kind, sizingMode:SIZING_NONE, displayMode:DISPLAY_ALWAYS, value:null, alias:null };
+  t.displayMode = getInt(doc, name + "_display", DISPLAY_ALWAYS);
+
+  const sw = getStr(doc, name + "_wrap");
+  if (sw !== null) { const v = atoi(sw); t.sizingMode = v > 0 ? SIZING_WRAP : v; }
+
+  if (el.width !== DIM_UNDEF || el.height !== DIM_UNDEF) {
+    if (t.sizingMode === SIZING_NONE) t.sizingMode = SIZING_CLIP;
+    if (el.width === DIM_UNDEF) el.width = SCREEN_W;
+    if (el.height === DIM_UNDEF) el.height = SCREEN_H;
+  } else t.sizingMode = SIZING_NONE;
+
+  if (kind === "StaticText") {
+    t.value = getStr(doc, name + "_value");
+    if (t.value === null) { el.drawable = false; el.missing = "value"; }
+  } else if (kind === "AttributeText") {
+    t.value = getStr(doc, name + "_attribute");
+    if (t.value === null) { el.drawable = false; el.missing = "attribute"; }
+    else {
+      let alias = getStr(doc, name + "_title");
+      if (alias === null) alias = t.value[0] === "#" ? t.value.slice(1) : t.value;
+      t.alias = alias + (t.sizingMode === SIZING_WRAP ? ":\n" : ": ");
+    }
+  } else if (kind === "GameCountText") {
+    t.alias = "";
+  }
+  el.extended = t;
+  return t;
+}
+
+/** initMutableImage (themes.c:457). `theme.caches` implements findDuplicate sharing. */
+function initImage(doc, name, el, typeName, def, theme, diags) {
+  const m = { pattern:null, count:def.count ?? 1, defaultTexture:null, overlay:null, overlayRect:null, cacheShared:false };
+  if (typeName === "AttributeImage") {
+    m.pattern = getStr(doc, name + "_attribute");
+    m.count = 1;
+  } else if (def.internal === "GameImage" || def.internal === "Background") {
+    m.pattern = def.pattern ?? null;
+    const sp = getStr(doc, name + "_pattern");
+    if (sp !== null) m.pattern = sp;
+    const sc = getStr(doc, name + "_count");
+    if (sc !== null) m.count = atoi(sc);
+  }
+
+  m.defaultTexture = getStr(doc, name + "_default");
+  if (def.internal !== "Background") m.overlay = getStr(doc, name + "_overlay");
+
+  if (m.overlay !== null) {
+    m.overlayRect = {};
+    let anyMissing = false;
+    for (const c of ["ulx","uly","urx","ury","llx","lly","lrx","lry"]) {
+      const v = getStr(doc, name + "_overlay_" + c);
+      if (v === null) { anyMissing = true; m.overlayRect[c] = 0; }         // §11.3
+      else m.overlayRect[c] = atoi(v);
+    }
+    if (anyMissing)
+      diags.push(dg("warn","OVERLAY_PARTIAL",
+        `${name}: overlay corner offsets are only partly defined. OPL leaves the rest uninitialised (undefined on hardware); the previewer uses 0.`,
+        lineOf(doc, name + "_overlay"), name));
+  }
+
+  // findDuplicate (themes.c:305): one cache per distinct pattern across all chains.
+  if (m.pattern) {
+    if (theme.caches.has(m.pattern)) { m.cacheShared = true; theme.caches.get(m.pattern).users.push(name); }
+    else theme.caches.set(m.pattern, { pattern:m.pattern, count:m.count, owner:name, users:[name], el });
+  }
+  el.extended = m;
+
+  const req = REQUIRED_ATTR[typeName];
+  if (req === "pattern" && !m.pattern) { el.drawable = false; el.missing = "pattern"; }
+  if (req === "default" && !m.defaultTexture) { el.drawable = false; el.missing = "default"; }
+  if (typeName === "AttributeImage" && !m.pattern) { el.drawable = false; el.missing = "attribute"; }
+  return m;
+}
+
+/** initItemsList (themes.c:878). */
+function initItemsList(doc, name, el) {
+  if (el.width === DIM_UNDEF) el.width = SCREEN_W;
+  if (el.height === DIM_UNDEF) el.height = 480 - (MENU_POS_V + HINT_HEIGHT);   // 398
+  el.extended = {
+    displayedItems: Math.floor(el.height / MENU_ITEM_HEIGHT),
+    decorator: getStr(doc, name + "_decorator"),
+    decoratorImage: null,
+  };
+}
+
+/**
+ * addGUIElem (themes.c:1010). Returns 'stop' when `<name>_type` is absent — the
+ * gap rule (§2.2) — 'skip' when nothing was appended, or the element.
+ */
+function addGUIElem(doc, name, theme, chain, diags) {
+  const enabled = getInt(doc, name + "_enabled", 1);
+  if (enabled === 0) {
+    if (hasKey(doc, name + "_type"))
+      diags.push(dg("info","DISABLED",`${name} (${getStr(doc,name+"_type")}) is disabled with ${name}_enabled=0. Numbering continues past it.`,
+        lineOf(doc, name + "_enabled"), name));
+    return "skip";
+  }
+  const typeName = getStr(doc, name + "_type");
+  if (typeName === null) return "stop";
+
+  if (!ELEMENT_TYPES.includes(typeName)) {
+    const near = ELEMENT_TYPES.find(t => t.toLowerCase() === typeName.trim().toLowerCase());
+    diags.push(dg("error","UNKNOWN_TYPE",
+      `${name}_type="${typeName}" is not a known element type, so the element is dropped. ` +
+      (near ? `Types are case-sensitive — did you mean "${near}"?` : `Numbering continues, so later elements still load.`),
+      lineOf(doc, name + "_type"), name));
+    return "skip";
+  }
+
+  if (typeName === "Background" && chain.length > 0) {
+    diags.push(dg("error","BG_NOT_FIRST",
+      `${name} is a Background but is not the first element in this page, so OPL discards it and injects a default background instead.`,
+      lineOf(doc, name + "_type"), name));
+    return "skip";
+  }
+
+  let def = ELEMENT_DEFAULTS[typeName];
+  if (typeName === "ItemsList") {
+    if (theme.itemsListCount === 0) def = ELEMENT_DEFAULTS.ItemsList;
+    else if (theme.itemsListCount === 1) def = ITEMSLIST_2ND;
+    else {
+      diags.push(dg("warn","THIRD_ITEMSLIST",
+        `${name}: a theme keeps at most two ItemsList elements (games + apps); this one is ignored.`,
+        lineOf(doc, name + "_type"), name));
+      return "skip";
+    }
+  }
+
+  const el = initBasic(doc, name, typeName, def, theme, diags);
+
+  switch (typeName) {
+    case "StaticText": case "AttributeText": case "GameCountText":
+      initText(doc, name, el, typeName, diags); break;
+    case "StaticImage": case "AttributeImage": case "GameImage":
+    case "ItemIcon": case "ItemCover": case "Background":
+      initImage(doc, name, el, typeName, def, theme, diags); break;
+    case "ItemsList":
+      initItemsList(doc, name, el);
+      el.slot = theme.itemsListCount === 0 ? "games" : "apps";
+      theme.itemsListLists[theme.itemsListCount] = el;
+      theme.itemsListCount++;
+      break;
+    case "LoadingIcon":
+      if (!theme.loadingIcon) theme.loadingIcon = el;
+      return "skip";      // never appended to a chain (§3.2)
+  }
+
+  if (el.missing) {
+    diags.push(dg("error","MISSING_REQUIRED",
+      `${name} (${typeName}) has no ${name}_${el.missing}, so OPL builds the element but never draws it.`,
+      lineOf(doc, name + "_type"), name));
+  }
+  return el;
+}
+
+function scanChain(doc, prefixName, theme, diags) {
+  const chain = [];
+  let i = 0;
+  for (;; i++) {
+    const name = prefixName + i;
+    const r = addGUIElem(doc, name, theme, chain, diags);
+    if (r === "stop") break;
+    if (r !== "skip") { r.index = i; r.chain = prefixName; chain.push(r); }
+    if (i > 512) break;                              // runaway guard, not an OPL behaviour
+  }
+  // Gap detection: keys beyond the stop index are dead weight (§2.2).
+  const orphans = [];
+  for (let j = i + 1; j <= i + 64; j++)
+    if (hasKey(doc, prefixName + j + "_type")) orphans.push(prefixName + j);
+  if (orphans.length)
+    diags.push(dg("error","NUMBER_GAP",
+      `${prefixName}${i} has no "type", which ends the scan for this page. ${orphans.length} later element${orphans.length>1?"s are":" is"} never read: ${orphans.join(", ")}. Renumber so the sequence is consecutive.`,
+      lineOf(doc, orphans[0] + "_type")));
+  return { chain, stoppedAt: i };
+}
+
+/** thmLoad (themes.c:1246): four chains, apps inheritance, then validation. */
+function buildTheme(doc) {
+  const diags = [...doc.diags];
+  const theme = {
+    usedHeight: SCREEN_H, useDefault:1,
+    bgColor:{...THEME_DEFAULTS.bg_color}, textColor:{...THEME_DEFAULTS.text_color},
+    uiTextColor:{...THEME_DEFAULTS.ui_text_color}, selTextColor:{...THEME_DEFAULTS.sel_text_color},
+    fonts:{}, caches:new Map(), itemsListCount:0, itemsListLists:[], loadingIcon:null,
+    chains:{}, diags,
+  };
+
+  theme.useDefault = getInt(doc, "use_default", 1);
+  if (getInt(doc, "use_real_height", 0)) theme.usedHeight = SCREEN_H;   // no-op in practice (§8)
+
+  for (const [key, prop] of [["bg_color","bgColor"],["text_color","textColor"],
+                             ["ui_text_color","uiTextColor"],["sel_text_color","selTextColor"]]) {
+    const raw = getStr(doc, key);
+    if (raw === null) continue;
+    const c = parseColor(raw);
+    theme[prop] = { r:c.r, g:c.g, b:c.b };
+    if (!c.ok) colorDiag(diags, doc, key, raw, c, null);
+  }
+
+  for (let i = 0; i < 16; i++) {
+    const fileKey = i === 0 ? "default_font" : "font" + i;
+    const sizeKey = i === 0 ? "default_font_size" : "font" + i + "_size";
+    const file = getStr(doc, fileKey);
+    let size = FNT_DEFAULT_SIZE;
+    const rawSize = getStr(doc, sizeKey);
+    if (rawSize !== null) { const v = atoi(rawSize); size = v > 0 ? v : FNT_DEFAULT_SIZE; }
+    theme.fonts[i] = { file, size, slot:i };
+  }
+
+  const main = scanChain(doc, "main", theme, diags);
+  theme.chains.main = main.chain;
+  theme.chains.appsMain = inheritChain(doc, "appsMain", "main", main.stoppedAt, theme, diags);
+  const info = scanChain(doc, "info", theme, diags);
+  theme.chains.info = info.chain;
+  theme.chains.appsInfo = inheritChain(doc, "appsInfo", "info", info.stoppedAt, theme, diags);
+
+  validateBackground(doc, theme, "main", "info", diags);
+  validateBackground(doc, theme, "appsMain", "appsInfo", diags);
+  validateItemsList(doc, theme, theme.itemsListLists[0], "main", diags);
+  validateItemsList(doc, theme, theme.itemsListLists[1], "appsMain", diags);
+  return theme;
+}
+
+/** themes.c:1314 — try appsMain<j>, else re-instantiate main<j>. */
+function inheritChain(doc, appsName, baseName, count, theme, diags) {
+  const chain = [];
+  for (let j = 0; j <= count; j++) {
+    let r = addGUIElem(doc, appsName + j, theme, chain, diags);
+    if (r === "stop") {
+      r = addGUIElem(doc, baseName + j, theme, chain, diags);
+      if (r === "stop" || r === "skip") continue;
+      r.inheritedFrom = baseName + j;
+    } else if (r === "skip") continue;
+    r.index = j; r.chain = appsName; chain.push(r);
+  }
+  return chain;
+}
+
+/** validateBackgroundElems (themes.c:947). */
+function validateBackground(doc, theme, mainKey, infoKey, diags) {
+  for (const [key, required] of [[mainKey, true], [infoKey, false]]) {
+    const chain = theme.chains[key];
+    if (!required && chain.length === 0) continue;         // absent info page stays absent
+    if (chain.length && chain[0].typeName === "Background") continue;
+    const el = initBasic(doc, "bg", "Background", INJECTED_BG, theme, diags);
+    el.injected = true; el.chain = key; el.index = -1; el.name = "bg";
+    initImage(doc, "bg", el, "Background", INJECTED_BG, theme, diags);
+    chain.unshift(el);
+    diags.push(dg("info","BG_INJECTED",
+      `${key}: no Background as the first element, so OPL injects a default one (pattern=BG, full screen). It reads bg_* keys if you define them.`,
+      undefined, "bg"));
+  }
+}
+
+/** validateItemsList (themes.c:968). */
+function validateItemsList(doc, theme, list, chainKey, diags) {
+  const chain = theme.chains[chainKey];
+  if (!list) {
+    if (!chain.length) return;
+    const el = initBasic(doc, "il", "ItemsList", INJECTED_IL, theme, diags);
+    el.injected = true; el.chain = chainKey; el.index = -1; el.name = "il";
+    initItemsList(doc, "il", el);
+    chain.splice(1, 0, el);
+    theme.itemsListLists[chainKey === "main" ? 0 : 1] = el;
+    diags.push(dg("info","IL_INJECTED",
+      `${chainKey}: no ItemsList declared, so OPL injects one at 42,42 sized 373×316 (${Math.floor(316/MENU_ITEM_HEIGHT)} rows), right after the background. It reads il_* keys if you define them.`,
+      undefined, "il"));
+    return;
+  }
+  if (chain.indexOf(list) < 0) return;
+  const want = list.extended.decorator;
+  if (!want) return;
+  let found = null, target = null;
+  for (const e of chain) {
+    if (e.internal !== "GameImage") continue;
+    if (!e.extended || !e.extended.pattern) continue;      // OPL would null-deref here (§5.3)
+    if (e.extended.pattern === want) { found = e; break; }
+  }
+  if (!found) {
+    diags.push(dg("warn","DECORATOR_NO_TARGET",
+      `${list.name}_decorator="${want}" matches no GameImage/ItemIcon/ItemCover on this page, so no row icons are drawn.`,
+      lineOf(doc, list.name + "_decorator"), list.name));
+    return;
+  }
+  const cache = theme.caches.get(want);
+  const need = list.extended.displayedItems;
+  if (cache && cache.count < need) {
+    diags.push(dg("warn","DECORATOR_DROPPED",
+      `${list.name}_decorator="${want}" is ignored: the ${found.typeName} caches ${cache.count} images but the list shows ${need} rows. OPL requires count ≥ rows — raise ${found.name}_count to ${need}, or shorten the list.`,
+      lineOf(doc, found.name + "_count") ?? lineOf(doc, list.name + "_decorator"), list.name));
+    return;
+  }
+  list.extended.decoratorImage = found;
+  target = found;
+  if (list.aligned === ALIGN_CENTER && target)
+    diags.push(dg("info","ALIGNED_DECORATOR",
+      `${list.name} is centred (aligned=1) and has a decorator. OPL centres the row icons but not the row text (themes.c:868), so they sit ${list.width>>1}px apart. This is OPL's behaviour, reproduced as-is.`,
+      lineOf(doc, list.name + "_aligned"), list.name));
+}
+
+/* ============================================================= 4. validate */
+
+/**
+ * Lint beyond what OPL itself does: bad filenames, missing assets, attributes the
+ * element type never reads, and the PS2 art-cache memory estimate (§7 of PLAN).
+ */
+function validateTheme(doc, theme, assets) {
+  const diags = [];
+  const have = assets ? assets.names : null;      // Set of lowercase file names present
+
+  const allElements = [];
+  for (const k of Object.keys(theme.chains)) allElements.push(...theme.chains[k]);
+  if (theme.loadingIcon) allElements.push(theme.loadingIcon);
+
+  for (const el of allElements) {
+    if (el.injected) continue;
+    const allowed = new Set([...COMMON_ATTRS, ...(TYPE_ATTRS[el.typeName] || [])]);
+    for (const k of el.explicit) {
+      if (!allowed.has(k))
+        diags.push(dg("info","INVALID_ATTR",
+          `${el.name}_${k} is not read by ${el.typeName} elements; it has no effect.`,
+          lineOf(doc, el.name + "_" + k), el.name));
+    }
+    const ex = el.extended || {};
+    for (const [attr, val] of [["default", ex.defaultTexture], ["overlay", ex.overlay]]) {
+      if (!val) continue;
+      if (/\.(png|jpe?g|bmp)$/i.test(val))
+        diags.push(dg("warn","EXT_IN_FILENAME",
+          `${el.name}_${attr}="${val}" includes a file extension. OPL appends ".png" itself, so it looks for "${val}.png".`,
+          lineOf(doc, el.name + "_" + attr), el.name));
+      if (have) {
+        const want = (val.replace(/\.(png|jpe?g|bmp)$/i, "") + ".png").toLowerCase();
+        if (!have.has(want)) {
+          const alt = [".jpg",".jpeg",".bmp"].find(e => have.has(want.replace(/\.png$/, e)));
+          diags.push(alt
+            ? dg("warn","JPG_ASSET",
+                `${el.name}_${attr}="${val}": only ${want.replace(/\.png$/, alt)} is present. OPL dropped JPG/BMP support on 2024-10-22 and now loads .png only — convert it.`,
+                lineOf(doc, el.name + "_" + attr), el.name)
+            : dg("error","MISSING_ASSET",
+                `${el.name}_${attr}="${val}": ${want} is not in the theme folder, so nothing is drawn.`,
+                lineOf(doc, el.name + "_" + attr), el.name));
+        }
+      }
+    }
+  }
+
+  const fontFiles = [];
+  for (let i = 0; i < 16; i++) { const f = theme.fonts[i]; if (f && f.file) fontFiles.push([i, f.file]); }
+  if (have) for (const [slot, file] of fontFiles)
+    if (!have.has(file.toLowerCase()))
+      diags.push(dg("error","MISSING_ASSET",
+        `Font slot ${slot} references "${file}", which is not in the theme folder. OPL falls back to its built-in font.`,
+        lineOf(doc, slot === 0 ? "default_font" : "font" + slot)));
+
+  return { diags, memory: estimateMemory(theme, assets) };
+}
+
+/**
+ * Art cache memory: count × w × h × 3 bytes per distinct cache (§6.5), shared
+ * caches counted once, which is what findDuplicate makes OPL do.
+ */
+const PATTERN_SIZE = { COV:{w:140,h:200}, COV2:{w:140,h:200}, ICO:{w:64,h:64}, BG:{w:640,h:480},
+                       SCR:{w:250,h:188}, SCR2:{w:250,h:188}, LGO:{w:200,h:80} };
+function estimateMemory(theme, assets) {
+  const rows = [];
+  let total = 0;
+  for (const cache of theme.caches.values()) {
+    const el = cache.el;
+    let w = el.width, h = el.height, basis = "element size";
+    if (w === DIM_UNDEF || h === DIM_UNDEF) {
+      const nat = (assets && assets.artSize && assets.artSize.get(cache.pattern))
+               || PATTERN_SIZE[cache.pattern] || { w:256, h:256 };
+      if (w === DIM_UNDEF) w = nat.w;
+      if (h === DIM_UNDEF) h = nat.h;
+      basis = assets && assets.artSize && assets.artSize.get(cache.pattern) ? "sample art" : "assumed for pattern";
+    }
+    const bytes = Math.max(0, cache.count) * Math.max(0,w) * Math.max(0,h) * 3;
+    total += bytes;
+    rows.push({ pattern:cache.pattern, count:cache.count, w, h, bytes, basis,
+                users:cache.users, shared:cache.users.length > 1 });
+  }
+  rows.sort((a,b) => b.bytes - a.bytes);
+  return { rows, total,
+    level: total > 12e6 ? "err" : total > 6e6 ? "warn" : "ok" };
+}
+
+/* ------------------------------------------------- text layout (§9.3, §9.4) */
+
+/**
+ * fntFitString (fntsys.c:735): inserts newlines at word boundaries, in place and
+ * once at load time. `measure(str)` returns a width in virtual pixels.
+ */
+function fitString(measure, string, width) {
+  let cw = 0;
+  const spacewidth = measure(" ");
+  const chars = string.split("");
+  let i = 0, prevSpace = -1;
+  while (i < chars.length) {
+    let sp = i;
+    while (sp < chars.length && chars[sp] !== " " && chars[sp] !== "\n") sp++;
+    if (chars[sp] === "\n") { cw = 0; i = sp + 1; prevSpace = -1; continue; }
+    const word = chars.slice(i, sp).join("");
+    const ww = measure(word);
+    if (cw + ww > width) {
+      if (prevSpace >= 0) { chars[prevSpace] = "\n"; cw = ww; prevSpace = sp; }
+      else { if (sp < chars.length) chars[sp] = "\n"; cw = 0; }
+    } else { cw += ww; prevSpace = sp; }
+    cw += spacewidth;
+    i = sp + 1;
+  }
+  return chars.join("");
+}
+
+/** Baseline offset applied by fntRenderString before drawing (§9.3). */
+const textBaselineOffset = (aligned, fontSize) =>
+  aligned === ALIGN_CENTER ? ((fontSize - 4) >> 1) : (fontSize - 2);
+
+/** rmSetupQuad geometry (§9.1/§9.2). aspectWidth is 4 for 4:3, 3 for 16:9. */
+function setupQuad(x, y, aligned, w, h, scaled, aspectWidth) {
+  w = (scaled & SCALING_RATIO) ? ((w * aspectWidth) >> 2) : w;
+  const ulx = (aligned & 8) ? x - (w >> 1) : x;      // ALIGN_HCENTER
+  const uly = (aligned & 2) ? y - (h >> 1) : y;      // ALIGN_VCENTER
+  return { x:ulx, y:uly, w, h };
+}
+
+const OPLCore = {
+  SCREEN_W, SCREEN_H, MENU_ITEM_HEIGHT, MENU_POS_V, HINT_HEIGHT, DECORATOR_SIZE,
+  DIM_UNDEF, ALIGN_NONE, ALIGN_CENTER, SCALING_NONE, SCALING_RATIO,
+  SIZING_NONE, SIZING_CLIP, SIZING_WRAP, DISPLAY_ALWAYS, DISPLAY_DEFINED, DISPLAY_NEVER,
+  FNT_DEFAULT_SIZE, TINT, ELEMENT_TYPES, ELEMENT_DEFAULTS, ITEMSLIST_2ND,
+  INJECTED_BG, INJECTED_IL, THEME_DEFAULTS, COMMON_ATTRS, TYPE_ATTRS, REQUIRED_ATTR,
+  atoi, parseColor, colorToHex, parseConfig, writeConfig, getStr, getInt, hasKey,
+  setKey, deleteKey, reindex, splitKey, cloneDoc, buildTheme, validateTheme,
+  estimateMemory, fitString, textBaselineOffset, setupQuad, lineOf,
+};
+// ===== OPL-CORE-END =====
+
+/* UI-PLACEHOLDER */
+</script>
+</body>
+</html>

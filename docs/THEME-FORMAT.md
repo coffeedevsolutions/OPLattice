@@ -82,8 +82,22 @@ A line with no `=` and no `:` is logged as malformed and **ignored** (`config.c:
 `# note ` with value ` something`. Keys beginning with `#` are stored like any other; they're only
 special in that they don't set the `modified` flag (`config.c:291`).
 
+Worse, a `#` line containing a **colon** and no `=` satisfies `parsePrefix` and becomes a **section
+header**. This:
+
+```
+main0:
+	type=Background
+	# note: watch out
+	x=7
+```
+
+stores `x` as `<tab># note_x`, not `main0_x` — the comment silently re-homes every key below it
+until the next header. Any `:` in a comment does this, and OPL logs nothing. The previewer raises
+`COMMENT_PREFIX` for it.
+
 Consequence for a round-trip writer: `#`-lines are unstructured text that must be preserved
-byte-for-byte, and a `#` line containing `=` is a real key that could shadow a later one.
+byte-for-byte, and a `#` line containing `=` or `:` is structurally significant.
 
 ### 1.5 Colors (`strToColor`, `src/config.c:30`)
 
@@ -581,6 +595,7 @@ Code wins in every row below.
 | 9 | Doesn't mention it | **Negative `x`/`y` are relative to the right/bottom edge** (`640+x`, `480+y`) — used constantly by the shipped theme. | High (undocumented, essential) |
 | 10 | Doesn't mention it | `POS_MID`/`DIM_INF` are matched by **7-char prefix**, so `POS_MIDDLE` also works. | Trivial |
 | 11 | Doesn't mention it | A color without a leading `#` parses as **black**, not as an error. | Medium |
+| 11b | Doesn't mention it | A **comment containing `:`** is parsed as a section header and silently re-homes every key under it (§1.4). | High (easy to hit, invisible) |
 | 12 | `AttributeText` / `AttributeImage` listed as "Information Page Only" | Nothing in the code restricts them to `info*`; they work on `main*` too (they just need a per-game config to read). | Low |
 | 13 | Doesn't mention it | `decorator` is dropped when the target's `count < displayedItems`. | Medium |
 | 14 | Doesn't mention it | `GameCountText` (2024-11-15) and `BdmIndex` (2024-07-30) exist; `appsMain*`/`appsInfo*` (2024-08-16) exist. | Medium |
