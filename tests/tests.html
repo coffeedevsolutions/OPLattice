@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>OPL Theme Previewer — core tests</title>
+<style>
+body{background:#14171c;color:#e6edf3;font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;margin:0;padding:18px}
+h1{font-size:15px;margin:0 0 4px}
+h2{font-size:12px;text-transform:uppercase;letter-spacing:.09em;color:#8b96a3;margin:18px 0 4px;
+   border-bottom:1px solid #333c47;padding-bottom:3px}
+.t{padding:1px 0 1px 18px;text-indent:-18px}
+.pass::before{content:"\2713  ";color:#3fb950}
+.fail::before{content:"\2717  ";color:#f85149}
+.fail{color:#f85149}
+pre{margin:2px 0 6px 18px;color:#e3b341;white-space:pre-wrap;font-size:12px}
+#sum{position:sticky;top:0;background:#14171c;padding:8px 0;font-size:15px;font-weight:700;border-bottom:1px solid #333c47}
+.ok{color:#3fb950} .bad{color:#f85149}
+.note{color:#8b96a3;font-weight:400;font-size:12px;margin-top:4px}
+</style>
+</head>
+<body>
+<h1>OPL Theme Previewer — core tests</h1>
+<div id="sum">running…</div>
+<div id="out"></div>
+<script type="module">
+/* Same specs as `node tests/run.mjs`, run in a browser.
+   Needs a local HTTP server (fetch cannot read siblings over file://):
+       python3 -m http.server 8731
+       open http://localhost:8731/tests/tests.html                              */
+import { specs } from "./spec.mjs";
+
+const out = document.getElementById("out");
+const sum = document.getElementById("sum");
+const state = { pass: 0, fail: 0 };
+
+const show = v => typeof v === "string" ? JSON.stringify(v) : (JSON.stringify(v) ?? String(v));
+const t = {
+  group(name) { const h = document.createElement("h2"); h.textContent = name; out.appendChild(h); },
+  test(name, fn) {
+    const d = document.createElement("div");
+    d.className = "t";
+    try { fn(); state.pass++; d.classList.add("pass"); d.textContent = name; }
+    catch (e) {
+      state.fail++; d.classList.add("fail"); d.textContent = name;
+      const p = document.createElement("pre"); p.textContent = e.message; d.appendChild(p);
+    }
+    out.appendChild(d);
+  },
+  eq(a, b, m) { if (!Object.is(a, b)) throw new Error(`${m ? m + "\n" : ""}expected ${show(b)}\nactual   ${show(a)}`); },
+  ok(v, m) { if (!v) throw new Error(m || "expected a truthy value"); },
+  deepEq(a, b, m) {
+    const x = JSON.stringify(a), y = JSON.stringify(b);
+    if (x !== y) throw new Error(`${m ? m + "\n" : ""}expected ${y}\nactual   ${x}`);
+  },
+  throws(fn, m) { try { fn(); } catch { return; } throw new Error(m || "expected a throw"); },
+};
+
+const FIXTURE_FILES = [
+  "fixtures/minimal/conf_theme.cfg",
+  "fixtures/midrange/conf_theme.cfg",
+  "fixtures/broken/conf_theme.cfg",
+  "docs/reference-conf_theme_OPL.cfg",
+];
+
+try {
+  const html = await (await fetch("../opl-theme-previewer.html")).text();
+  const a = html.indexOf("// ===== OPL-CORE-BEGIN =====");
+  const b = html.indexOf("// ===== OPL-CORE-END =====");
+  if (a < 0 || b < 0) throw new Error("core markers not found in opl-theme-previewer.html");
+  const src = html.slice(a, b) + "\nexport default OPLCore;\n";
+  const C = (await import(URL.createObjectURL(new Blob([src], { type: "text/javascript" })))).default;
+
+  const texts = await Promise.all(FIXTURE_FILES.map(f => fetch("../" + f).then(r => r.text())));
+  const fixtures = Object.fromEntries(FIXTURE_FILES.map((f, i) => [f, texts[i]]));
+
+  specs(C, fixtures, t);
+  sum.innerHTML = `<span class="${state.fail ? "bad" : "ok"}">${state.pass} passed, ${state.fail} failed</span>`;
+} catch (e) {
+  sum.innerHTML = `<span class="bad">could not run: ${e.message}</span>` +
+    `<div class="note">Serve the project over HTTP — <code>python3 -m http.server 8731</code> — then open <code>http://localhost:8731/tests/tests.html</code>.</div>`;
+  throw e;
+}
+</script>
+</body>
+</html>

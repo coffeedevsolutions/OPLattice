@@ -98,8 +98,8 @@ kbd{font-family:var(--mono);font-size:10.5px;background:#0f1216;border:1px solid
     <span class="sep"></span>
     <label>Zoom</label>
     <select id="zoom">
-      <option value="fit">Fit</option><option value="1">1×</option>
-      <option value="2" selected>2×</option><option value="3">3×</option>
+      <option value="fit" selected>Fit</option><option value="1">1×</option>
+      <option value="2">2×</option><option value="3">3×</option>
     </select>
     <button id="btnSmooth" title="Smooth vs nearest-neighbour upscaling">Smooth</button>
     <span class="sep"></span>
@@ -904,8 +904,11 @@ function validateTheme(doc, theme, assets) {
  * Art cache memory: count × w × h × 3 bytes per distinct cache (§6.5), shared
  * caches counted once, which is what findDuplicate makes OPL do.
  */
-const PATTERN_SIZE = { COV:{w:140,h:200}, COV2:{w:140,h:200}, ICO:{w:64,h:64}, BG:{w:640,h:480},
-                       SCR:{w:250,h:188}, SCR2:{w:250,h:188}, LGO:{w:200,h:80} };
+// Assumed source dimensions when an element uses DIM_UNDEF and no sample art is
+// loaded. Sized after a real art pack rather than optimistically, because this
+// figure is a hardware-safety estimate — measured art always overrides it.
+const PATTERN_SIZE = { COV:{w:300,h:450}, COV2:{w:300,h:450}, ICO:{w:64,h:64}, BG:{w:460,h:215},
+                       SCR:{w:250,h:188}, SCR2:{w:250,h:188}, LGO:{w:400,h:278} };
 function estimateMemory(theme, assets) {
   const rows = [];
   let total = 0;
@@ -980,7 +983,1286 @@ const OPLCore = {
 };
 // ===== OPL-CORE-END =====
 
-/* UI-PLACEHOLDER */
+/* ============================================================== 5. assets */
+
+// PoeVeticaNew.ttf — OPL's built-in font (Makefile:706), embedded so the tool
+// works from file://. assets/PoeVeticaNew.ttf is the source of truth;
+// `node tools/embed-font.mjs` regenerates this literal.
+const FONT_B64 = "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//8AYAAAB0UFmhAiAHM3ABAjAOMCPAAAEAMA5AOS/TL//wB0/mYDuAQAEAsAIgQGBADAAP//AEkAAAUaBsMSIgAkAAAQAwBDAWEBmv//AEkAAAUaBsMSIgAkAAAQAwB0AbkBmv//AEkAAAUaBsMSIgAkAAAQAwDLAZwBmv//AEkAAAUaBuESIgAkAAAQAwDSAWEBmv//AEkAAAUaBswSIgAkAAAQAwBpAZwBmv//AEkAAAUaBxcSIgAkAAAQAwDQAcYBmgACAEkAAAZTBZoAAwATAAABAyEZASEDIwEhFSERIRUhESEVIQK76QFc/nKWwQH0BBb9iAI8/cQCePzbBQv9MgLO/KP+UgWaj/4Ej/4PjwAAAAEAef7OBOoFmgAkAAAhJBEQISATIwIhIBEQISATMwIFBzYWFRQjIic3FjMyNTQjIgcnArv9vgJRAgIesg7+oP5cAaQBYA6yHP5AIzxNpjYwEiwvSTohJRkJAsQCzf5HASr9wv3CASr+ZRxJCj88ehdJFC4uDCYA//8ArwAABGAGwxIiACgAABADAEMBXwGa//8ArwAABGAGwxIiACgAABADAHQBZwGa//8ArwAABGAGwxIiACgAABADAMsBcgGa//8ArwAABGAGzBIiACgAABADAGkBcgGa//8AdgAAAboGwxIiACwqABADAEMACAGa//8AegAAAb4GwxIiACwiABADAHQACAGa//8AXwAAAkwGwxIiACwAABADAMv/8AGa//8AggAAAjMGzBIiACwBABADAGn/8QGaAAIAWQAABRgFmgAKABUAAAERISARECkBETMVJREhIBEQKQERIzUBfgFKAaP+Xf62xP6PAfcCUP2w/gl4ApT9+wI+Aj798mlpAp39M/0zApRpAAAA//8ArwAABOwG4RIiADEAABADANIBfQGa//8AegAABRsGwxIiADIAABADAEMBogGa//8AegAABRsGwxIiADIAABADAHQBqgGa//8AegAABRsGwxIiADIAABADAMsBtQGa//8AegAABRsG4RIiADIAABADANIBegGa//8AegAABRsGzBIiADIAABADAGkBtQGa//8AnQFzA1EEKBKDAA4CYP+LLUEtQdK/LUEAAAADAH7/+wUfBZUAEQAYAB8AACUmERAhMhc3FwcWERAhIicHJwkBFjMgETQJASYjIBEUARGTAlHq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fnnoASwC8I/7+49/j/v7jwACAGgAAAPHBLoABgAKAAATARUJARUBAyEVIXEDVv1qApb8qgkDX/yhAzQBhrf+3/7gtwGG/f6PAAIAdgAAA9UEugAGAAoAAAkBNQkBNQkBIRUhA9X8qgKW/WoDVvyhA1/8oQKR/nq3ASABIbf+ev1bjwAAAAIAZgAAA4cFmgATABcAAAE1ECEyFxUmIyIdATMVIxEjESM1IREjEQEEATq0jo60jNDQrp4DIKwEAIUBFSiPKIaFj/yPA3GP/AAEAAABAGYAAAOHBZoAFwAAASYjIh0BMxUjESMRIzUzNRAhMhc1MxEjAtpSXnjQ0K6engEmXlKsrATtHoaFj/yPA3GPhQEVHh76ZgAAACwCFgABAAAAAAAAAFYArgABAAAAAAABAA4BIwABAAAAAAACAAcBQgABAAAAAAADACgBnAABAAAAAAAEAA4B4wABAAAAAAAFAAwCDAABAAAAAAAGABgCSwABAAAAAAAHAFUDEAABAAAAAAAJAAwDgAABAAAAAAAKAD8EDQADAAEEAwACAAwETQADAAEEBQACABAEWwADAAEEBgACAAwEbQADAAEEBwACABAEewADAAEECAACABAEjQADAAEECQAAAKwAAAADAAEECQABABwBBQADAAEECQACAA4BMgADAAEECQADAFABSgADAAEECQAEABwBxQADAAEECQAFABgB8gADAAEECQAGADACGQADAAEECQAHAKoCZAADAAEECQAJABgDZgADAAEECQAKAH4DjQADAAEECgACAAwEnwADAAEECwACABAErQADAAEEDAACAAwEvwADAAEEDgACAAwEzQADAAEEEAACAA4E2wADAAEEEwACABIE6wADAAEEFAACAAwE/wADAAEEFQACABAFDQADAAEEFgACAAwFHwADAAEEGQACAA4FLQADAAEEGwACABAFPQADAAEEHQACAAwFTwADAAEEHwACAAwFXQADAAEEJAACAA4FawADAAEELQACAA4FewADAAEICgACAAwFiwADAAEIFgACAAwFmQADAAEMCgACAAwFpwADAAEMDAACAAwFtQBUAHkAcABlAGYAYQBjAGUAIABjAG8AcAB5AHIAaQBnAGgAdAAgAGIAeQAgAFQAaABlACAAUABvAHcAZQByAGgAbwB1AHMAZQAgAG8AZgAgAEUAbgB0AGUAcgB0AGEAaQBuAG0AZQBuAHQALAAgAEkAbgBjAC4AIAAyADAAMQA2AC4AIABBAGwAbAAgAFIAaQBnAGgAdABzACAAUgBlAHMAZQByAHYAZQBkAC4AAFR5cGVmYWNlIGNvcHlyaWdodCBieSBUaGUgUG93ZXJob3VzZSBvZiBFbnRlcnRhaW5tZW50LCBJbmMuIDIwMTYuIEFsbCBSaWdodHMgUmVzZXJ2ZWQuAABQAE8ARQAgAFYAZQB0AGkAYwBhACAATgBlAHcAAFBPRSBWZXRpY2EgTmV3AABSAGUAZwB1AGwAYQByAABSZWd1bGFyAABQAE8ARQAgAFYAZQB0AGkAYwBhACAATgBlAHcAIABSAGUAaQBuAGMAYQByAG4AYQB0AGUAZAA6AFYAZQByAHMAaQBvAG4AIAAxAC4AMAAwAABQT0UgVmV0aWNhIE5ldyBSZWluY2FybmF0ZWQ6VmVyc2lvbiAxLjAwAABQAE8ARQAgAFYAZQB0AGkAYwBhACAATgBlAHcAAFBPRSBWZXRpY2EgTmV3AABWAGUAcgBzAGkAbwBuACAAMQAuADAAMAAAVmVyc2lvbiAxLjAwAABQAE8ARQBWAGUAdABpAGMAYQBOAGUAdwBSAGUAaQBuAGMAYQByAG4AYQB0AGUAZAAAUE9FVmV0aWNhTmV3UmVpbmNhcm5hdGVkAABQAE8ARQAgAFYAZQB0AGkAYwBhACAATgBlAHcAIABpAHMAIABhACAAcgBlAGcAaQBzAHQAZQByAGUAZAAgACgArgApACAAdAByAGEAZABlAG0AYQByAGsAIABvAGYAIABUAGgAZQAgAFAAbwB3AGUAcgBoAG8AdQBzAGUAIABvAGYAIABFAG4AdABlAHIAdABhAGkAbgBtAGUAbgB0ACwAIABJAG4AYwAuAABQT0UgVmV0aWNhIE5ldyBpcyBhIHJlZ2lzdGVyZWQgKKgpIHRyYWRlbWFyayBvZiBUaGUgUG93ZXJob3VzZSBvZiBFbnRlcnRhaW5tZW50LCBJbmMuAABEAGEAbgAgAFAALgAgAEwAeQBvAG4AcwAARGFuIFAuIEx5b25zAABUAGgAaQBzACAAZgBvAG4AdAAgAHcAYQBzACAAYwByAGUAYQB0AGUAZAAgAHUAcwBpAG4AZwAgAEYAbwBuAHQAQwByAGUAYQB0AG8AcgAgADUALgA2ACAAZgByAG8AbQAgAEgAaQBnAGgALQBMAG8AZwBpAGMALgBjAG8AbQAAVGhpcyBmb250IHdhcyBjcmVhdGVkIHVzaW5nIEZvbnRDcmVhdG9yIDUuNiBmcm9tIEhpZ2gtTG9naWMuY29tAABOAG8AcgBtAGEAbAAAAG8AYgB5AQ0AZQBqAG4A6QAAAG4AbwByAG0AYQBsAAAAUwB0AGEAbgBkAGEAcgBkAAADmgOxA70DvwO9A7kDugOsAAAATgBvAHIAbQBhAGwAAABOAG8AcgBtAGEAYQBsAGkAAABOAG8AcgBtAGEAbAAAAE4AbwByAG0A4QBsAAAATgBvAHIAbQBhAGwAZQAAAFMAdABhAG4AZABhAGEAcgBkAAAATgBvAHIAbQBhAGwAAABOAG8AcgBtAGEAbABuAHkAAABOAG8AcgBtAGEAbAAABB4EMQRLBEcEPQRLBDkAAABOAG8AcgBtAOEAbABuAGUAAABOAG8AcgBtAGEAbAAAAE4AbwByAG0AYQBsAAAATgBhAHYAYQBkAG4AbwAAAEEAcgByAHUAbgB0AGEAAABOAG8AcgBtAGEAbAAAAE4AbwByAG0AYQBsAAAATgBvAHIAbQBhAGwAAABOAG8AcgBtAGEAbAAAAAAAAAIAAAAAAAD/JwCWAAAAAAAAAAAAAAAAAAAAAAAAAAAA8gAAAAEAAgADAAQABQAGAAcACAAJAAoACwAMAA0ADgAPABAAEQASABMAFAAVABYAFwAYABkAGgAbABwAHQAeAB8AIAAhACIAIwAkACUAJgAnACgAKQAqACsALAAtAC4ALwAwADEAMgAzADQANQA2ADcAOAA5ADoAOwA8AD0APgA/AEAAQQBCAEMARABFAEYARwBIAEkASgBLAEwATQBOAE8AUABRAFIAUwBUAFUAVgBXAFgAWQBaAFsAXABdAF4AXwBgAGEAowCEAIUAvQCWAOgAhgCOAIsAnQCpAKQAigDaAIMAkwECAQMAjQCXAIgAwwDeAQQAngCqAPUA9AD2AKIArQDJAMcArgBiAGMAkABkAMsAZQDIAMoAzwDMAM0AzgDpAGYA0wDQANEArwBnAPAAkQDWANQA1QBoAOsA7QCJAGoAaQBrAG0AbABuAKAAbwBxAHAAcgBzAHUAdAB2AHcA6gB4AHoAeQB7AH0AfAC4AKEAfwB+AIAAgQDsAO4AugDXAOIA4wCwALEA5ADlALsA5gDnAKYA2ADhAQUA2wDcAN0A4ADZAN8AsgCzALYAtwDEALQAtQDFAIIAwgCHAKsAxgC+AL8AvAEGAQcAjAEIAQkBCgELAO8ApwCPAJQAlQEMAQ0HdW5pMDBCMgd1bmkwMEIzB3VuaTAwQjkHdW5pMDJDOQd1bmkyMDc0BEV1cm8JYXJyb3dsZWZ0B2Fycm93dXAKYXJyb3dyaWdodAlhcnJvd2Rvd24HdW5pRjAwMQd1bmlGMDAyAAAAAAAB//8AAgABAAAADAAAABYAAAACAAEAAQDxAAEABAAAAAIAAAAAAAAAAQAAAADZaGI1AAAAANQAs8sAAAAA2ks3IQ==";
+const FONT_FAMILY = "OPLPoeVetica";
+let fontReady = false;
+
+async function loadBuiltinFont() {
+  if (!FONT_B64 || FONT_B64.startsWith("__")) return false;      // not embedded yet
+  try {
+    const bin = atob(FONT_B64);
+    const buf = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+    const face = new FontFace(FONT_FAMILY, buf.buffer);
+    await face.load();
+    document.fonts.add(face);
+    fontReady = true;
+    return true;
+  } catch (e) { console.warn("built-in font unavailable:", e); return false; }
+}
+
+/** Load a theme-supplied TTF so `default_font` / `fontN` render with the real face. */
+async function loadThemeFont(file, family) {
+  try {
+    const face = new FontFace(family, await file.arrayBuffer());
+    await face.load();
+    document.fonts.add(face);
+    return true;
+  } catch { return false; }
+}
+
+const lower = s => s.toLowerCase();
+
+/** Ingest a FileList / array of Files into the asset store. */
+async function ingestFiles(files) {
+  S.files = new Map();
+  S.images = new Map();
+  S.art = new Map();
+  S.themeFonts = new Map();
+  let cfgText = null, cfgFile = null;
+
+  for (const f of files) {
+    const rel = (f.webkitRelativePath || f.name).replace(/^[^/]*\//, "");
+    S.files.set(lower(rel), f);
+    const base = lower(rel.split("/").pop());
+    if (base === "conf_theme.cfg" && (!cfgFile || rel.length < cfgFile.length)) { cfgFile = rel; cfgText = await f.text(); }
+  }
+
+  const jobs = [];
+  for (const [rel, f] of S.files) {
+    const base = rel.split("/").pop();
+    if (/\.(png|jpe?g|bmp|gif)$/.test(base)) {
+      if (rel.startsWith("art/")) jobs.push(loadArt(base, f));
+      else jobs.push(loadImage(base, f));
+    }
+  }
+  await Promise.all(jobs);
+  return cfgText;
+}
+
+function loadImage(name, file) {
+  return new Promise(res => {
+    const img = new Image();
+    img.onload = () => { S.images.set(lower(name), img); res(); };
+    img.onerror = () => res();
+    img.src = URL.createObjectURL(file);
+  });
+}
+function loadArt(name, file) {
+  return new Promise(res => {
+    const img = new Image();
+    img.onload = () => { S.art.set(lower(name.replace(/\.[^.]+$/, "")), img); res(); };
+    img.onerror = () => res();
+    img.src = URL.createObjectURL(file);
+  });
+}
+
+/** The set validateTheme() checks referenced filenames against. */
+const assetIndex = () => ({
+  names: new Set([...S.files.keys()].map(k => k.split("/").pop())),
+  artSize: new Map([...S.art].map(([k, img]) => [k.split("_").pop().toUpperCase(), { w: img.width, h: img.height }])),
+});
+
+/* --------------------------------------------------- generated sample art */
+
+const artCache = new Map();
+/**
+ * Stand-in art at the conventional aspect for a pattern, stamped with the
+ * serial so per-game mapping is visible. Real art wins when the ART folder has
+ * <SERIAL>_<PATTERN>.png (§6.5).
+ */
+function gameArt(serial, pattern) {
+  const real = S.art.get(lower(serial + "_" + pattern));
+  if (real) return real;
+  if (!S.placeholderArt) return null;
+  const key = serial + "_" + pattern;
+  if (artCache.has(key)) return artCache.get(key);
+
+  const size = PATTERN_SIZE[pattern] || { w: 200, h: 200 };
+  const c = document.createElement("canvas");
+  c.width = size.w; c.height = size.h;
+  const g = c.getContext("2d");
+  let h = 0;
+  for (const ch of key) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  const hue = h % 360;
+  const grad = g.createLinearGradient(0, 0, size.w, size.h);
+  grad.addColorStop(0, `hsl(${hue} 55% 42%)`);
+  grad.addColorStop(1, `hsl(${(hue + 48) % 360} 55% 22%)`);
+  g.fillStyle = grad; g.fillRect(0, 0, size.w, size.h);
+  g.strokeStyle = "#ffffff55"; g.lineWidth = 2; g.strokeRect(1, 1, size.w - 2, size.h - 2);
+  g.fillStyle = "#fff";
+  const fs = Math.max(8, Math.round(Math.min(size.w, size.h) / 9));
+  g.font = `700 ${fs}px system-ui,sans-serif`;
+  g.textAlign = "center";
+  g.fillText(pattern, size.w / 2, size.h / 2 - fs * 0.2);
+  g.font = `${Math.round(fs * 0.72)}px ui-monospace,monospace`;
+  g.fillStyle = "#ffffffcc";
+  g.fillText(serial, size.w / 2, size.h / 2 + fs);
+  const img = new Image();
+  img.src = c.toDataURL();
+  artCache.set(key, img);
+  return img;
+}
+
+/* ======================================================== 6. fixture data */
+
+/**
+ * Sample list. Titles, serials and sizes come from a real dump manifest, so the
+ * serials match the <SERIAL>_<PATTERN>.png art an author already has and the
+ * row text is representative in length. The info-page attributes below (genre,
+ * release, developer, description) are NOT a game database — they are marked
+ * sample strings sized to exercise wrapping and clipping. `size` is real.
+ */
+const GAMES = [
+  { serial:"SCPS_150.21", title:"Jak and Daxter (JP)",             size:"1392" },
+  { serial:"SCPS_150.16", title:"Minna no Golf 3 (JP)",            size:"1416" },
+  { serial:"SCPS_150.37", title:"Ratchet & Clank (JP)",            size:"1723" },
+  { serial:"SCPS_150.56", title:"Ratchet & Clank 2 (JP)",          size:"3513" },
+  { serial:"SCPS_150.99", title:"Ratchet & Clank 4 (JP)",          size:"3087" },
+  { serial:"SLPM_650.10", title:"Onimusha (JP)",                   size:"3739" },
+  { serial:"SLPM_650.78", title:"Metal Gear Solid 2 (JP)",         size:"4432" },
+  { serial:"SLPM_654.88", title:"Grand Theft Auto: Vice City (JP)",size:"4481" },
+  { serial:"SLPM_657.90", title:"Metal Gear Solid 3 (JP)",         size:"4357" },
+  { serial:"SLPM_662.32", title:"Need for Speed: Most Wanted (JP)",size:"3526" },
+  { serial:"SLPM_663.20", title:"Final Fantasy XII (JP)",          size:"3845" },
+  { serial:"SLPS_200.01", title:"Ridge Racer V (JP)",              size:"715"  },
+  { serial:"SLPS_250.50", title:"Final Fantasy X (JP)",            size:"4371" },
+  { serial:"SLPS_252.30", title:"SoulCalibur II (JP)",             size:"4001" },
+  // Art present in the sample ART folder with no manifest entry — shown by
+  // serial rather than guessing a title.
+  { serial:"SCPS_150.97", title:"SCPS_150.97",                     size:"2048" },
+  { serial:"SLPM_654.49", title:"SLPM_654.49",                     size:"2048" },
+  { serial:"SLPS_254.78", title:"SLPS_254.78",                     size:"2048" },
+];
+const GAME_DESC = "Sample description text. It is deliberately long enough to exercise the word wrapping that OPL applies at load time and the box clipping it applies when an element declares both a width and a height.";
+
+/** Per-game values an AttributeText element can look up. */
+function gameAttr(game, attr) {
+  const key = attr.replace(/^#/, "").toLowerCase();
+  switch (key) {
+    case "title": return game.title;
+    case "genre": return "Sample genre";
+    case "release": return "20XX-XX-XX";
+    case "developer": return "Sample developer";
+    case "size": return game.size;              // real, from the dump manifest
+    case "description": return GAME_DESC;
+    case "startup": case "name": return game.serial;
+    case "media": return "DVD";
+    case "format": return "ISO";
+    case "rating": return "4";
+    case "vmode": return "NTSC";
+    case "aspect": return "4:3";
+    case "scan": return "480p";
+    case "device": return "USB";
+    default: return null;
+  }
+}
+// English labels for the attributes OPL localises (lng_tmpl/_base.yml).
+const ATTR_LABEL = { title:"Title", genre:"Genre", release:"Release", developer:"Developer",
+                     size:"Size", description:"Description" };
+
+/* =============================================================== 7. render */
+
+const cScreen = document.getElementById("cScreen");
+const cOverlay = document.getElementById("cOverlay");
+const ctx = cScreen.getContext("2d");
+const octx = cOverlay.getContext("2d");
+
+const S = {
+  doc:null, theme:null, validation:null, chain:"main", sel:null,
+  files:new Map(), images:new Map(), art:new Map(), themeFonts:new Map(),
+  aspect:4, zoom:"fit", smooth:false, grid:false, snap:false, plasma:true,
+  showLoading:false, placeholderArt:true,
+  gameIndex:3, pageStart:0, dirHandle:null, live:false, liveTimer:null,
+  undo:[], redo:[], syncing:false, typing:0,
+};
+
+const rgb = c => `rgb(${c.r},${c.g},${c.b})`;
+
+/* ------------------------------------------------------------ text layout */
+
+const glyphCache = new Map();
+/**
+ * OPL bakes the size into the font handle, so a slot whose TTF fails to load
+ * reverts to slot 0 completely — size included (themes.c:1220/1240). Only apply
+ * that when a folder is loaded and we can tell the file is genuinely absent;
+ * with a pasted cfg, honour the declared size so the layout stays useful.
+ */
+function fontSpec(el) {
+  const slot = el ? el.font : 0;
+  const fonts = (S.theme && S.theme.fonts) || {};
+  const size = s => (fonts[s] && fonts[s].size) || FNT_DEFAULT_SIZE;
+  const loaded = s => { const fam = S.themeFonts.get(s); return fam ? { size: size(s), family: fam } : null; };
+
+  const got = loaded(slot);
+  if (got) return got;
+  if (fonts[slot] && fonts[slot].file && S.files.size)
+    return loaded(0) || { size: FNT_DEFAULT_SIZE, family: FONT_FAMILY };
+  return { size: size(slot), family: FONT_FAMILY };
+}
+function useFont(spec) { ctx.font = `${spec.size}px "${spec.family}", sans-serif`; }
+
+/**
+ * PoeVeticaNew has no `kern` table, so FT_HAS_KERNING is false and OPL's
+ * advance is exactly `glyph->shx >> 6` — an integer per glyph. Summing rounded
+ * per-glyph advances reproduces that, unlike measuring the whole string.
+ */
+function glyphMetrics(ch, spec) {
+  const key = spec.family + "|" + spec.size + "|" + ch;
+  let m = glyphCache.get(key);
+  if (!m) {
+    useFont(spec);
+    const t = ctx.measureText(ch);
+    m = { adv: Math.round(t.width),
+          ink: Math.ceil((t.actualBoundingBoxRight || t.width) + (t.actualBoundingBoxLeft || 0)) };
+    glyphCache.set(key, m);
+  }
+  return m;
+}
+function textWidth(str, spec) {
+  let w = 0;
+  for (const ch of String(str)) w += glyphMetrics(ch, spec).adv;
+  return w;
+}
+
+/** fntRenderString (fntsys.c:502) — §9.3. Returns the final pen x. */
+function renderString(el, x, y, aligned, width, height, string, color) {
+  const spec = fontSpec(el);
+  string = String(string ?? "");
+  if (aligned & 8)
+    x -= (width ? Math.min(textWidth(string, spec), width) : textWidth(string, spec)) >> 1;
+  y += textBaselineOffset(aligned & 2 ? ALIGN_CENTER : ALIGN_NONE, spec.size);
+
+  useFont(spec);
+  ctx.fillStyle = rgb(color);
+  ctx.textAlign = "left";
+  ctx.textBaseline = "alphabetic";
+
+  let pen = x;
+  const xmax = x + width, ymax = y + height;
+  for (const ch of string) {
+    const g = glyphMetrics(ch, spec);
+    if (width) {
+      if (ch === "\n") { pen = x; y += MENU_ITEM_HEIGHT; continue; }
+      if (y > ymax) break;
+      if (pen + g.ink > xmax) { pen = xmax + 1; continue; }   // rest of the line is dropped
+    }
+    if (ch !== "\n") ctx.fillText(ch, pen, y);
+    pen += g.adv;
+  }
+  return pen;
+}
+
+/* -------------------------------------------------------------- primitives */
+
+/** rmDrawPixmap (§9.1/§9.2), recording the rect for hit-testing. */
+function drawPixmap(el, img, x, y, aligned, w, h, scaled, tint) {
+  if (w === DIM_UNDEF) w = img ? img.naturalWidth || img.width : 0;
+  if (h === DIM_UNDEF) h = img ? img.naturalHeight || img.height : 0;
+  const q = setupQuad(x, y, aligned, w, h, scaled, S.aspect);
+  if (img && q.w > 0 && q.h > 0) {
+    // gDefaultCol (#808080) is the neutral multiply; anything else tints.
+    if (tint && (tint.r !== 0x80 || tint.g !== 0x80 || tint.b !== 0x80)) {
+      const t = tintedCopy(img, tint);
+      ctx.drawImage(t, q.x, q.y, q.w, q.h);
+    } else ctx.drawImage(img, q.x, q.y, q.w, q.h);
+  }
+  return q;
+}
+
+const tintCache = new Map();
+function tintedCopy(img, tint) {
+  const key = (img.src || "").slice(-64) + colorToHex(tint);
+  if (tintCache.has(key)) return tintCache.get(key);
+  const w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
+  const c = document.createElement("canvas");
+  c.width = w; c.height = h;
+  const g = c.getContext("2d");
+  g.drawImage(img, 0, 0);
+  g.globalCompositeOperation = "multiply";
+  // 0x80 is "1.0" on the GS, so the multiplier is component/128.
+  g.fillStyle = `rgb(${Math.min(255, tint.r * 2)},${Math.min(255, tint.g * 2)},${Math.min(255, tint.b * 2)})`;
+  g.fillRect(0, 0, w, h);
+  g.globalCompositeOperation = "destination-in";
+  g.drawImage(img, 0, 0);
+  tintCache.set(key, c);
+  return c;
+}
+
+/** A labelled stand-in for an icon OPL compiles in rather than reads from the theme. */
+function drawStub(q, label, accent) {
+  if (q.w <= 0 || q.h <= 0) return;
+  ctx.save();
+  ctx.fillStyle = accent || "#ffffff1c";
+  ctx.fillRect(q.x, q.y, q.w, q.h);
+  ctx.strokeStyle = "#ffffff59"; ctx.lineWidth = 1;
+  ctx.setLineDash([3, 2]);
+  ctx.strokeRect(q.x + .5, q.y + .5, q.w - 1, q.h - 1);
+  ctx.setLineDash([]);
+  if (q.w >= 24 && q.h >= 10) {
+    ctx.fillStyle = "#ffffffcc";
+    ctx.font = `${Math.min(10, Math.max(7, q.h - 4))}px system-ui,sans-serif`;
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText(label, q.x + q.w / 2, q.y + q.h / 2, q.w - 4);
+    ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
+  }
+  ctx.restore();
+}
+
+/* ---------------------------------------------------------------- plasma */
+
+let plasmaCache = null;
+/**
+ * guiDrawBGPlasma (gui.c:1269) renders a 32x32 Perlin field tinted by bg_color
+ * and stretches it to the screen, updating 6 rows a frame. A layout tool wants
+ * a stable image, so this is the converged field, static (§11.6).
+ */
+function plasmaTexture(color) {
+  const key = colorToHex(color);
+  if (plasmaCache && plasmaCache.key === key) return plasmaCache.canvas;
+  const N = 32;
+  const c = document.createElement("canvas");
+  c.width = N; c.height = N;
+  const g = c.getContext("2d");
+  const im = g.createImageData(N, N);
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+    const u = x / N * 2, v = y / N * 2;
+    const n = (Math.sin(u * 3.1) * Math.cos(v * 2.7) + Math.sin((u + v) * 2.2) * 0.6
+             + Math.sin(u * 5.3 + v * 1.7) * 0.35) / 1.95;
+    const f = Math.max(0, Math.min(1, n * 0.5 + 0.5));
+    const o = (y * N + x) * 4;
+    im.data[o]   = f * color.r;
+    im.data[o+1] = f * color.g;
+    im.data[o+2] = f * color.b;
+    im.data[o+3] = 255;
+  }
+  g.putImageData(im, 0, 0);
+  plasmaCache = { key, canvas: c };
+  return c;
+}
+function drawPlasma(color) {
+  const prev = ctx.imageSmoothingEnabled;
+  ctx.imageSmoothingEnabled = true;
+  ctx.drawImage(plasmaTexture(color), 0, 0, SCREEN_W, SCREEN_H);
+  ctx.imageSmoothingEnabled = prev;
+}
+
+/* ------------------------------------------------------- element drawing */
+
+const themeImage = name => name ? S.images.get(lower(name.replace(/\.(png|jpe?g|bmp)$/i, "") + ".png")) || null : null;
+
+function drawElement(el) {
+  const game = GAMES[S.gameIndex];
+  const ex = el.extended || {};
+  let q = null;
+  // GameCountText and ItemIcon/ItemCover are registered under another internal
+  // type (§3), so dispatch on the cfg type where the drawing differs.
+  const kind = el.typeName === "GameCountText" ? "GameCountText" : el.internal;
+
+  switch (kind) {
+    case "Background": {
+      let img = ex.pattern ? gameArt(game.serial, ex.pattern) : null;
+      if (!img || !img.complete) img = themeImage(ex.defaultTexture);
+      if (img && img.complete && img.naturalWidth) {
+        q = drawPixmap(el, img, el.posX, el.posY, el.aligned, el.width, el.height, el.scaled, el.color);
+      } else {
+        if (S.plasma) drawPlasma(S.theme.bgColor);
+        else { ctx.fillStyle = rgb(S.theme.bgColor); ctx.fillRect(0, 0, SCREEN_W, SCREEN_H); }
+        q = { x:0, y:0, w:SCREEN_W, h:SCREEN_H };
+      }
+      break;
+    }
+    case "StaticImage": {
+      const img = themeImage(ex.defaultTexture);
+      q = drawPixmap(el, img, el.posX, el.posY, el.aligned, el.width, el.height, el.scaled, el.color);
+      if (!img) q = stubQuad(el, "no image");
+      if (ex.overlay) drawOverlay(el, q);
+      break;
+    }
+    case "GameImage": {
+      let img = ex.pattern ? gameArt(game.serial, ex.pattern) : null;
+      if (!img) img = themeImage(ex.defaultTexture);
+      if (img && img.complete && img.naturalWidth)
+        q = drawPixmap(el, img, el.posX, el.posY, el.aligned, el.width, el.height, el.scaled, el.color);
+      else q = stubQuad(el, ex.pattern || "art");
+      if (ex.overlay) drawOverlay(el, q);
+      break;
+    }
+    case "AttributeImage": {
+      const v = ex.pattern ? gameAttr(game, ex.pattern) : null;
+      const img = themeImage(ex.defaultTexture);
+      if (img) q = drawPixmap(el, img, el.posX, el.posY, el.aligned, el.width, el.height, el.scaled, el.color);
+      else q = stubQuad(el, v ? `${(ex.pattern||"").replace(/^#/,"")}=${v}` : (ex.pattern || "attr"));
+      break;
+    }
+    case "ItemsList":  q = drawItemsList(el); break;
+    case "ItemText":   q = drawSingleText(el, game.serial); break;
+    case "StaticText": q = drawSingleText(el, ex.value ?? ""); break;
+    case "GameCountText": q = drawSingleText(el, `Files found: ${GAMES.length}`); break;
+    case "AttributeText": q = drawAttributeText(el, game); break;
+    case "MenuText":   q = drawMenuText(el); break;
+    case "MenuIcon":   q = stubQuad(el, "MenuIcon", 32, 32); break;
+    case "BdmIndex":   q = stubQuad(el, "USB 1", 64, 8); break;
+    case "HintText":   q = drawHints(el, [["START","Menu"],["○","Run"],["□","Info"],["△","Options"],["SEL","Refresh"]]); break;
+    case "InfoHintText": q = drawHints(el, [["○","Run"],["✕","Back"]]); break;
+    case "LoadingIcon": q = stubQuad(el, "busy", 32, 32); break;
+    default: q = stubQuad(el, el.typeName);
+  }
+  el._rect = q || { x:el.posX, y:el.posY, w:0, h:0 };
+}
+
+function stubQuad(el, label, dw, dh) {
+  const w = el.width === DIM_UNDEF ? (dw ?? 64) : el.width;
+  const h = el.height === DIM_UNDEF ? (dh ?? 64) : el.height;
+  const q = setupQuad(el.posX, el.posY, el.aligned, w, h, el.scaled, S.aspect);
+  drawStub(q, label);
+  return q;
+}
+
+/** rmDrawOverlayPixmap: the frame on top, corner offsets relative to its UL (§6.3). */
+function drawOverlay(el, base) {
+  const img = themeImage(el.extended.overlay);
+  const q = setupQuad(el.posX, el.posY, el.aligned,
+    el.width === DIM_UNDEF ? base.w : el.width,
+    el.height === DIM_UNDEF ? base.h : el.height, el.scaled, S.aspect);
+  if (img && img.complete) ctx.drawImage(img, q.x, q.y, q.w, q.h);
+  else drawStub(q, "overlay " + el.extended.overlay);
+}
+
+/**
+ * The width/height fntRenderString is called with. Only the mutable-text types
+ * ever pass a box; everything else passes 0,0, meaning no clipping and no
+ * newline handling (§6.2). DIM_UNDEF must never reach the clipper as -1.
+ */
+function textBox(el) {
+  const ex = el.extended || {};
+  if (ex.sizingMode === undefined || ex.sizingMode === SIZING_NONE) return { w:0, h:0 };
+  return { w: el.width === DIM_UNDEF ? 0 : el.width, h: el.height === DIM_UNDEF ? 0 : el.height };
+}
+
+function drawSingleText(el, str) {
+  const box = textBox(el);
+  const ex = el.extended || {};
+  if (ex.sizingMode === SIZING_WRAP && box.w)
+    str = fitString(s => textWidth(s, fontSpec(el)), String(str), box.w);
+  renderString(el, el.posX, el.posY, el.aligned, box.w, box.h, str, el.color);
+  return textRect(el, String(str), box);
+}
+
+function drawAttributeText(el, game) {
+  const ex = el.extended;
+  const box = textBox(el);
+  let value = ex.value ? gameAttr(game, ex.value) : null;
+  let out;
+  if (value !== null && value !== undefined) {
+    const isSize = /^#?size$/i.test(ex.value);
+    if (ex.displayMode === DISPLAY_NEVER) out = isSize ? `${value} MiB` : value;
+    else out = isSize ? `${ex.alias}${value} MiB` : `${ex.alias}${value}`;
+  } else if (ex.displayMode === DISPLAY_ALWAYS) {
+    out = ex.alias ?? "";
+  } else return { x:el.posX, y:el.posY, w:0, h:0 };
+  if (ex.sizingMode === SIZING_WRAP && box.w)
+    out = fitString(s => textWidth(s, fontSpec(el)), out, box.w);
+  renderString(el, el.posX, el.posY, el.aligned, box.w, box.h, out, el.color);
+  return textRect(el, out, box);
+}
+
+/** A selectable rect around rendered text, matching where the glyphs land. */
+function textRect(el, str, box) {
+  const spec = fontSpec(el);
+  const lines = String(str).split("\n");
+  const w = box.w ? Math.min(Math.max(...lines.map(l => textWidth(l, spec))), box.w)
+                  : Math.max(...lines.map(l => textWidth(l, spec)), 0);
+  const h = Math.max(spec.size, lines.length * (box.w ? MENU_ITEM_HEIGHT : spec.size));
+  let x = el.posX, y = el.posY;
+  if (el.aligned & 8) x -= w >> 1;
+  const top = (el.aligned & 2) ? y + ((spec.size - 4) >> 1) : y + (spec.size - 2);
+  return { x, y: top - spec.size + 3, w: Math.max(w, 4), h };
+}
+
+/** drawItemsList (themes.c:840) — §5.2, including the decorator/text mismatch. */
+function drawItemsList(el) {
+  const ex = el.extended;
+  const n = ex.displayedItems;
+  if (S.gameIndex < S.pageStart) S.pageStart = S.gameIndex;
+  if (S.gameIndex >= S.pageStart + n) S.pageStart = S.gameIndex - n + 1;
+  S.pageStart = Math.max(0, Math.min(S.pageStart, Math.max(0, GAMES.length - n)));
+
+  let posX = el.posX, posY = el.posY;
+  if (el.aligned) { posX -= el.width >> 1; posY -= el.height >> 1; }
+  const top = posY;
+
+  for (let i = 0; i < n; i++) {
+    const g = GAMES[S.pageStart + i];
+    if (!g) break;
+    const color = (S.pageStart + i === S.gameIndex) ? S.theme.selTextColor : el.color;
+    if (ex.decoratorImage) {
+      const icon = gameArt(g.serial, ex.decoratorImage.extended.pattern);
+      const q = setupQuad(posX, posY, el.aligned, DECORATOR_SIZE, DECORATOR_SIZE, el.scaled, S.aspect);
+      if (icon && icon.complete && icon.naturalWidth) ctx.drawImage(icon, q.x, q.y, q.w, q.h);
+      else drawStub(q, "");
+      // NOTE: OPL uses elem->posX here, not the centred posX (§5.2 quirk).
+      renderString(el, el.posX + DECORATOR_SIZE, posY, el.aligned, el.width, el.height, g.title, color);
+    } else {
+      renderString(el, el.posX, posY, el.aligned, el.width, el.height, g.title, color);
+    }
+    posY += MENU_ITEM_HEIGHT;
+  }
+  el._rows = { top, count: Math.min(n, GAMES.length - S.pageStart), x: posX };
+  return { x: el.aligned ? el.posX - (el.width >> 1) : el.posX, y: top, w: el.width, h: el.height };
+}
+
+function drawMenuText(el) {
+  const label = S.chain.startsWith("apps") ? "Apps" : "USB Games";
+  const spec = fontSpec(el);
+  if (el.aligned) {
+    const off = el.width >> 1;
+    drawStub(setupQuad(el.posX - off, el.posY, el.aligned, 20, 20, el.scaled, S.aspect), "‹");
+    drawStub(setupQuad(el.posX + off, el.posY, el.aligned, 20, 20, el.scaled, S.aspect), "›");
+  } else {
+    drawStub(setupQuad(el.posX - 20, el.posY, el.aligned, 20, 20, el.scaled, S.aspect), "‹");
+    drawStub(setupQuad(el.posX + el.width, el.posY, el.aligned, 20, 20, el.scaled, S.aspect), "›");
+  }
+  renderString(el, el.posX, el.posY, el.aligned, 0, 0, label, el.color);
+  const w = textWidth(label, spec);
+  return { x: (el.aligned & 8) ? el.posX - (w >> 1) : el.posX, y: el.posY, w: Math.max(w, el.width), h: spec.size + 4 };
+}
+
+/**
+ * drawHintText (themes.c:915): icon + label pairs, `width` used as the gap
+ * between them, `aligned` centring the whole row (guiAlignMenuHints).
+ */
+function drawHints(el, hints) {
+  const spec = fontSpec(el);
+  const ICON_W = 22;
+  let x = el.posX;
+  if (el.aligned) {
+    let total = SCREEN_W;
+    hints.forEach((h, i) => {
+      total -= ICON_W + 2 + textWidth(h[1], spec);
+      if (i !== hints.length - 1) total -= el.width;
+    });
+    x = total >> 1;
+  }
+  const startX = x;
+  for (const [icon, label] of hints) {
+    drawStub({ x, y: el.posY, w: ICON_W, h: 20 }, icon);
+    x += ICON_W + 2;
+    renderString(el, x, el.posY + 10, ALIGN_CENTER & 2, 0, 0, label, el.color);
+    x += textWidth(label, spec) + el.width;
+  }
+  return { x: startX, y: el.posY, w: x - startX - el.width, h: 20 };
+}
+
+/* ------------------------------------------------------------ frame draw */
+
+function render() {
+  if (!S.theme) { ctx.clearRect(0, 0, SCREEN_W, SCREEN_H); octx.clearRect(0, 0, SCREEN_W, SCREEN_H); return; }
+  ctx.save();
+  ctx.clearRect(0, 0, SCREEN_W, SCREEN_H);
+  ctx.fillStyle = "#000"; ctx.fillRect(0, 0, SCREEN_W, SCREEN_H);
+  const chain = S.theme.chains[S.chain] || [];
+  for (const el of chain) drawElement(el);      // list order = numbered order (§2.4)
+  if (S.showLoading && S.theme.loadingIcon) drawElement(S.theme.loadingIcon);
+  ctx.restore();
+  drawOverlayLayer(chain);
+  applyViewport();
+}
+
+function drawOverlayLayer(chain) {
+  octx.clearRect(0, 0, SCREEN_W, SCREEN_H);
+  if (S.grid) {
+    octx.strokeStyle = "#ffffff14"; octx.lineWidth = 1;
+    octx.beginPath();
+    for (let x = 0; x <= SCREEN_W; x += 8) { octx.moveTo(x + .5, 0); octx.lineTo(x + .5, SCREEN_H); }
+    for (let y = 0; y <= SCREEN_H; y += 8) { octx.moveTo(0, y + .5); octx.lineTo(SCREEN_W, y + .5); }
+    octx.stroke();
+  }
+  const el = S.sel;
+  if (!el || !el._rect || !chain.includes(el)) return;
+  const r = el._rect;
+  octx.strokeStyle = "#00aeff"; octx.lineWidth = 1;
+  octx.setLineDash([4, 3]);
+  octx.strokeRect(r.x + .5, r.y + .5, Math.max(1, r.w) - 1, Math.max(1, r.h) - 1);
+  octx.setLineDash([]);
+  octx.fillStyle = "#00aeff";
+  for (const [hx, hy] of handlePoints(r)) octx.fillRect(hx - 2, hy - 2, 5, 5);
+  const tag = `${el.name} · ${el.typeName}`;
+  octx.font = "10px system-ui,sans-serif";
+  const tw = octx.measureText(tag).width + 8;
+  const ty = r.y > 14 ? r.y - 13 : r.y + Math.max(1, r.h) + 1;
+  octx.fillStyle = "#00aeffdd";
+  octx.fillRect(r.x, ty, tw, 12);
+  octx.fillStyle = "#04121c";
+  octx.fillText(tag, r.x + 4, ty + 9);
+}
+const handlePoints = r => [
+  [r.x, r.y], [r.x + r.w / 2, r.y], [r.x + r.w, r.y],
+  [r.x, r.y + r.h / 2], [r.x + r.w, r.y + r.h / 2],
+  [r.x, r.y + r.h], [r.x + r.w / 2, r.y + r.h], [r.x + r.w, r.y + r.h]];
+
+/** Present the 640x480 buffer: zoom, smoothing, and the 16:9 stretch. */
+function applyViewport() {
+  const stack = document.getElementById("stack");
+  const stage = document.getElementById("stage");
+  const wide = S.aspect === 3;
+  let scale;
+  if (S.zoom === "fit") {
+    const pad = 24;
+    scale = Math.min((stage.clientWidth - pad) / (wide ? SCREEN_W * 4 / 3 : SCREEN_W),
+                     (stage.clientHeight - pad) / SCREEN_H);
+    scale = Math.max(0.2, scale);
+  } else scale = Number(S.zoom);
+  const w = Math.round(SCREEN_W * scale * (wide ? 4 / 3 : 1));
+  const h = Math.round(SCREEN_H * scale);
+  stack.style.width = w + "px";
+  stack.style.height = h + "px";
+  for (const c of stack.querySelectorAll("canvas"))
+    c.style.imageRendering = S.smooth ? "auto" : "pixelated";
+  S.viewScaleX = w / SCREEN_W;
+  S.viewScaleY = h / SCREEN_H;
+}
+
+/* =============================================================== 8. editor */
+
+/** Screen-space point → virtual 640x480 coordinates. */
+function toVirtual(ev) {
+  const r = cOverlay.getBoundingClientRect();
+  return { x: (ev.clientX - r.left) / (r.width / SCREEN_W),
+           y: (ev.clientY - r.top) / (r.height / SCREEN_H) };
+}
+
+function hitTest(pt) {
+  const chain = S.theme ? (S.theme.chains[S.chain] || []) : [];
+  for (let i = chain.length - 1; i >= 0; i--) {          // topmost first
+    const el = chain[i], r = el._rect;
+    if (!r || r.w <= 0 || r.h <= 0) continue;
+    if (el.internal === "Background" && i === 0 && chain.length > 1) continue;  // don't swallow clicks
+    if (pt.x >= r.x && pt.x <= r.x + r.w && pt.y >= r.y && pt.y <= r.y + r.h) return el;
+  }
+  return chain[0] && chain[0].internal === "Background" ? chain[0] : null;
+}
+
+function select(el) {
+  S.sel = el;
+  renderInspector();
+  renderTree();
+  render();
+}
+
+/* ------------------------------------------------------------- coordinate edits */
+
+/**
+ * Write a new resolved position back to the cfg, keeping the author's
+ * right/bottom-relative convention when they used one (§6.1).
+ */
+function writePos(el, key, resolved) {
+  const wasNeg = (key === "x" ? el.rawX : el.rawY) < 0;
+  const raw = wasNeg ? resolved - (key === "x" ? SCREEN_W : SCREEN_H) : resolved;
+  setKeyUndoable(el.name + "_" + key, String(raw));
+}
+
+let dragState = null;
+cOverlay.addEventListener("pointerdown", ev => {
+  if (!S.theme) return;
+  cOverlay.focus();
+  const pt = toVirtual(ev);
+  const el = S.sel;
+  let mode = "move", handle = null;
+  if (el && el._rect && (S.theme.chains[S.chain] || []).includes(el)) {
+    const hs = handlePoints(el._rect);
+    for (let i = 0; i < hs.length; i++) {
+      if (Math.abs(pt.x - hs[i][0]) <= 4 && Math.abs(pt.y - hs[i][1]) <= 4) { mode = "resize"; handle = i; break; }
+    }
+  }
+  if (mode === "move") {
+    const hit = hitTest(pt);
+    if (hit !== S.sel) select(hit);
+    if (!S.sel) return;
+    if (S.sel.internal === "ItemsList" && S.sel._rows) {
+      const row = Math.floor((pt.y - S.sel._rows.top) / MENU_ITEM_HEIGHT);
+      if (row >= 0 && row < S.sel._rows.count) { S.gameIndex = S.pageStart + row; renderGames(); render(); }
+    }
+  }
+  if (!S.sel || S.sel.injected) { if (S.sel && S.sel.injected) setStatus("Injected defaults aren't in the file yet — set a value in the inspector to create it."); return; }
+  dragState = { mode, handle, startPt: pt, startX: S.sel.posX, startY: S.sel.posY,
+                startW: S.sel.width, startH: S.sel.height, el: S.sel, moved: false };
+  cOverlay.setPointerCapture(ev.pointerId);
+});
+
+cOverlay.addEventListener("pointermove", ev => {
+  if (!dragState) {
+    if (!S.theme) return;
+    const pt = toVirtual(ev);
+    let cur = "default";
+    const el = S.sel;
+    if (el && el._rect && (S.theme.chains[S.chain] || []).includes(el)) {
+      const hs = handlePoints(el._rect);
+      const CURS = ["nwse-resize","ns-resize","nesw-resize","ew-resize","ew-resize","nesw-resize","ns-resize","nwse-resize"];
+      for (let i = 0; i < hs.length; i++)
+        if (Math.abs(pt.x - hs[i][0]) <= 4 && Math.abs(pt.y - hs[i][1]) <= 4) { cur = CURS[i]; break; }
+    }
+    if (cur === "default" && hitTest(pt)) cur = "move";
+    cOverlay.style.cursor = cur;
+    return;
+  }
+  const pt = toVirtual(ev);
+  let dx = Math.round(pt.x - dragState.startPt.x), dy = Math.round(pt.y - dragState.startPt.y);
+  if (ev.altKey) { if (Math.abs(dx) > Math.abs(dy)) dy = 0; else dx = 0; }
+  if (!dragState.moved && Math.abs(dx) + Math.abs(dy) < 2) return;
+  dragState.moved = true;
+  const el = dragState.el;
+  const snap = v => S.snap ? Math.round(v / 8) * 8 : v;
+
+  if (dragState.mode === "move") {
+    writePos(el, "x", snap(dragState.startX + dx));
+    writePos(el, "y", snap(dragState.startY + dy));
+  } else {
+    const h = dragState.handle;
+    const w0 = dragState.startW === DIM_UNDEF ? Math.round(el._rect.w) : dragState.startW;
+    const h0 = dragState.startH === DIM_UNDEF ? Math.round(el._rect.h) : dragState.startH;
+    const left = [0,3,5].includes(h), right = [2,4,7].includes(h);
+    const topH = [0,1,2].includes(h), bot = [5,6,7].includes(h);
+    if (right) setKeyUndoable(el.name + "_width", String(Math.max(0, snap(w0 + dx))));
+    if (left)  { setKeyUndoable(el.name + "_width", String(Math.max(0, snap(w0 - dx)))); writePos(el, "x", snap(dragState.startX + dx)); }
+    if (bot)   setKeyUndoable(el.name + "_height", String(Math.max(0, snap(h0 + dy))));
+    if (topH)  { setKeyUndoable(el.name + "_height", String(Math.max(0, snap(h0 - dy)))); writePos(el, "y", snap(dragState.startY + dy)); }
+  }
+  rebuild({ keepSelection: el.name });
+}, { passive: true });
+
+addEventListener("pointerup", () => {
+  if (dragState && dragState.moved) commitUndo();
+  dragState = null;
+});
+
+cOverlay.addEventListener("keydown", ev => {
+  if (!S.sel || S.sel.injected) return;
+  const step = ev.shiftKey ? 8 : 1;
+  const map = { ArrowLeft:[-step,0], ArrowRight:[step,0], ArrowUp:[0,-step], ArrowDown:[0,step] };
+  if (map[ev.key]) {
+    ev.preventDefault();
+    pushUndo();
+    writePos(S.sel, "x", S.sel.posX + map[ev.key][0]);
+    writePos(S.sel, "y", S.sel.posY + map[ev.key][1]);
+    rebuild({ keepSelection: S.sel.name });
+    commitUndo();
+  } else if (ev.key === "Tab") {
+    ev.preventDefault();
+    const chain = S.theme.chains[S.chain] || [];
+    const i = chain.indexOf(S.sel);
+    select(chain[(i + (ev.shiftKey ? -1 : 1) + chain.length) % chain.length]);
+  } else if (ev.key === "Escape") select(null);
+});
+
+/* ---------------------------------------------------------------- undo */
+
+let undoPending = null;
+function pushUndo() { if (!undoPending && S.doc) undoPending = writeConfig(S.doc); }
+function commitUndo() {
+  if (!undoPending) return;
+  const now = writeConfig(S.doc);
+  if (now !== undoPending) { S.undo.push(undoPending); S.redo.length = 0; if (S.undo.length > 200) S.undo.shift(); }
+  undoPending = null;
+}
+function setKeyUndoable(key, value) { pushUndo(); setKey(S.doc, key, value); }
+function deleteKeyUndoable(key) { pushUndo(); deleteKey(S.doc, key); }
+
+addEventListener("keydown", ev => {
+  const mod = ev.metaKey || ev.ctrlKey;
+  if (!mod || ev.key.toLowerCase() !== "z") return;
+  if (document.activeElement === document.getElementById("cfg")) return;   // let the textarea undo itself
+  ev.preventDefault();
+  const stack = ev.shiftKey ? S.redo : S.undo, other = ev.shiftKey ? S.undo : S.redo;
+  if (!stack.length) return;
+  other.push(writeConfig(S.doc));
+  loadCfgText(stack.pop(), { keepSelection: S.sel && S.sel.name });
+});
+
+/* ------------------------------------------------------------ inspector */
+
+const ATTR_META = {
+  x:{kind:"pos"}, y:{kind:"pos"}, width:{kind:"dim"}, height:{kind:"dim"},
+  aligned:{kind:"enum", options:[["0","0 — x,y is the top-left"],["1","1 — x,y is the centre"]]},
+  scaled:{kind:"enum", options:[["0","0 — stretch in widescreen"],["1","1 — keep aspect in widescreen"]]},
+  enabled:{kind:"enum", options:[["1","1 — drawn"],["0","0 — skipped, numbering continues"]]},
+  color:{kind:"color"}, font:{kind:"int"}, count:{kind:"int"},
+  display:{kind:"enum", options:[["0","0 — label always"],["1","1 — label when defined"],["2","2 — value only"]]},
+  wrap:{kind:"enum", options:[["0","0 — no wrap"],["1","1 — word wrap"]]},
+  type:{kind:"type"},
+};
+const OVERLAY_SET = new Set(OVERLAY_ATTRS);
+
+function renderInspector() {
+  const host = document.getElementById("insp");
+  const el = S.sel;
+  if (!el) { host.innerHTML = '<div class="empty">Select an element on the canvas or in the list.</div>'; return; }
+  host.innerHTML = "";
+
+  const head = document.createElement("div");
+  head.className = "hint";
+  head.innerHTML = `<b style="color:var(--fg)">${el.name}</b> — ${el.typeName}` +
+    (el.internal !== el.typeName ? ` <span title="OPL builds this as ${el.internal} internally">(built as ${el.internal})</span>` : "") +
+    (el.injected ? `<br>Injected by OPL because the theme didn't declare one. Setting any value here writes it into the file.` : "") +
+    (el.inheritedFrom ? `<br>Inherited from <b>${el.inheritedFrom}</b>. Editing writes to ${el.inheritedFrom}, which also changes the main page — add an <code>${el.name}_type</code> block to override just this page.` : "") +
+    (el.missing ? `<br><span style="color:var(--err)">No ${el.name}_${el.missing}, so OPL never draws this.</span>` : "") +
+    `<br>resolved: x=${el.posX} y=${el.posY} w=${el.width === DIM_UNDEF ? "texture" : el.width} h=${el.height === DIM_UNDEF ? "texture" : el.height}`;
+  host.appendChild(head);
+
+  const used = [...COMMON_ATTRS.filter(a => a !== "type"), ...(TYPE_ATTRS[el.typeName] || [])];
+  const shownOverlay = el.extended && el.extended.overlay;
+  for (const attr of used) {
+    if (OVERLAY_SET.has(attr) && attr !== "overlay" && !shownOverlay) continue;
+    host.appendChild(attrRow(el, attr));
+  }
+
+  const unused = [...el.explicit].filter(k => !used.includes(k) && k !== "type");
+  if (unused.length) {
+    const d = document.createElement("details");
+    d.className = "grp";
+    d.innerHTML = `<summary>Not used by ${el.typeName} (${unused.length})</summary>`;
+    for (const attr of unused) d.appendChild(attrRow(el, attr, true));
+    host.appendChild(d);
+  }
+}
+
+function effectiveValue(el, attr) {
+  const raw = getStr(S.doc, el.name + "_" + attr);
+  if (raw !== null) return { raw, explicit: true };
+  const ex = el.extended || {};
+  const shown = {
+    x: String(el.rawX), y: String(el.rawY),
+    width: el.width === DIM_UNDEF ? "-1" : String(el.width),
+    height: el.height === DIM_UNDEF ? "-1" : String(el.height),
+    aligned: el.aligned === ALIGN_CENTER ? "1" : "0",
+    scaled: el.scaled === SCALING_RATIO ? "1" : "0",
+    enabled: "1", color: colorToHex(el.color), font: String(el.font),
+    pattern: ex.pattern ?? "", count: String(ex.count ?? ""), default: ex.defaultTexture ?? "",
+    overlay: ex.overlay ?? "", decorator: ex.decorator ?? "",
+    value: ex.value ?? "", attribute: ex.value ?? "", title: "",
+    display: String(ex.displayMode ?? 0), wrap: ex.sizingMode === SIZING_WRAP ? "1" : "0",
+  };
+  if (OVERLAY_SET.has(attr) && ex.overlayRect) shown[attr] = String(ex.overlayRect[attr.slice(8)] ?? 0);
+  return { raw: shown[attr] ?? "", explicit: false };
+}
+
+function attrRow(el, attr, greyed) {
+  const { raw, explicit } = effectiveValue(el, attr);
+  const meta = ATTR_META[attr] || { kind: "text" };
+  const row = document.createElement("div");
+  row.className = "row" + (explicit ? "" : " def");
+  const label = document.createElement("label");
+  label.textContent = attr;
+  label.title = explicit ? `${el.name}_${attr} is set in the file` : "using the type default";
+  row.appendChild(label);
+
+  let input;
+  const commit = v => {
+    pushUndo();
+    if (v === "" && explicit) deleteKey(S.doc, el.name + "_" + attr);
+    else setKey(S.doc, el.name + "_" + attr, v);
+    commitUndo();
+    rebuild({ keepSelection: el.name });
+  };
+
+  if (meta.kind === "enum") {
+    input = document.createElement("select");
+    for (const [v, text] of meta.options) {
+      const o = document.createElement("option");
+      o.value = v; o.textContent = text; input.appendChild(o);
+    }
+    input.value = String(atoi(raw));
+    input.onchange = () => commit(input.value);
+  } else if (meta.kind === "color") {
+    const wrap = document.createElement("div");
+    wrap.className = "swatch";
+    const parsed = parseColor(raw);
+    const pick = document.createElement("input");
+    pick.type = "color"; pick.value = colorToHex(parsed);
+    const text = document.createElement("input");
+    text.type = "text"; text.value = raw; text.style.flex = "1";
+    pick.oninput = () => { text.value = pick.value; commit(pick.value); };
+    text.onchange = () => commit(text.value);
+    wrap.append(pick, text);
+    input = wrap;
+  } else {
+    input = document.createElement("input");
+    input.type = "text";
+    input.value = raw;
+    input.placeholder = meta.kind === "pos" ? "number or POS_MID"
+                      : meta.kind === "dim" ? "number, -1 or DIM_INF" : "";
+    input.onchange = () => commit(input.value.trim());
+  }
+  if (greyed) input.style.opacity = ".6";
+  row.appendChild(input);
+
+  const rst = document.createElement("button");
+  rst.className = "rst"; rst.textContent = "reset"; rst.title = "remove this line from the file";
+  rst.onclick = () => { pushUndo(); deleteKey(S.doc, el.name + "_" + attr); commitUndo(); rebuild({ keepSelection: el.name }); };
+  row.appendChild(rst);
+  return row;
+}
+
+/* ------------------------------------------------------- tree / diagnostics */
+
+function renderTabs() {
+  const host = document.getElementById("tabs");
+  host.innerHTML = "";
+  const labels = { main:"Main", info:"Info", appsMain:"Apps main", appsInfo:"Apps info" };
+  for (const key of ["main","info","appsMain","appsInfo"]) {
+    const n = S.theme ? (S.theme.chains[key] || []).length : 0;
+    const b = document.createElement("button");
+    b.textContent = `${labels[key]} (${n})`;
+    b.className = S.chain === key ? "on" : "";
+    b.disabled = n === 0 && key !== "main";
+    b.onclick = () => { S.chain = key; S.sel = null; renderTabs(); renderTree(); renderInspector(); render(); };
+    host.appendChild(b);
+  }
+}
+
+function renderTree() {
+  const host = document.getElementById("tree");
+  host.innerHTML = "";
+  const chain = S.theme ? (S.theme.chains[S.chain] || []) : [];
+  if (!chain.length) { host.innerHTML = '<div class="empty">Nothing on this page.</div>'; return; }
+  const byEl = new Map();
+  for (const d of allDiags()) if (d.element) {
+    const cur = byEl.get(d.element);
+    if (!cur || (cur !== "error" && d.severity === "error")) byEl.set(d.element, d.severity);
+  }
+  chain.forEach((el, i) => {
+    const row = document.createElement("div");
+    row.className = "el" + (el === S.sel ? " sel" : "") + (el.injected || !el.drawable ? " ghost" : "");
+    const sev = byEl.get(el.name);
+    row.innerHTML = `<span class="n">${String(i).padStart(2, " ")}</span> ${el.name} · ${el.typeName}` +
+      (el.injected ? ' <span class="b w">injected</span>' : "") +
+      (!el.drawable && !el.injected ? ' <span class="b">not drawn</span>' : "") +
+      (sev && el.drawable ? ` <span class="b ${sev === "error" ? "" : "w"}">${sev === "error" ? "!" : "?"}</span>` : "");
+    row.onclick = () => select(el);
+    host.appendChild(row);
+  });
+}
+
+function renderGames() {
+  const host = document.getElementById("games");
+  host.innerHTML = "";
+  GAMES.forEach((g, i) => {
+    const row = document.createElement("div");
+    row.className = "el" + (i === S.gameIndex ? " sel" : "");
+    row.innerHTML = `${g.title}<br><span class="n">${g.serial}</span>`;
+    row.onclick = () => { S.gameIndex = i; renderGames(); render(); };
+    host.appendChild(row);
+  });
+}
+
+const allDiags = () => [...(S.theme ? S.theme.diags : []), ...(S.validation ? S.validation.diags : [])];
+
+function renderDiags() {
+  const host = document.getElementById("diags");
+  host.innerHTML = "";
+  const list = allDiags().slice().sort((a, b) => rank(b.severity) - rank(a.severity));
+  if (!list.length) { host.innerHTML = '<div class="empty">No problems found.</div>'; return; }
+  for (const d of list) {
+    const row = document.createElement("div");
+    row.className = "d " + d.severity;
+    row.innerHTML = `<span class="ic">${d.severity === "error" ? "ERR" : d.severity === "warn" ? "WARN" : "INFO"}</span>` +
+      `<span>${escapeHtml(d.message)}<code>${d.code}${d.line ? " · line " + d.line : ""}</code></span>`;
+    row.onclick = () => {
+      if (d.line) gotoLine(d.line);
+      if (d.element) {
+        for (const key of ["main","info","appsMain","appsInfo"]) {
+          const el = (S.theme.chains[key] || []).find(e => e.name === d.element);
+          if (el) { S.chain = key; renderTabs(); select(el); break; }
+        }
+      }
+    };
+    host.appendChild(row);
+  }
+}
+const rank = s => s === "error" ? 2 : s === "warn" ? 1 : 0;
+const escapeHtml = s => String(s).replace(/[&<>]/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;" }[c]));
+
+function renderMemory() {
+  const host = document.getElementById("mem");
+  const m = S.validation && S.validation.memory;
+  if (!m || !m.rows.length) { host.innerHTML = '<div class="empty">No art caches in this theme.</div>'; return; }
+  const mb = b => (b / 1048576).toFixed(2) + " MB";
+  host.innerHTML =
+    `<table id="memTable"><tr><th>pattern</th><th>count</th><th>size</th><th class="n">RAM</th></tr>` +
+    m.rows.map(r => `<tr><td>${r.pattern}${r.shared ? " ×" + r.users.length : ""}</td><td>${r.count}</td>` +
+      `<td title="${r.basis}">${r.w}×${r.h}</td><td class="n">${mb(r.bytes)}</td></tr>`).join("") +
+    `<tr><td colspan="3"><b>total</b></td><td class="n mem-${m.level}"><b>${mb(m.total)}</b></td></tr></table>` +
+    `<div class="hint" style="padding:6px 9px 10px">count × width × height × 3 bytes, decoded, shared patterns counted once. ` +
+    (m.level === "err" ? `<span style="color:var(--err)">This is very likely to exhaust a 32 MB console even though it will look fine in PCSX2.</span>`
+     : m.level === "warn" ? `<span style="color:var(--warn)">Getting heavy for a 32 MB console — test on hardware.</span>`
+     : `Comfortable for a 32 MB console.`) + `</div>`;
+}
+
+/* -------------------------------------------------------------- cfg pane */
+
+const cfgEl = document.getElementById("cfg");
+let cfgTimer = null;
+cfgEl.addEventListener("input", () => {
+  if (S.syncing) return;
+  S.typing = Date.now();
+  clearTimeout(cfgTimer);
+  cfgTimer = setTimeout(() => {
+    S.undo.push(S.doc ? writeConfig(S.doc) : "");
+    S.redo.length = 0;
+    loadCfgText(cfgEl.value, { fromPane: true, keepSelection: S.sel && S.sel.name });
+  }, 250);
+});
+
+function gotoLine(n) {
+  const lines = cfgEl.value.split("\n");
+  let pos = 0;
+  for (let i = 0; i < n - 1 && i < lines.length; i++) pos += lines[i].length + 1;
+  cfgEl.focus();
+  cfgEl.setSelectionRange(pos, pos + (lines[n - 1] || "").length);
+  const lineH = 11.5 * 1.45;
+  cfgEl.scrollTop = Math.max(0, (n - 4) * lineH);
+}
+
+/* ---------------------------------------------------------- build + sync */
+
+function rebuild(opts = {}) {
+  S.theme = buildTheme(S.doc);
+  S.validation = validateTheme(S.doc, S.theme, S.files.size ? assetIndex() : null);
+  if (opts.keepSelection) {
+    let found = null;
+    for (const key of ["main","info","appsMain","appsInfo"])
+      for (const el of S.theme.chains[key] || []) if (el.name === opts.keepSelection && (!found || key === S.chain)) found = el;
+    S.sel = found;
+  } else if (S.sel) S.sel = null;
+
+  if (!opts.fromPane) {
+    const text = writeConfig(S.doc);
+    if (cfgEl.value !== text) {
+      // Don't clobber the buffer mid-keystroke; the debounce will reconcile.
+      if (document.activeElement !== cfgEl || Date.now() - S.typing > 800) {
+        S.syncing = true;
+        const { selectionStart: a, selectionEnd: b, scrollTop } = cfgEl;
+        cfgEl.value = text;
+        try { cfgEl.setSelectionRange(a, b); } catch {}
+        cfgEl.scrollTop = scrollTop;
+        S.syncing = false;
+      }
+    }
+  }
+  renderTabs(); renderTree(); renderInspector(); renderDiags(); renderMemory(); render();
+}
+
+function loadCfgText(text, opts = {}) {
+  S.doc = parseConfig(text);
+  if (!opts.fromPane) {
+    S.syncing = true; cfgEl.value = text; S.syncing = false;
+  }
+  if (!(S.theme && S.theme.chains[S.chain])) S.chain = "main";
+  rebuild(opts);
+  if (!S.theme.chains[S.chain] || !S.theme.chains[S.chain].length) S.chain = "main";
+}
+
+/* ================================================================= 9. app */
+
+const setStatus = (msg) => {
+  const el = document.getElementById("status");
+  el.textContent = msg || "";
+  if (msg) setTimeout(() => { if (el.textContent === msg) el.textContent = ""; }, 6000);
+};
+
+async function adoptFiles(files) {
+  const cfg = await ingestFiles(files);
+  if (cfg === null) {
+    await applyThemeFonts();
+    setStatus("No conf_theme.cfg in that folder — assets loaded, cfg unchanged.");
+    if (S.doc) rebuild({ keepSelection: S.sel && S.sel.name });
+    return;
+  }
+  S.undo.length = 0; S.redo.length = 0;
+  // Parse first: applyThemeFonts reads default_font/fontN out of the *new* cfg.
+  S.doc = parseConfig(cfg);
+  await applyThemeFonts();
+  loadCfgText(cfg);
+  setStatus(`Loaded ${S.files.size} files, ${S.images.size} images${S.art.size ? ", " + S.art.size + " art files" : ""}.`);
+}
+
+/** Register the theme's own TTFs so `font=N` previews with the right face. */
+async function applyThemeFonts() {
+  S.themeFonts = new Map();
+  if (!S.doc) return;
+  const probe = buildTheme(S.doc);
+  for (let i = 0; i < 16; i++) {
+    const f = probe.fonts[i];
+    if (!f || !f.file) continue;
+    const file = S.files.get(lower(f.file));
+    if (!file) continue;
+    const family = "ThemeFont" + i;
+    if (await loadThemeFont(file, family)) S.themeFonts.set(i, family);
+  }
+  glyphCache.clear();
+}
+
+document.getElementById("btnFolder").onclick = () => {
+  const inp = document.createElement("input");
+  inp.type = "file"; inp.webkitdirectory = true; inp.multiple = true;
+  inp.onchange = () => adoptFiles([...inp.files]);
+  inp.click();
+};
+
+document.getElementById("btnArt").onclick = () => {
+  const inp = document.createElement("input");
+  inp.type = "file"; inp.webkitdirectory = true; inp.multiple = true;
+  inp.onchange = async () => {
+    let n = 0;
+    await Promise.all([...inp.files].filter(f => /\.(png|jpe?g)$/i.test(f.name))
+      .map(f => { n++; return loadArt(f.name, f); }));
+    setStatus(`Loaded ${n} art files. Names must be <SERIAL>_<PATTERN>.png`);
+    render();
+  };
+  inp.click();
+};
+
+/* File System Access API — live reload (progressive enhancement). */
+const btnLive = document.getElementById("btnLive");
+if (!window.showDirectoryPicker) { btnLive.disabled = true; btnLive.title = "This browser has no File System Access API — use “Open theme folder…”."; }
+btnLive.onclick = async () => {
+  if (S.live) { stopLive(); return; }
+  try {
+    S.dirHandle = await showDirectoryPicker({ mode: "readwrite" });
+    await reloadFromHandle(true);
+    S.live = true;
+    btnLive.classList.add("on");
+    document.getElementById("btnSave").disabled = false;
+    S.liveTimer = setInterval(() => reloadFromHandle(false), 700);
+  } catch { /* user cancelled */ }
+};
+function stopLive() {
+  S.live = false; clearInterval(S.liveTimer);
+  btnLive.classList.remove("on");
+  setStatus("Live reload off.");
+}
+let liveStamps = new Map();
+async function reloadFromHandle(initial) {
+  if (!S.dirHandle) return;
+  try {
+    const files = [], stamps = new Map();
+    for await (const [name, h] of S.dirHandle.entries()) {
+      if (h.kind !== "file") continue;
+      const f = await h.getFile();
+      files.push(f); stamps.set(name, f.lastModified + ":" + f.size);
+    }
+    let changed = initial;
+    if (!changed) {
+      if (stamps.size !== liveStamps.size) changed = true;
+      else for (const [k, v] of stamps) if (liveStamps.get(k) !== v) { changed = true; break; }
+    }
+    liveStamps = stamps;
+    if (!changed) return;
+    const keep = S.sel && S.sel.name, chain = S.chain;
+    await adoptFiles(files);
+    S.chain = chain;
+    rebuild({ keepSelection: keep });
+    if (!initial) setStatus("Reloaded " + new Date().toLocaleTimeString());
+  } catch (e) { stopLive(); setStatus("Live reload stopped: " + e.message); }
+}
+
+document.getElementById("btnSave").onclick = async () => {
+  if (!S.dirHandle || !S.doc) return;
+  try {
+    const h = await S.dirHandle.getFileHandle("conf_theme.cfg", { create: true });
+    const w = await h.createWritable();
+    await w.write(writeConfig(S.doc));
+    await w.close();
+    liveStamps = new Map();       // don't treat our own write as an external change
+    setStatus("Saved conf_theme.cfg");
+  } catch (e) { setStatus("Save failed: " + e.message); }
+};
+
+document.getElementById("btnExport").onclick = () => {
+  if (!S.doc) { setStatus("Nothing to export yet."); return; }
+  const text = writeConfig(S.doc);
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([text], { type: "text/plain" }));
+  a.download = "conf_theme.cfg";
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+};
+
+/* Drag and drop a folder. */
+const dropEl = document.getElementById("drop");
+let dragDepth = 0;
+addEventListener("dragenter", e => { e.preventDefault(); if (++dragDepth === 1) dropEl.classList.add("on"); });
+addEventListener("dragover", e => e.preventDefault());
+addEventListener("dragleave", e => { e.preventDefault(); if (--dragDepth <= 0) { dragDepth = 0; dropEl.classList.remove("on"); } });
+addEventListener("drop", async e => {
+  e.preventDefault(); dragDepth = 0; dropEl.classList.remove("on");
+  const files = [];
+  const walk = async (entry, path) => {
+    if (entry.isFile) {
+      const f = await new Promise(r => entry.file(r));
+      Object.defineProperty(f, "webkitRelativePath", { value: path + f.name });
+      files.push(f);
+    } else if (entry.isDirectory) {
+      const reader = entry.createReader();
+      for (;;) {
+        const batch = await new Promise(r => reader.readEntries(r));
+        if (!batch.length) break;
+        for (const c of batch) await walk(c, path + entry.name + "/");
+      }
+    }
+  };
+  const entries = [...e.dataTransfer.items].map(i => i.webkitGetAsEntry && i.webkitGetAsEntry()).filter(Boolean);
+  if (entries.length) { for (const en of entries) await walk(en, ""); await adoptFiles(files); }
+  else if (e.dataTransfer.files.length) await adoptFiles([...e.dataTransfer.files]);
+});
+
+/* Toolbar */
+const toggle = (id, get, set) => {
+  const b = document.getElementById(id);
+  b.onclick = () => { set(!get()); b.classList.toggle("on", get()); render(); };
+};
+document.getElementById("btn43").onclick = () => {
+  S.aspect = 4;
+  document.getElementById("btn43").classList.add("on");
+  document.getElementById("btn169").classList.remove("on");
+  render();
+};
+document.getElementById("btn169").onclick = () => {
+  S.aspect = 3;
+  document.getElementById("btn169").classList.add("on");
+  document.getElementById("btn43").classList.remove("on");
+  render();
+};
+document.getElementById("zoom").onchange = e => { S.zoom = e.target.value; render(); };
+toggle("btnSmooth", () => S.smooth, v => S.smooth = v);
+toggle("btnGrid", () => S.grid, v => S.grid = v);
+toggle("btnSnap", () => S.snap, v => S.snap = v);
+toggle("btnPlasma", () => S.plasma, v => { S.plasma = v; plasmaCache = null; });
+toggle("btnLoad", () => S.showLoading, v => S.showLoading = v);
+document.getElementById("btnBig").onclick = e => {
+  document.getElementById("cfgWrap").classList.toggle("big");
+  e.target.textContent = document.getElementById("cfgWrap").classList.contains("big") ? "Shrink" : "Expand";
+  render();
+};
+addEventListener("resize", () => { if (S.zoom === "fit") render(); });
+
+/* Boot */
+(async () => {
+  await loadBuiltinFont();
+  if (!fontReady) setStatus("Built-in font not embedded — run tools/embed-font.mjs. Text metrics will be approximate.");
+  renderGames();
+  renderTabs();
+  loadCfgText(
+    "# Paste a conf_theme.cfg here, or use “Open theme folder…”.\n" +
+    "# With nothing declared, OPL still draws a plasma background and injects\n" +
+    "# an ItemsList — which is what you are looking at.\n\n" +
+    "bg_color=#28C5F9\n");
+})();
 </script>
 </body>
 </html>
