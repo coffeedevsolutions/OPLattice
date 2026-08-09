@@ -15,6 +15,11 @@ validation panel; if a code below stops appearing, something regressed.
 | 8 | `main6_default=missing_cover` | `MISSING_ASSET` | `missing_cover.png` is not in the folder. |
 | 9 | `main7` has no `type` | `NUMBER_GAP` | This ends the scan for the page. `main8` and `main9` are **never read** — the classic "why did my element vanish" bug. |
 | 10 | `info1_pattern=COV` | `INVALID_ATTR` | `AttributeText` never reads `pattern`; the line is dead weight. |
+| 11 | `sel_text_color=#0FF` | `COLOR_MALFORMED` | Three-digit shorthand is not supported. OPL accumulates two hex digits per channel, so this reads as `#0FF000` — green, not cyan. |
+
+Loading this folder should produce **exactly these eleven** diagnostics and a
+red art-cache total of ~31 MB. Duplicates would mean the apps-chain
+de-duplication regressed; extra codes mean something else broke.
 
 Also present: `DUP_KEY` is *not* expected here, and `COMMENT_PREFIX` must **not**
 fire — no comment in the file contains a colon, which is itself the point. A `#`

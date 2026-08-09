@@ -346,6 +346,21 @@ function parseConfig(text) {
 
 const dg = (severity, code, message, line, element) => ({ severity, code, message, line, element });
 
+/**
+ * The apps chains re-instantiate their main<N> twins (§2.3), so the same fault
+ * is reported once per chain. Identical diagnostics are one problem.
+ */
+function dedupeDiags(list) {
+  const seen = new Set(), out = [];
+  for (const d of list) {
+    const key = `${d.severity}|${d.code}|${d.line}|${d.element}|${d.message}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(d);
+  }
+  return out;
+}
+
 /** Effective value of a key: the LAST occurrence wins (§11.4). null when absent. */
 function getStr(doc, key) {
   const idxs = doc.index.get(key);
@@ -763,6 +778,7 @@ function buildTheme(doc) {
   validateBackground(doc, theme, "appsMain", "appsInfo", diags);
   validateItemsList(doc, theme, theme.itemsListLists[0], "main", diags);
   validateItemsList(doc, theme, theme.itemsListLists[1], "appsMain", diags);
+  theme.diags = dedupeDiags(diags);
   return theme;
 }
 
@@ -897,7 +913,7 @@ function validateTheme(doc, theme, assets) {
         `Font slot ${slot} references "${file}", which is not in the theme folder. OPL falls back to its built-in font.`,
         lineOf(doc, slot === 0 ? "default_font" : "font" + slot)));
 
-  return { diags, memory: estimateMemory(theme, assets) };
+  return { diags: dedupeDiags(diags), memory: estimateMemory(theme, assets) };
 }
 
 /**
@@ -1354,7 +1370,12 @@ function drawPlasma(color) {
 
 /* ------------------------------------------------------- element drawing */
 
-const themeImage = name => name ? S.images.get(lower(name.replace(/\.(png|jpe?g|bmp)$/i, "") + ".png")) || null : null;
+/**
+ * texDiscoverLoad appends ".png" and nothing else (§6.4) — no extension
+ * stripping, no other formats. Being lenient here would hide the very bug
+ * EXT_IN_FILENAME warns about, so `default=logo.png` really does miss.
+ */
+const themeImage = name => name ? S.images.get(lower(name + ".png")) || null : null;
 
 function drawElement(el) {
   const game = GAMES[S.gameIndex];
