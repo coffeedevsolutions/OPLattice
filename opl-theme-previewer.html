@@ -929,15 +929,16 @@ function estimateMemory(theme, assets) {
   const rows = [];
   let total = 0;
   for (const cache of theme.caches.values()) {
-    const el = cache.el;
-    let w = el.width, h = el.height, basis = "element size";
-    if (w === DIM_UNDEF || h === DIM_UNDEF) {
-      const nat = (assets && assets.artSize && assets.artSize.get(cache.pattern))
-               || PATTERN_SIZE[cache.pattern] || { w:256, h:256 };
-      if (w === DIM_UNDEF) w = nat.w;
-      if (h === DIM_UNDEF) h = nat.h;
-      basis = assets && assets.artSize && assets.artSize.get(cache.pattern) ? "sample art" : "assumed for pattern";
-    }
+    // The cache holds the DECODED SOURCE image (texLoad decodes the PNG at its
+    // native size); the element's width/height only scale the draw quad. Sizing
+    // this off the element would under-report, which is the wrong direction for
+    // a hardware-safety figure.
+    const measured = assets && assets.artSize && assets.artSize.get(cache.pattern);
+    const nat = measured || PATTERN_SIZE[cache.pattern] || { w:256, h:256 };
+    const w = nat.w, h = nat.h;
+    const basis = measured ? "measured from your art"
+                : PATTERN_SIZE[cache.pattern] ? "assumed source size for this pattern"
+                : "assumed source size";
     const bytes = Math.max(0, cache.count) * Math.max(0,w) * Math.max(0,h) * 3;
     total += bytes;
     rows.push({ pattern:cache.pattern, count:cache.count, w, h, bytes, basis,
@@ -2018,7 +2019,8 @@ function renderMemory() {
     m.rows.map(r => `<tr><td>${r.pattern}${r.shared ? " ×" + r.users.length : ""}</td><td>${r.count}</td>` +
       `<td title="${r.basis}">${r.w}×${r.h}</td><td class="n">${mb(r.bytes)}</td></tr>`).join("") +
     `<tr><td colspan="3"><b>total</b></td><td class="n mem-${m.level}"><b>${mb(m.total)}</b></td></tr></table>` +
-    `<div class="hint" style="padding:6px 9px 10px">count × width × height × 3 bytes, decoded, shared patterns counted once. ` +
+    `<div class="hint" style="padding:6px 9px 10px">count × <b>source</b> width × height × 3 bytes, decoded and held resident. ` +
+    `The element's drawn size does not reduce this. Shared patterns counted once. ` +
     (m.level === "err" ? `<span style="color:var(--err)">This is very likely to exhaust a 32 MB console even though it will look fine in PCSX2.</span>`
      : m.level === "warn" ? `<span style="color:var(--warn)">Getting heavy for a 32 MB console — test on hardware.</span>`
      : `Comfortable for a 32 MB console.`) + `</div>`;

@@ -495,14 +495,30 @@ export function specs(C, fixtures, t) {
 
   t.group("validate: PS2 art cache estimate (§6.5)");
 
-  t.test("bytes are count x w x h x 3", () => {
-    const r = val("main0_type=Background\nmain1_type=ItemCover\nmain1_width=140\nmain1_height=200\nmain1_count=10\n", null);
-    const row = r.memory.rows.find(x => x.pattern === "COV");
-    eq(row.bytes, 10 * 140 * 200 * 3);
+  const withArt = (text, sizes) => {
+    const d = P(text);
+    return C.validateTheme(d, C.buildTheme(d), { names: new Set(), artSize: new Map(Object.entries(sizes)) });
+  };
+
+  t.test("bytes are count x SOURCE w x h x 3, measured from the art", () => {
+    const r = withArt("main0_type=Background\nmain1_type=ItemCover\nmain1_count=10\n",
+                      { COV: { w:140, h:200 } });
+    eq(r.memory.rows.find(x => x.pattern === "COV").bytes, 10 * 140 * 200 * 3);
+  });
+
+  t.test("the element's declared size does NOT reduce the estimate", () => {
+    // The cache holds the decoded source image; width/height only scale the
+    // draw quad. Sizing off the element would under-report the real risk.
+    const big = { COV: { w:512, h:512 } };
+    const a = withArt("main0_type=Background\nmain1_type=ItemCover\nmain1_count=10\n", big);
+    const b = withArt("main0_type=Background\nmain1_type=ItemCover\nmain1_count=10\nmain1_width=40\nmain1_height=60\n", big);
+    eq(a.memory.total, b.memory.total);
+    eq(a.memory.total, 10 * 512 * 512 * 3);
   });
 
   t.test("a fat cache trips the danger level", () => {
-    const r = val("main0_type=Background\nmain1_type=ItemCover\nmain1_width=512\nmain1_height=512\nmain1_count=40\n", null);
+    const r = withArt("main0_type=Background\nmain1_type=ItemCover\nmain1_count=40\n",
+                      { COV: { w:512, h:512 } });
     eq(r.memory.level, "err");
     ok(r.memory.total > 30e6);
   });

@@ -418,9 +418,12 @@ Conventional patterns: `COV` (front cover), `COV2` (back), `ICO` (icon), `BG` (b
 is an arbitrary string; only `ItemIcon`/`ItemCover` preset it.
 
 `count` (`cacheInitCache`, `src/texcache.c:80`) allocates `count` decoded textures held in RAM
-simultaneously. **This is the PS2 out-of-memory lever:** cost ≈ `count × width × height × 3 bytes`
-(textures are decoded to `GS_PSM_CT24`). A 512×512 cover with `count=20` is ~15 MB against a 32 MB
-console. The previewer's validation panel flags large `count × declared size` products.
+simultaneously. **This is the PS2 out-of-memory lever:** cost = `count × source width × height × 3
+bytes` (decoded to `GS_PSM_CT24`). A 512×512 cover with `count=20` is ~15 MB against a 32 MB console.
+
+Note the dimensions are those of the **image file**, not the element. `texLoad` decodes the PNG at
+its native size; the element's `width`/`height` only scale the draw quad. Shrinking an element saves
+no memory at all — only smaller art files or a lower `count` do.
 
 ### 6.6 Which attributes are valid for which type
 

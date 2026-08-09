@@ -263,7 +263,9 @@ Two groups, because they answer different questions.
 **B. "This may not run on real hardware"** — the memory check the brief asked for:
 
 `estimatedBytes = Σ over caches of count × w × h × 3` (decoded `GS_PSM_CT24`, §6.5), where `w`/`h`
-are the declared element size or, if `DIM_UNDEF`, the measured size of the supplied/placeholder art.
+are the **source image** dimensions — measured from the loaded art, else assumed per pattern. Not
+the element's declared size: the cache holds the decoded file, so sizing off the element would
+under-report, which is the wrong direction for a safety figure.
 Reported as a per-cache table plus a total, with thresholds calling out that a fat cache on a 32 MB
 console is the classic "theme works in PCSX2, black-screens on PS2" failure. Shared caches
 (`findDuplicate`, §6.4) are counted **once**, matching OPL.
