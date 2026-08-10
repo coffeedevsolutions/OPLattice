@@ -114,6 +114,7 @@ kbd{font-family:var(--mono);font-size:10.5px;background:#0f1216;border:1px solid
       <option value="1">1 connected</option><option value="2">2</option>
       <option value="3" selected>3</option><option value="4">4</option><option value="5">5</option>
     </select>
+    <button id="btnLaunch" title="Simulate launching the selected game. Only launching moves the recently-played list — selecting does not.">Launch ▶</button>
     <label>Sort</label>
     <select id="sortMode" title="Matches the patch's sort modes, cycled on hardware with R3. A–Z is stock OPL's autosort.">
       <option value="0" selected>A–Z</option><option value="1">Z–A</option>
@@ -2036,10 +2037,10 @@ cOverlay.addEventListener("pointerdown", ev => {
     if (!S.sel) return;
     if (S.sel.internal === "ItemsList" && S.sel._cells) {
       const cell = S.sel._cells.find(c => pt.x >= c.x && pt.x <= c.x + c.w && pt.y >= c.y && pt.y <= c.y + c.h);
-      if (cell) { S.gameIndex = cell.index; pushRecent(gameList()[cell.index].serial); renderGames(); render(); }
+      if (cell) { S.gameIndex = cell.index; renderGames(); render(); }
     } else if (S.sel.internal === "ItemsList" && S.sel._rows) {
       const row = Math.floor((pt.y - S.sel._rows.top) / MENU_ITEM_HEIGHT);
-      if (row >= 0 && row < S.sel._rows.count) { S.gameIndex = S.pageStart + row; pushRecent(gameList()[S.gameIndex].serial); renderGames(); render(); }
+      if (row >= 0 && row < S.sel._rows.count) { S.gameIndex = S.pageStart + row; renderGames(); render(); }
     }
   }
   if (!S.sel || S.sel.injected) { if (S.sel && S.sel.injected) setStatus("Injected defaults aren't in the file yet — set a value in the inspector to create it."); return; }
@@ -2308,7 +2309,7 @@ function renderGames() {
     const row = document.createElement("div");
     row.className = "el" + (i === S.gameIndex ? " sel" : "");
     row.innerHTML = `${g.title}<br><span class="n">${g.serial}</span>`;
-    row.onclick = () => { S.gameIndex = i; pushRecent(g.serial); renderGames(); render(); };
+    row.onclick = () => { S.gameIndex = i; renderGames(); render(); };
     host.appendChild(row);
   });
 }
@@ -2608,6 +2609,13 @@ devCount.onchange = syncDevices;
 
 // gAutosort defaults to 1 (opl.c:1739) and sorts with strcasecmp on the display
 // text (submenuSort, menusys.c:561). Reproduced so row order matches the console.
+document.getElementById("btnLaunch").onclick = () => {
+  const g = gameList()[S.gameIndex];
+  if (!g) return;
+  pushRecent(g.serial);
+  setStatus(`Launched ${g.title} — recently-played updated.`);
+  render();
+};
 document.getElementById("sortMode").onchange = e => {
   S.sortMode = Number(e.target.value);
   S.gameIndex = 0; S.pageStart = 0;
