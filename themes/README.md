@@ -136,15 +136,34 @@ It gathers everything OPL can say about a title:
 
 | Element | Shows |
 |---|---|
-| `ItemCover`, `GameImage` with `pattern=LGO` / `SCR` / `SCR2` | the rest of the art collateral |
-| `AttributeText` `Title` `Genre` `Release` `Developer` `#Size` `Description` | metadata from the game's own config |
+| `GameImage` `pattern=BG` | the hero, full width |
+| `ItemCover`, `GameImage` `pattern=LGO` / `SCR` | cover and logo overlapping the hero's edge, plus a screenshot |
+| `AttributeText` `Title` `Genre` `Release` `Developer` `#Size` | metadata from the game's own config |
 | `AttributeImage` `#Media` `#Format` `Rating` | badges picked by the value of that key |
 | `ItemText` | the startup id |
 
 Metadata reflects what your setup actually records. `Size`, `Media` and `Format`
-are filled in by OPL; `Genre`, `Release`, `Developer` and `Description` come from
-whatever art/config pack you use and stay blank otherwise — `display=0` keeps the
-label visible either way.
+are filled in by OPL; `Genre`, `Release` and `Developer` come from whatever
+art/config pack you use. They carry **no labels** — `display=2` prints the value
+alone, and an empty value draws nothing at all, so absent fields leave no gap
+rather than a stranded "Genre:".
+
+### The hero and widescreen
+
+The hero is `scaled=1` and centred, so it keeps its shape rather than stretching.
+In 4:3 that fills the screen exactly; in 16:9 it is a centred band with the flat
+backdrop showing at the edges. Filling the width in *both* would mean distorting
+it in one — the source art has only one shape. Swap to `scaled=0` if you would
+rather have full width and accept the stretch.
+
+### Screenshots
+
+`SCR` and `SCR2` are **screenshots**, and they will display — put
+`<SERIAL>_SCR.png` in the device's `ART` folder and the slot fills in. Nothing
+about the name is special: OPL only knows `ICO` and `COV` (the presets behind
+`ItemIcon` and `ItemCover`); every other pattern is naming convention, so any
+string works as long as the files match. The sample art pack has `COV`, `BG` and
+`LGO` only, which is why the slot shows its `default` until you add them.
 
 ## Button hints without OPL's button graphics
 
