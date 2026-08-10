@@ -1071,7 +1071,8 @@ function estimateVram(theme, assets) {
       const nat = measured || PATTERN_SIZE[pattern] || { w:256, h:256 };
       const bytes = concurrent * nat.w * nat.h * 4;
       total += bytes;
-      rows.push({ el: el.name, pattern, concurrent, w:nat.w, h:nat.h, bytes });
+      rows.push({ el: el.name, pattern, concurrent, w:nat.w, h:nat.h, bytes,
+                  basis: measured ? "measured" : "assumed for this pattern — load your ART folder for a real figure" });
     }
 
     rows.sort((a, b) => b.bytes - a.bytes);
@@ -1241,10 +1242,19 @@ function loadArt(name, file) {
 }
 
 /** The set validateTheme() checks referenced filenames against. */
-const assetIndex = () => ({
-  names: new Set([...S.files.keys()].map(k => k.split("/").pop())),
-  artSize: new Map([...S.art].map(([k, img]) => [k.split("_").pop().toUpperCase(), { w: img.width, h: img.height }])),
-});
+function assetIndex() {
+  // Largest per pattern, not the last one seen: the memory and VRAM figures are
+  // safety estimates, so a mixed-size art pack has to be judged on its worst
+  // case rather than on whichever file happened to load last.
+  const artSize = new Map();
+  for (const [key, img] of S.art) {
+    const pattern = key.split("_").pop().toUpperCase();
+    const w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
+    const prev = artSize.get(pattern);
+    if (!prev || w * h > prev.w * prev.h) artSize.set(pattern, { w, h });
+  }
+  return { names: new Set([...S.files.keys()].map(k => k.split("/").pop())), artSize };
+}
 
 /* --------------------------------------------------- generated sample art */
 
@@ -2407,7 +2417,8 @@ function renderMemory() {
   host.innerHTML =
     (v ? `<table id="memTable"><tr><th>drawn together</th><th>at once</th><th>size</th><th class="n">VRAM</th></tr>` +
       v.rows.map(r => `<tr><td>${r.el} ${r.pattern}</td><td>${r.concurrent}</td>` +
-        `<td>${r.w}×${r.h}</td><td class="n">${vmb(r.bytes)}</td></tr>`).join("") +
+        `<td title="${r.basis}">${r.w}×${r.h}${r.basis === "measured" ? "" : "?"}</td>` +
+        `<td class="n">${vmb(r.bytes)}</td></tr>`).join("") +
       `<tr><td colspan="3"><b>VRAM peak (${v.chain})</b></td><td class="n mem-${v.level}"><b>${vmb(v.total)}</b></td></tr>` +
       `<tr><td colspan="3">budget</td><td class="n">${vmb(v.budget)}</td></tr></table>` +
       `<div class="hint" style="padding:6px 9px 10px">Textures resident in one frame, at <b>source</b> size × 4 bytes. ` +
@@ -2454,7 +2465,7 @@ function gotoLine(n) {
 
 function rebuild(opts = {}) {
   S.theme = buildTheme(S.doc);
-  S.validation = validateTheme(S.doc, S.theme, S.files.size ? assetIndex() : null);
+  S.validation = validateTheme(S.doc, S.theme, (S.files.size || S.art.size) ? assetIndex() : null);
   if (opts.keepSelection) {
     let found = null;
     for (const key of ["main","info","appsMain","appsInfo"])
@@ -2543,8 +2554,9 @@ document.getElementById("btnArt").onclick = () => {
     let n = 0;
     await Promise.all([...inp.files].filter(f => /\.(png|jpe?g)$/i.test(f.name))
       .map(f => { n++; return loadArt(f.name, f); }));
-    setStatus(`Loaded ${n} art files. Names must be <SERIAL>_<PATTERN>.png`);
-    render();
+    const sizes = [...assetIndex().artSize].map(([p, d]) => `${p} ${d.w}×${d.h}`).join(", ");
+    setStatus(`Loaded ${n} art files${sizes ? " — " + sizes : ""}`);
+    rebuild({ keepSelection: S.sel && S.sel.name });   // re-measure RAM and VRAM
   };
   inp.click();
 };
