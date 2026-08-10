@@ -107,8 +107,8 @@ wrong or vanish on the console:
 * Keys or values past OPL's 32/256-byte limits, and duplicate keys.
 
 The second is the hardware-safety check: **PS2 art cache estimate**. Each art
-cache costs `count × width × height × 3` bytes of decoded texture, held
-resident. Shared patterns are counted once, matching OPL's `findDuplicate`. A
+cache costs `count × source width × height × 3` bytes of decoded texture, held
+resident — the element's drawn size does not reduce it. Shared patterns are counted once, matching OPL's `findDuplicate`. A
 512×512 cover with `count=40` is ~31 MB against a 32 MB console — a theme that
 looks perfect in PCSX2 and black-screens on real hardware. Every diagnostic is
 clickable and jumps to the offending line.
@@ -154,7 +154,7 @@ Zero dependencies. Both this and `tests/tests.html` (open it over the local
 server) extract the core logic straight out of `opl-theme-previewer.html`
 between marker comments, so there is no second copy to drift.
 
-92 assertions covering both cfg forms, CRLF/BOM handling, `write(parse(x)) === x`
+93 assertions covering both cfg forms, CRLF/BOM handling, `write(parse(x)) === x`
 over every fixture *and* OPL's own `conf_theme_OPL.cfg`, surgical single-line
 edits, the numbering-gap/unknown-type/`enabled=0` scan outcomes, the per-type
 defaults table, `displayedItems` arithmetic, the decorator count guard, colour
