@@ -241,7 +241,7 @@ const OVERLAY_ATTRS = ["overlay","overlay_ulx","overlay_uly","overlay_urx","over
 const TYPE_ATTRS = {
   AttributeText:  ["attribute","title","display","wrap"],
   StaticText:     ["value","title","display","wrap"],
-  GameCountText:  ["title","display","wrap"],
+  GameCountText:  ["title","display","wrap","prefix","suffix"],
   AttributeImage: ["attribute","default",...OVERLAY_ATTRS],
   GameImage:      ["pattern","count","default","offset",...OVERLAY_ATTRS],
   StaticImage:    ["default",...OVERLAY_ATTRS],
@@ -251,14 +251,18 @@ const TYPE_ATTRS = {
   ItemsList:      ["decorator","columns","cell_width","cell_height","gap","text","frame","label_height"],
   RecentImage:    ["pattern","count","default","index"],
   RecentText:     ["index"],
-  MenuTabs:       ["pad","frame","sel_color","icon_prev","icon_next"],
+  MenuTabs:       ["pad","frame","sel_color","sel_text_color","hint_font","hint_color",
+                   "prev_text","next_text","cap_left","cap_right",
+                   "label_bdm","label_eth","label_hdd","label_app"],
   MenuIcon:[], MenuText:[], ItemText:[], HintText:[], InfoHintText:[], LoadingIcon:[], BdmIndex:[],
 };
 // Attributes added by patches/opl-tile-grid.patch. Stock OPL ignores them
 // silently, so the previewer names them rather than letting a theme look right
 // here and wrong on an unpatched console.
 const PATCHED_ATTRS = new Set(["offset","columns","cell_width","cell_height","gap","text","frame",
-                               "label_height","index","pad","sel_color","icon_prev","icon_next"]);
+                               "label_height","index","pad","sel_color","sel_text_color","hint_font",
+                               "hint_color","prev_text","next_text","cap_left","cap_right",
+                               "label_bdm","label_eth","label_hdd","label_app","prefix","suffix"]);
 // Element types that only exist in a patched build.
 const PATCHED_TYPES = new Set(["RecentImage","RecentText","MenuTabs"]);
 
@@ -608,6 +612,8 @@ function initText(doc, name, el, kind, diags) {
     }
   } else if (kind === "GameCountText") {
     t.alias = "";
+    t.countPrefix = getStr(doc, name + "_prefix");
+    t.countSuffix = getStr(doc, name + "_suffix");
   }
   el.extended = t;
   return t;
@@ -754,15 +760,29 @@ function addGUIElem(doc, name, theme, chain, diags) {
       el.extended = { recentIndex: Math.max(0, getInt(doc, name + "_index", 0)), sizingMode: SIZING_NONE };
       break;
     case "MenuTabs": {
-      const selRaw = getStr(doc, name + "_sel_color");
-      const sel = selRaw === null ? null : parseColor(selRaw);
-      if (sel && !sel.ok) colorDiag(diags, doc, name + "_sel_color", selRaw, sel, name);
+      const col = (key, dflt) => {
+        const raw = getStr(doc, name + "_" + key);
+        if (raw === null) return dflt;
+        const c = parseColor(raw);
+        if (!c.ok) colorDiag(diags, doc, name + "_" + key, raw, c, name);
+        return { r:c.r, g:c.g, b:c.b };
+      };
+      let hintFont = 0;
+      const hf = getStr(doc, name + "_hint_font");
+      if (hf !== null) { const v = atoi(hf); if (v > 0 && v < 16) hintFont = v; }
       el.extended = {
         pad: Math.max(0, getInt(doc, name + "_pad", 10)),
         frameSize: Math.max(0, getInt(doc, name + "_frame", 2)),
-        selColor: sel ? { r:sel.r, g:sel.g, b:sel.b } : theme.selTextColor,
-        iconPrev: getStr(doc, name + "_icon_prev"),
-        iconNext: getStr(doc, name + "_icon_next"),
+        selColor: col("sel_color", theme.selTextColor),
+        selTextColor: col("sel_text_color", theme.bgColor),
+        hintFont,
+        hintColor: col("hint_color", null),
+        prevText: getStr(doc, name + "_prev_text"),
+        nextText: getStr(doc, name + "_next_text"),
+        capLeft: getStr(doc, name + "_cap_left"),
+        capRight: getStr(doc, name + "_cap_right"),
+        labels: { bdm:getStr(doc, name + "_label_bdm"), eth:getStr(doc, name + "_label_eth"),
+                  hdd:getStr(doc, name + "_label_hdd"), app:getStr(doc, name + "_label_app") },
       };
       break;
     }
@@ -1221,7 +1241,14 @@ function gameArt(serial, pattern) {
  */
 // OPL builds one menu entry per connected device (opl.c:216); the theme renders
 // whichever is selected. Names come from the English string table.
-const DEVICES = ["USB Games", "HDD Games", "ETH Games", "SD Games", "Apps"];
+const DEVICES = [
+  { name:"USB Games", kind:"bdm" },
+  { name:"HDD Games", kind:"hdd" },
+  { name:"ETH Games", kind:"eth" },
+  { name:"SD Games",  kind:"bdm" },
+  { name:"Apps",      kind:"app" },
+];
+const deviceName = i => DEVICES[i].name;
 
 const GAMES = [
   { serial:"SCPS_150.21", title:"Jak and Daxter (JP)",             size:"1392" },
@@ -1571,7 +1598,15 @@ function drawElement(el) {
     case "ItemsList":  q = drawItemsList(el); break;
     case "ItemText":   q = drawSingleText(el, game.serial); break;
     case "StaticText": q = drawSingleText(el, ex.value ?? ""); break;
-    case "GameCountText": q = drawSingleText(el, `Files found: ${gameList().length}`); break;
+    case "GameCountText": {
+      // prefix/suffix replace OPL's localised "Files found: %i" (patch 03).
+      const n = gameList().length;
+      const txt = (ex.countPrefix || ex.countSuffix)
+        ? `${ex.countPrefix || ""}${n}${ex.countSuffix || ""}`
+        : `Files found: ${n}`;
+      q = drawSingleText(el, txt);
+      break;
+    }
     case "AttributeText": q = drawAttributeText(el, game); break;
     case "MenuText":   q = drawMenuText(el); break;
     case "MenuIcon":   q = stubQuad(el, "MenuIcon", 32, 32); break;
@@ -1723,47 +1758,54 @@ function drawItemsListGrid(el, posX, posY) {
 function drawMenuTabs(el) {
   const ex = el.extended;
   const spec = fontSpec(el);
-  const devices = DEVICES.slice(0, S.deviceCount);
-  const iconH = 20;
-  const iconW = name => {
-    const img = themeImage(name);
-    return img && img.complete && img.naturalHeight ? Math.round(img.naturalWidth * iconH / img.naturalHeight) : 0;
-  };
-  const tabW = name => textWidth(name, spec) + 2 * ex.pad;
+  const hintSpec = fontSpec({ font: ex.hintFont });
+  // OPL's device order: BDM slots, then ETH, HDD, APP.
+  const shown = DEVICES.slice(0, S.deviceCount).map(d => ex.labels[d.kind] || d.name);
+  const mid = el.posY + (el.height >> 1);
+  const tabW = n => textWidth(n, spec) + 2 * ex.pad;
 
-  let total = devices.reduce((n, d) => n + tabW(d), 0) + (devices.length - 1) * el.width;
-  const wPrev = iconW(ex.iconPrev), wNext = iconW(ex.iconNext);
-  if (wPrev) total += wPrev + el.width;
-  if (wNext) total += wNext + el.width;
+  let total = shown.reduce((n, d) => n + tabW(d), 0) + (shown.length - 1) * el.width;
+  if (ex.prevText) total += textWidth(ex.prevText, hintSpec) + el.width;
+  if (ex.nextText) total += textWidth(ex.nextText, hintSpec) + el.width;
 
   let x = el.posX;
   if (el.aligned) x -= total >> 1;
   const startX = x;
 
-  const drawIcon = (name, w) => {
-    const img = themeImage(name);
-    const q = setupQuad(x, el.posY + (el.height >> 1), 2, w, iconH, el.scaled, S.aspect);
-    if (img && img.complete && img.naturalWidth) ctx.drawImage(img, q.x, q.y, q.w, q.h);
-    x += q.w + el.width;
-  };
-  if (wPrev) drawIcon(ex.iconPrev, wPrev);
+  const hintColor = ex.hintColor || el.color;
+  if (ex.prevText) {
+    renderString({ font: ex.hintFont }, x, mid, 2, 0, 0, ex.prevText, hintColor);
+    x += textWidth(ex.prevText, hintSpec) + el.width;
+  }
 
-  devices.forEach((name, i) => {
+  shown.forEach((name, i) => {
     const w = tabW(name);
     if (i === S.device) {
-      if (ex.frameSize > 0) {
-        const fw = (el.scaled & SCALING_RATIO) ? (w * S.aspect) >> 2 : w;
-        drawCellFrame(x, el.posY, fw, el.height, ex.frameSize, ex.selColor);
+      // Round cap, plain fill, round cap — the caps scale with the glyphs so the
+      // pill stays wrapped around the text in 16:9 too.
+      const capSrc = el.height >> 1;
+      const capW = (el.scaled & SCALING_RATIO) ? (capSrc * S.aspect) >> 2 : capSrc;
+      const l = themeImage(ex.capLeft), r = themeImage(ex.capRight);
+      if (l && r && l.complete && r.complete) {
+        const tinted = img => tintedCopy(img, { r:ex.selColor.r >> 1, g:ex.selColor.g >> 1, b:ex.selColor.b >> 1 });
+        ctx.drawImage(tinted(l), x, el.posY, capW, el.height);
+        if (w - 2 * capW > 0) {
+          ctx.fillStyle = rgb(ex.selColor);
+          ctx.fillRect(x + capW, el.posY, w - 2 * capW, el.height);
+        }
+        ctx.drawImage(tinted(r), x + w - capW, el.posY, capW, el.height);
+      } else if (ex.frameSize > 0) {
+        drawCellFrame(x, el.posY, w, el.height, ex.frameSize, ex.selColor);
       }
-      renderString(el, x + ex.pad, el.posY + (el.height >> 1), 2, 0, 0, name, ex.selColor);
+      renderString(el, x + ex.pad, mid, 2, 0, 0, name, ex.selTextColor);
     } else {
-      renderString(el, x + ex.pad, el.posY + (el.height >> 1), 2, 0, 0, name, el.color);
+      renderString(el, x + ex.pad, mid, 2, 0, 0, name, el.color);
     }
     x += w + el.width;
   });
 
-  if (wNext) drawIcon(ex.iconNext, wNext);
-  return { x: startX, y: el.posY, w: x - startX - el.width, h: el.height };
+  if (ex.nextText) renderString({ font: ex.hintFont }, x, mid, 2, 0, 0, ex.nextText, hintColor);
+  return { x: startX, y: el.posY, w: x - startX, h: el.height };
 }
 
 /** drawItemsList (themes.c:840) — §5.2, including the decorator/text mismatch. */
@@ -1803,7 +1845,7 @@ function drawItemsList(el) {
 }
 
 function drawMenuText(el) {
-  const label = S.chain.startsWith("apps") ? "Apps" : DEVICES[S.device];
+  const label = S.chain.startsWith("apps") ? "Apps" : deviceName(S.device);
   const spec = fontSpec(el);
   // Arrows appear only when another device is actually connected.
   const hasPrev = S.device > 0, hasNext = S.device < S.deviceCount - 1;
@@ -2553,7 +2595,7 @@ document.getElementById("btn169").onclick = () => {
 document.getElementById("zoom").onchange = e => { S.zoom = e.target.value; render(); };
 
 const devSel = document.getElementById("device"), devCount = document.getElementById("devCount");
-DEVICES.forEach((d, i) => devSel.add(new Option(d, String(i))));
+DEVICES.forEach((d, i) => devSel.add(new Option(d.name, String(i))));
 const syncDevices = () => {
   S.deviceCount = Number(devCount.value);
   if (S.device >= S.deviceCount) S.device = S.deviceCount - 1;

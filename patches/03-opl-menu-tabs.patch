@@ -1,26 +1,55 @@
 diff --git a/include/themes.h b/include/themes.h
-index 9cd64d9..77a1507 100644
+index 9cd64d9..764d2a2 100644
 --- a/include/themes.h
 +++ b/include/themes.h
-@@ -70,6 +70,16 @@ typedef struct
+@@ -62,6 +62,11 @@ typedef struct
+     char *value;
+     int sizingMode;
+ 
++    // Attributes for: GameCountText. Set both and the count renders as
++    // prefix + number + suffix instead of the localised "Files found: %i".
++    char *countPrefix;
++    char *countSuffix;
++
+     // Attributes for: AttributeText
+     char *alias;
+     int displayMode;
+@@ -70,6 +75,33 @@ typedef struct
      char *currentValue;
  } mutable_text_t;
  
 +/// MenuTabs: every visible device drawn at once, with the current one framed.
 +typedef struct
 +{
-+    int pad;        //!< horizontal padding inside each tab
-+    int frameSize;  //!< selection frame thickness, 0 to disable
-+    u64 selColor;   //!< frame and active label colour
-+    image_texture_t *iconPrev;
-+    image_texture_t *iconNext;
++    int pad;          //!< horizontal padding inside each tab
++    int frameSize;    //!< outline thickness when no pill is supplied
++    u64 selColor;     //!< pill fill, or outline colour
++    u64 selTint;      //!< the same colour halved, for tinting the white caps
++    u64 selTextColor; //!< label colour on top of the pill
++    int hintFont;     //!< font slot for the L1/R1 hints
++    u64 hintColor;
++    char *prevText;   //!< drawn left of the strip, e.g. "L1"
++    char *nextText;
++
++    /* Round caps for the pill. Each is half as wide as the tab is tall; the
++     * span between them is filled with a plain rect, so the pill is exact at
++     * any label width instead of a stretched rounded rectangle. */
++    image_texture_t *capLeft;
++    image_texture_t *capRight;
++
++    /* Per-device label overrides, so a theme can say "USB" where OPL's string
++     * table says "USB Games". NULL falls back to the localised name. */
++    char *labelBdm;
++    char *labelEth;
++    char *labelHdd;
++    char *labelApp;
 +} menu_tabs_t;
 +
  typedef struct
  {
      int displayedItems;
 diff --git a/src/themes.c b/src/themes.c
-index 65713ef..6e11198 100644
+index 65713ef..97d10cd 100644
 --- a/src/themes.c
 +++ b/src/themes.c
 @@ -50,6 +50,7 @@ enum ELEM_ATTRIBUTE_TYPE {
@@ -31,17 +60,70 @@ index 65713ef..6e11198 100644
      ELEM_TYPE_COUNT
  };
  
-@@ -80,7 +81,8 @@ static const char *elementsType[ELEM_TYPE_COUNT] = {
+@@ -80,7 +81,10 @@ static const char *elementsType[ELEM_TYPE_COUNT] = {
      "BdmIndex",
      "GameCountText",
      "RecentImage",
 -    "RecentText"};
 +    "RecentText",
 +    "MenuTabs"};
++
++static char *themeStrDup(config_set_t *themeConfig, const char *name, const char *suffix);
  
  // Common functions for Text ////////////////////////////////////////////////////////////////////////////////////////////////
  
-@@ -851,6 +853,149 @@ static void drawMenuText(struct menu_list *menu, struct submenu_list *item, conf
+@@ -94,6 +98,12 @@ static void endMutableText(theme_element_t *elem)
+         if (mutableText->alias)
+             free(mutableText->alias);
+ 
++        if (mutableText->countPrefix)
++            free(mutableText->countPrefix);
++
++        if (mutableText->countSuffix)
++            free(mutableText->countSuffix);
++
+         free(mutableText);
+     }
+ 
+@@ -106,6 +116,8 @@ static mutable_text_t *initMutableText(const char *themePath, config_set_t *them
+     mutableText->currentConfigId = 0;
+     mutableText->currentValue = NULL;
+     mutableText->alias = NULL;
++    mutableText->countPrefix = NULL;
++    mutableText->countSuffix = NULL;
+ 
+     char elemProp[64];
+ 
+@@ -220,7 +232,18 @@ static void drawGameCountText(struct menu_list *menu, struct submenu_list *item,
+             mutableText->currentConfigId = config->uid;
+ 
+             int count = getGameCount(menu->item->userdata);
+-            snprintf(mutableText->value, sizeof(char) * 60, _l(_STR_FILE_COUNT), count);
++
++            /* A prefix or suffix replaces the localised "Files found: %i", so a
++             * theme can render "17 Titles". Deliberately not a printf format
++             * from the cfg -- that would hand a user-supplied format string
++             * straight to snprintf. */
++            if (mutableText->countPrefix || mutableText->countSuffix)
++                snprintf(mutableText->value, sizeof(char) * 60, "%s%d%s",
++                         mutableText->countPrefix ? mutableText->countPrefix : "",
++                         count,
++                         mutableText->countSuffix ? mutableText->countSuffix : "");
++            else
++                snprintf(mutableText->value, sizeof(char) * 60, _l(_STR_FILE_COUNT), count);
+         }
+     }
+ 
+@@ -234,6 +257,8 @@ static void initGameCountText(const char *themePath, config_set_t *themeConfig,
+     memset(countStr, 0, length * sizeof(char));
+ 
+     elem->extended = initMutableText(themePath, themeConfig, theme, name, ELEM_TYPE_ATTRIBUTE_TEXT, elem, countStr, NULL, DISPLAY_ALWAYS, SIZING_NONE);
++    ((mutable_text_t *)elem->extended)->countPrefix = themeStrDup(themeConfig, name, "prefix");
++    ((mutable_text_t *)elem->extended)->countSuffix = themeStrDup(themeConfig, name, "suffix");
+     elem->endElem = &endMutableText;
+     elem->drawElem = &drawGameCountText;
+ }
+@@ -851,6 +876,231 @@ static void drawMenuText(struct menu_list *menu, struct submenu_list *item, conf
      fntRenderString(elem->font, elem->posX, elem->posY, elem->aligned, 0, 0, menuItemGetText(menu->item), elem->color);
  }
  
@@ -59,35 +141,76 @@ index 65713ef..6e11198 100644
 +    menu_tabs_t *tabs = (menu_tabs_t *)elem->extended;
 +
 +    if (tabs) {
-+        if (tabs->iconPrev)
-+            freeImageTexture(tabs->iconPrev);
-+        if (tabs->iconNext)
-+            freeImageTexture(tabs->iconNext);
++        if (tabs->capLeft)
++            freeImageTexture(tabs->capLeft);
++        if (tabs->capRight)
++            freeImageTexture(tabs->capRight);
 +        free(tabs);
 +    }
 +
 +    free(elem);
 +}
 +
-+/// Width of one tab in virtual units, padding included.
-+static int menuTabWidth(theme_element_t *elem, menu_tabs_t *tabs, struct menu_item *item)
++/// Theme override for a device's name, else OPL's localised one.
++static const char *menuTabLabel(menu_tabs_t *tabs, struct menu_item *item)
 +{
-+    return rmUnScaleX(fntCalcDimensions(elem->font, menuItemGetText(item))) + (2 * tabs->pad);
++    item_list_t *list = (item_list_t *)item->userdata;
++
++    if (list) {
++        if (list->mode == ETH_MODE && tabs->labelEth)
++            return tabs->labelEth;
++        if (list->mode == HDD_MODE && tabs->labelHdd)
++            return tabs->labelHdd;
++        if (list->mode == APP_MODE && tabs->labelApp)
++            return tabs->labelApp;
++        if (list->mode < ETH_MODE && tabs->labelBdm)
++            return tabs->labelBdm;
++    }
++
++    return menuItemGetText(item);
 +}
 +
-+static int menuTabIconWidth(image_texture_t *icon, int height)
++/// Width of a string in virtual units, for the given font slot.
++static int menuTabTextWidth(int font, const char *text)
 +{
-+    if (!icon || !icon->source.Mem || icon->source.Height == 0)
-+        return 0;
++    return rmUnScaleX(fntCalcDimensions(font, text));
++}
 +
-+    return (icon->source.Width * height) / icon->source.Height;
++static int menuTabWidth(theme_element_t *elem, menu_tabs_t *tabs, struct menu_item *item)
++{
++    return menuTabTextWidth(elem->font, menuTabLabel(tabs, item)) + (2 * tabs->pad);
++}
++
++/**
++ * Pill behind the active tab: a round cap at each end with a plain rect between
++ * them, so it stays exact at any label width. The caps are drawn scaled, which
++ * narrows them by 3/4 in anamorphic 16:9 exactly as the glyphs are narrowed, so
++ * the pill keeps its shape and stays wrapped around the text in both aspects.
++ */
++static void drawMenuTabPill(theme_element_t *elem, menu_tabs_t *tabs, int x, int w)
++{
++    int capSrc = elem->height >> 1;
++    int capW = (elem->scaled & SCALING_RATIO) ? rmWideScale(capSrc) : capSrc;
++    int mid = w - (2 * capW);
++
++    if (!tabs->capLeft || !tabs->capRight) {
++        if (tabs->frameSize > 0)
++            drawCellFrame(x, elem->posY, w, elem->height, tabs->frameSize, tabs->selColor);
++        return;
++    }
++
++    rmDrawPixmap(&tabs->capLeft->source, x, elem->posY, ALIGN_NONE, capSrc, elem->height, elem->scaled, tabs->selTint);
++    if (mid > 0)
++        rmDrawRect(x + capW, elem->posY, mid, elem->height, tabs->selColor);
++    rmDrawPixmap(&tabs->capRight->source, x + w - capW, elem->posY, ALIGN_NONE, capSrc, elem->height, elem->scaled, tabs->selTint);
 +}
 +
 +static void drawMenuTabs(struct menu_list *menu, struct submenu_list *item, config_set_t *config, struct theme_element *elem)
 +{
 +    menu_tabs_t *tabs = (menu_tabs_t *)elem->extended;
 +    struct menu_list *head = menu, *m;
-+    int total = 0, count = 0, x, iconW, iconH = 20;
++    int total = 0, count = 0, x, hintW;
++    int mid = elem->posY + (elem->height >> 1);
 +
 +    while (head->prev)
 +        head = head->prev;
@@ -104,21 +227,19 @@ index 65713ef..6e11198 100644
 +
 +    total += (count - 1) * elem->width; // elem->width is the gap between tabs
 +
-+    iconW = menuTabIconWidth(tabs->iconPrev, iconH);
-+    if (iconW)
-+        total += iconW + elem->width;
-+    iconW = menuTabIconWidth(tabs->iconNext, iconH);
-+    if (iconW)
-+        total += iconW + elem->width;
++    if (tabs->prevText)
++        total += menuTabTextWidth(tabs->hintFont, tabs->prevText) + elem->width;
++    if (tabs->nextText)
++        total += menuTabTextWidth(tabs->hintFont, tabs->nextText) + elem->width;
 +
 +    x = elem->posX;
 +    if (elem->aligned)
 +        x -= total >> 1;
 +
-+    iconW = menuTabIconWidth(tabs->iconPrev, iconH);
-+    if (iconW) {
-+        rmDrawPixmap(&tabs->iconPrev->source, x, elem->posY + (elem->height >> 1), ALIGN_VCENTER, iconW, iconH, elem->scaled, gDefaultCol);
-+        x += iconW + elem->width;
++    if (tabs->prevText) {
++        hintW = menuTabTextWidth(tabs->hintFont, tabs->prevText);
++        fntRenderString(tabs->hintFont, x, mid, ALIGN_VCENTER, 0, 0, tabs->prevText, tabs->hintColor);
++        x += hintW + elem->width;
 +    }
 +
 +    for (m = head; m; m = m->next) {
@@ -130,18 +251,28 @@ index 65713ef..6e11198 100644
 +        w = menuTabWidth(elem, tabs, m->item);
 +
 +        if (m == menu) {
-+            if (tabs->frameSize > 0)
-+                drawCellFrame(x, elem->posY, w, elem->height, tabs->frameSize, tabs->selColor);
-+            fntRenderString(elem->font, x + tabs->pad, elem->posY + (elem->height >> 1), ALIGN_VCENTER, 0, 0, menuItemGetText(m->item), tabs->selColor);
++            drawMenuTabPill(elem, tabs, x, w);
++            fntRenderString(elem->font, x + tabs->pad, mid, ALIGN_VCENTER, 0, 0, menuTabLabel(tabs, m->item), tabs->selTextColor);
 +        } else
-+            fntRenderString(elem->font, x + tabs->pad, elem->posY + (elem->height >> 1), ALIGN_VCENTER, 0, 0, menuItemGetText(m->item), elem->color);
++            fntRenderString(elem->font, x + tabs->pad, mid, ALIGN_VCENTER, 0, 0, menuTabLabel(tabs, m->item), elem->color);
 +
 +        x += w + elem->width;
 +    }
 +
-+    iconW = menuTabIconWidth(tabs->iconNext, iconH);
-+    if (iconW)
-+        rmDrawPixmap(&tabs->iconNext->source, x, elem->posY + (elem->height >> 1), ALIGN_VCENTER, iconW, iconH, elem->scaled, gDefaultCol);
++    if (tabs->nextText)
++        fntRenderString(tabs->hintFont, x, mid, ALIGN_VCENTER, 0, 0, tabs->nextText, tabs->hintColor);
++}
++
++static char *themeStrDup(config_set_t *themeConfig, const char *name, const char *suffix)
++{
++    char elemProp[64];
++    const char *value = NULL;
++
++    snprintf(elemProp, sizeof(elemProp), "%s_%s", name, suffix);
++    if (!configGetStr(themeConfig, elemProp, &value) || !value)
++        return NULL;
++
++    return strdup(value);
 +}
 +
 +static void initMenuTabs(const char *themePath, config_set_t *themeConfig, theme_t *theme, theme_element_t *elem, const char *name)
@@ -150,12 +281,23 @@ index 65713ef..6e11198 100644
 +    unsigned char charColor[3];
 +    const char *value;
 +    char elemProp[64];
++    int intValue;
 +
 +    tabs->pad = 10;
 +    tabs->frameSize = 2;
-+    tabs->selColor = gTheme->selTextColor;
-+    tabs->iconPrev = NULL;
-+    tabs->iconNext = NULL;
++    tabs->selColor = theme->selTextColor;
++    tabs->selTint = gDefaultCol;
++    tabs->selTextColor = GS_SETREG_RGBA(theme->bgColor[0], theme->bgColor[1], theme->bgColor[2], 0x80);
++    tabs->hintFont = elem->font;
++    tabs->hintColor = elem->color;
++    tabs->prevText = NULL;
++    tabs->nextText = NULL;
++    tabs->capLeft = NULL;
++    tabs->capRight = NULL;
++    tabs->labelBdm = NULL;
++    tabs->labelEth = NULL;
++    tabs->labelHdd = NULL;
++    tabs->labelApp = NULL;
 +
 +    snprintf(elemProp, sizeof(elemProp), "%s_pad", name);
 +    configGetInt(themeConfig, elemProp, &tabs->pad);
@@ -167,21 +309,43 @@ index 65713ef..6e11198 100644
 +    if (tabs->frameSize < 0)
 +        tabs->frameSize = 0;
 +
-+    // Its own colour, so the tab frame need not match the game-grid frame.
-+    tabs->selColor = theme->selTextColor;
 +    snprintf(elemProp, sizeof(elemProp), "%s_sel_color", name);
-+    if (configGetColor(themeConfig, elemProp, charColor))
++    if (configGetColor(themeConfig, elemProp, charColor)) {
 +        tabs->selColor = GS_SETREG_RGBA(charColor[0], charColor[1], charColor[2], 0x80);
++        /* Textured draws multiply by the vertex colour with 0x80 as unity, so a
++         * white cap tinted with the full value would come out doubled. Halve it
++         * here and the cap lands on exactly the requested colour. */
++        tabs->selTint = GS_SETREG_RGBA(charColor[0] >> 1, charColor[1] >> 1, charColor[2] >> 1, 0x80);
++    }
++
++    snprintf(elemProp, sizeof(elemProp), "%s_sel_text_color", name);
++    if (configGetColor(themeConfig, elemProp, charColor))
++        tabs->selTextColor = GS_SETREG_RGBA(charColor[0], charColor[1], charColor[2], 0x80);
++
++    snprintf(elemProp, sizeof(elemProp), "%s_hint_font", name);
++    if (configGetInt(themeConfig, elemProp, &intValue) && intValue > 0 && intValue < THM_MAX_FONTS)
++        tabs->hintFont = theme->fonts[intValue];
++
++    snprintf(elemProp, sizeof(elemProp), "%s_hint_color", name);
++    if (configGetColor(themeConfig, elemProp, charColor))
++        tabs->hintColor = GS_SETREG_RGBA(charColor[0], charColor[1], charColor[2], 0x80);
++
++    tabs->prevText = themeStrDup(themeConfig, name, "prev_text");
++    tabs->nextText = themeStrDup(themeConfig, name, "next_text");
++    tabs->labelBdm = themeStrDup(themeConfig, name, "label_bdm");
++    tabs->labelEth = themeStrDup(themeConfig, name, "label_eth");
++    tabs->labelHdd = themeStrDup(themeConfig, name, "label_hdd");
++    tabs->labelApp = themeStrDup(themeConfig, name, "label_app");
 +
 +    value = NULL;
-+    snprintf(elemProp, sizeof(elemProp), "%s_icon_prev", name);
++    snprintf(elemProp, sizeof(elemProp), "%s_cap_left", name);
 +    if (configGetStr(themeConfig, elemProp, &value) && value)
-+        tabs->iconPrev = initImageTexture(themePath, themeConfig, name, value, 0);
++        tabs->capLeft = initImageTexture(themePath, themeConfig, name, value, 0);
 +
 +    value = NULL;
-+    snprintf(elemProp, sizeof(elemProp), "%s_icon_next", name);
++    snprintf(elemProp, sizeof(elemProp), "%s_cap_right", name);
 +    if (configGetStr(themeConfig, elemProp, &value) && value)
-+        tabs->iconNext = initImageTexture(themePath, themeConfig, name, value, 0);
++        tabs->capRight = initImageTexture(themePath, themeConfig, name, value, 0);
 +
 +    elem->extended = tabs;
 +    elem->endElem = &endMenuTabs;
@@ -191,7 +355,7 @@ index 65713ef..6e11198 100644
  static void drawBDMIndex(struct menu_list *menu, struct submenu_list *item, config_set_t *config, struct theme_element *elem)
  {
      item_list_t *itemList = menu->item->userdata;
-@@ -1319,6 +1464,9 @@ static int addGUIElem(const char *themePath, config_set_t *themeConfig, theme_t
+@@ -1319,6 +1569,9 @@ static int addGUIElem(const char *themePath, config_set_t *themeConfig, theme_t
              } else if (!strcmp(elementsType[ELEM_TYPE_LOADING_ICON], type)) {
                  if (!theme->loadingIcon)
                      theme->loadingIcon = initBasic(themePath, themeConfig, theme, name, ELEM_TYPE_LOADING_ICON, -40, -60, ALIGN_CENTER, DIM_UNDEF, DIM_UNDEF, SCALING_RATIO, gDefaultCol, theme->fonts[0]);

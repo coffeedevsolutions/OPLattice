@@ -8,7 +8,7 @@ the second builds on the first.
 |---|---|
 | `01-opl-tile-grid.patch` | Tile grids: `columns`, `cell_width`, `cell_height`, `gap`, `text`, `label_height`, `frame` on `ItemsList`; `offset` on `GameImage`; two-axis navigation |
 | `02-opl-sort-and-recent.patch` | Sort modes cycled with **R3**; a persistent recently-played list; `RecentImage` and `RecentText` element types; widescreen correction for the grid |
-| `03-opl-menu-tabs.patch` | `MenuTabs` — every visible device drawn at once, current one framed |
+| `03-opl-menu-tabs.patch` | `MenuTabs` — every visible device drawn at once with a capsule behind the active one; per-device label overrides; `prefix`/`suffix` on `GameCountText` |
 
 ```bash
 git clone https://github.com/ps2homebrew/Open-PS2-Loader
@@ -182,14 +182,35 @@ framing the current one.
 | Key | Default | Meaning |
 |---|---|---|
 | `pad` | `10` | Horizontal padding inside each tab |
-| `frame` | `2` | Selection frame thickness, `0` to disable |
-| `sel_color` | `sel_text_color` | Frame and active label colour, so the tab frame need not match the game-grid frame |
-| `icon_prev` / `icon_next` | *(none)* | Theme PNGs drawn at each end, for marking the buttons that move between devices |
+| `sel_color` | theme `sel_text_color` | Capsule fill, or outline colour when no caps are given |
+| `sel_text_color` | theme `bg_color` | Active label, i.e. inverted out of the capsule |
+| `cap_left` / `cap_right` | *(none)* | Round end caps for the capsule |
+| `frame` | `2` | Outline thickness used **only** when no caps are supplied |
+| `prev_text` / `next_text` | *(none)* | Button hints drawn at each end, e.g. `L1` / `R1` |
+| `hint_font`, `hint_color` | element's | So the hints can be smaller and dimmer than the tabs |
+| `label_bdm`, `label_eth`, `label_hdd`, `label_app` | *(none)* | Replace OPL's device names, e.g. `USB` for "USB Games" |
 | `width` | `16` | Gap between tabs, not a box width |
-| `height` | `24` | Tab height, which is what the frame encloses |
+| `height` | `24` | Tab height, which is what the capsule encloses |
 
 `aligned=1` with `x=POS_MID` centres the whole strip, measured the same way
 `guiAlignMenuHints` measures the hint row.
+
+**The capsule** is a round cap at each end with a plain `rmDrawRect` between
+them, so it is exact at any label width rather than a stretched rounded
+rectangle. The caps are drawn scaled, which narrows them by 3/4 in anamorphic
+16:9 exactly as `fntUpdateAspectRatio` narrows the glyphs — so the capsule stays
+wrapped around its label in both aspects. Cap art should be white: the tint is
+halved before it reaches the GS, because a textured draw multiplies by the vertex
+colour with `0x80` as unity and a full-value tint would come out doubled.
+
+### `GameCountText` prefix and suffix
+
+| Key | Meaning |
+|---|---|
+| `prefix` / `suffix` | Set either and the count renders as `prefix` + number + `suffix`, replacing the localised "Files found: %i" |
+
+Deliberately not a printf format from the cfg — that would hand a user-supplied
+format string straight to `snprintf`.
 
 ## Files touched
 
