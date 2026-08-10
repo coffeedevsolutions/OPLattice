@@ -124,7 +124,7 @@ index 1f3eaef..5b4f464 100644
      configGetDiscIDBinary(configSet, gid);
  
 diff --git a/src/menusys.c b/src/menusys.c
-index b875bf1..26dde88 100644
+index b875bf1..0d959ba 100644
 --- a/src/menusys.c
 +++ b/src/menusys.c
 @@ -558,16 +558,67 @@ static void swap(submenu_list_t *a, submenu_list_t *b)
@@ -240,7 +240,20 @@ index b875bf1..26dde88 100644
  static void menuNextH()
  {
      struct menu_list *next = selected_item->next;
-@@ -1072,6 +1140,8 @@ void menuHandleInputMain()
+@@ -1042,8 +1110,10 @@ void menuRenderMain(void)
+ 
+ void menuHandleInputMain()
+ {
+-    // In a grid, left/right have to walk the row, so device switching moves to
+-    // L2/R2. Classic single-column themes keep the original mapping exactly.
++    /* A grid needs both d-pad axes for the tiles, so device switching moves to
++     * the shoulders: L1/R1 change device, L2/R2 page through the list. Classic
++     * single-column themes keep stock OPL's mapping exactly.
++     */
+     int grid = menuRowStep() > 1;
+ 
+     if (getKey(KEY_LEFT)) {
+@@ -1072,20 +1142,28 @@ void menuHandleInputMain()
          // reinit main menu - show/hide items valid in the active context
          menuInitMainMenu();
          guiSwitchScreen(GUI_SCREEN_MENU);
@@ -248,7 +261,34 @@ index b875bf1..26dde88 100644
 +        menuCycleSort();
      } else if (getKeyOn(KEY_SELECT)) {
          selected_item->item->refresh(selected_item->item);
-     } else if (getKey(KEY_L1)) {
+-    } else if (getKey(KEY_L1)) {
+-        menuPrevPage();
+-    } else if (getKey(KEY_R1)) {
+-        menuNextPage();
+-    } else if (getKeyOn(KEY_L2)) { // home, or previous device in a grid theme
++    } else if (getKey(KEY_L1)) { // page up, or previous device in a grid theme
+         if (grid)
+             menuPrevH();
+         else
+-            menuFirstPage();
+-    } else if (getKeyOn(KEY_R2)) { // end, or next device in a grid theme
++            menuPrevPage();
++    } else if (getKey(KEY_R1)) { // page down, or next device in a grid theme
+         if (grid)
+             menuNextH();
++        else
++            menuNextPage();
++    } else if (getKeyOn(KEY_L2)) { // home, or page up in a grid theme
++        if (grid)
++            menuPrevPage();
++        else
++            menuFirstPage();
++    } else if (getKeyOn(KEY_R2)) { // end, or page down in a grid theme
++        if (grid)
++            menuNextPage();
+         else
+             menuLastPage();
+     }
 diff --git a/src/opl.c b/src/opl.c
 index a6d8fa3..20c6256 100644
 --- a/src/opl.c

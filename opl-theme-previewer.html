@@ -193,7 +193,7 @@ const TINT = { r: 0x80, g: 0x80, b: 0x80 };     // gDefaultCol — neutral multi
 // elementsType[] in declaration order (themes.c:62). Case-sensitive.
 const ELEMENT_TYPES = ["AttributeText","StaticText","AttributeImage","GameImage","StaticImage",
   "Background","MenuIcon","MenuText","ItemsList","ItemIcon","ItemCover","ItemText","HintText",
-  "InfoHintText","LoadingIcon","BdmIndex","GameCountText","RecentImage","RecentText"];
+  "InfoHintText","LoadingIcon","BdmIndex","GameCountText","RecentImage","RecentText","MenuTabs"];
 
 // Per-type defaults, transcribed from addGUIElem (themes.c:1023-1083) — see §7.
 // `color:'text'` = theme textColor, `color:'tint'` = gDefaultCol.
@@ -219,6 +219,7 @@ const ELEMENT_DEFAULTS = {
   BdmIndex:       D(320,355,ALIGN_CENTER,DIM_UNDEF,DIM_UNDEF,SCALING_RATIO,"tint","BdmIndex"),
   RecentImage:    D(0,0,ALIGN_CENTER,DIM_UNDEF,DIM_UNDEF,SCALING_RATIO,"tint","RecentImage",{pattern:"COV",count:1}),
   RecentText:     D(0,0,ALIGN_CENTER,DIM_UNDEF,DIM_UNDEF,SCALING_RATIO,"text","RecentText"),
+  MenuTabs:       D(320,20,ALIGN_CENTER,16,24,SCALING_RATIO,"text","MenuTabs"),
 };
 // The 2nd ItemsList in a theme is built from different defaults (themes.c:1058).
 const ITEMSLIST_2ND = D(42,42,ALIGN_NONE,400,360,SCALING_RATIO,"text","ItemsList");
@@ -250,15 +251,16 @@ const TYPE_ATTRS = {
   ItemsList:      ["decorator","columns","cell_width","cell_height","gap","text","frame","label_height"],
   RecentImage:    ["pattern","count","default","index"],
   RecentText:     ["index"],
+  MenuTabs:       ["pad","frame","sel_color","icon_prev","icon_next"],
   MenuIcon:[], MenuText:[], ItemText:[], HintText:[], InfoHintText:[], LoadingIcon:[], BdmIndex:[],
 };
 // Attributes added by patches/opl-tile-grid.patch. Stock OPL ignores them
 // silently, so the previewer names them rather than letting a theme look right
 // here and wrong on an unpatched console.
 const PATCHED_ATTRS = new Set(["offset","columns","cell_width","cell_height","gap","text","frame",
-                               "label_height","index"]);
+                               "label_height","index","pad","sel_color","icon_prev","icon_next"]);
 // Element types that only exist in a patched build.
-const PATCHED_TYPES = new Set(["RecentImage","RecentText"]);
+const PATCHED_TYPES = new Set(["RecentImage","RecentText","MenuTabs"]);
 
 const REQUIRED_ATTR = {   // missing ⇒ element is built but never draws
   StaticText:"value", AttributeText:"attribute", AttributeImage:"attribute",
@@ -751,6 +753,19 @@ function addGUIElem(doc, name, theme, chain, diags) {
     case "RecentText":
       el.extended = { recentIndex: Math.max(0, getInt(doc, name + "_index", 0)), sizingMode: SIZING_NONE };
       break;
+    case "MenuTabs": {
+      const selRaw = getStr(doc, name + "_sel_color");
+      const sel = selRaw === null ? null : parseColor(selRaw);
+      if (sel && !sel.ok) colorDiag(diags, doc, name + "_sel_color", selRaw, sel, name);
+      el.extended = {
+        pad: Math.max(0, getInt(doc, name + "_pad", 10)),
+        frameSize: Math.max(0, getInt(doc, name + "_frame", 2)),
+        selColor: sel ? { r:sel.r, g:sel.g, b:sel.b } : theme.selTextColor,
+        iconPrev: getStr(doc, name + "_icon_prev"),
+        iconNext: getStr(doc, name + "_icon_next"),
+      };
+      break;
+    }
     case "ItemsList":
       initItemsList(doc, name, el);
       el.slot = theme.itemsListCount === 0 ? "games" : "apps";
@@ -1552,6 +1567,7 @@ function drawElement(el) {
       q = drawSingleText(el, g4 ? g4.title : "");
       break;
     }
+    case "MenuTabs":   q = drawMenuTabs(el); break;
     case "ItemsList":  q = drawItemsList(el); break;
     case "ItemText":   q = drawSingleText(el, game.serial); break;
     case "StaticText": q = drawSingleText(el, ex.value ?? ""); break;
@@ -1697,6 +1713,57 @@ function drawItemsListGrid(el, posX, posY) {
     el._cells.push({ x:q.x, y:cy, w:q.w, h:ex.cellHeight, index:S.pageStart + n });
   }
   return { x:posX, y:posY, w:gridW, h:el.height };
+}
+
+/**
+ * MenuTabs — every visible device drawn at once, current one framed. Needs
+ * patches/03-opl-menu-tabs.patch. Layout mirrors guiAlignMenuHints: measure the
+ * whole strip, then centre it on posX when aligned.
+ */
+function drawMenuTabs(el) {
+  const ex = el.extended;
+  const spec = fontSpec(el);
+  const devices = DEVICES.slice(0, S.deviceCount);
+  const iconH = 20;
+  const iconW = name => {
+    const img = themeImage(name);
+    return img && img.complete && img.naturalHeight ? Math.round(img.naturalWidth * iconH / img.naturalHeight) : 0;
+  };
+  const tabW = name => textWidth(name, spec) + 2 * ex.pad;
+
+  let total = devices.reduce((n, d) => n + tabW(d), 0) + (devices.length - 1) * el.width;
+  const wPrev = iconW(ex.iconPrev), wNext = iconW(ex.iconNext);
+  if (wPrev) total += wPrev + el.width;
+  if (wNext) total += wNext + el.width;
+
+  let x = el.posX;
+  if (el.aligned) x -= total >> 1;
+  const startX = x;
+
+  const drawIcon = (name, w) => {
+    const img = themeImage(name);
+    const q = setupQuad(x, el.posY + (el.height >> 1), 2, w, iconH, el.scaled, S.aspect);
+    if (img && img.complete && img.naturalWidth) ctx.drawImage(img, q.x, q.y, q.w, q.h);
+    x += q.w + el.width;
+  };
+  if (wPrev) drawIcon(ex.iconPrev, wPrev);
+
+  devices.forEach((name, i) => {
+    const w = tabW(name);
+    if (i === S.device) {
+      if (ex.frameSize > 0) {
+        const fw = (el.scaled & SCALING_RATIO) ? (w * S.aspect) >> 2 : w;
+        drawCellFrame(x, el.posY, fw, el.height, ex.frameSize, ex.selColor);
+      }
+      renderString(el, x + ex.pad, el.posY + (el.height >> 1), 2, 0, 0, name, ex.selColor);
+    } else {
+      renderString(el, x + ex.pad, el.posY + (el.height >> 1), 2, 0, 0, name, el.color);
+    }
+    x += w + el.width;
+  });
+
+  if (wNext) drawIcon(ex.iconNext, wNext);
+  return { x: startX, y: el.posY, w: x - startX - el.width, h: el.height };
 }
 
 /** drawItemsList (themes.c:840) — §5.2, including the decorator/text mismatch. */

@@ -8,6 +8,7 @@ the second builds on the first.
 |---|---|
 | `01-opl-tile-grid.patch` | Tile grids: `columns`, `cell_width`, `cell_height`, `gap`, `text`, `label_height`, `frame` on `ItemsList`; `offset` on `GameImage`; two-axis navigation |
 | `02-opl-sort-and-recent.patch` | Sort modes cycled with **R3**; a persistent recently-played list; `RecentImage` and `RecentText` element types; widescreen correction for the grid |
+| `03-opl-menu-tabs.patch` | `MenuTabs` — every visible device drawn at once, current one framed |
 
 ```bash
 git clone https://github.com/ps2homebrew/Open-PS2-Loader
@@ -15,6 +16,7 @@ cd Open-PS2-Loader
 git checkout 3e3f34e
 git apply /path/to/01-opl-tile-grid.patch
 git apply /path/to/02-opl-sort-and-recent.patch
+git apply /path/to/03-opl-menu-tabs.patch
 make
 ```
 
@@ -121,13 +123,17 @@ A grid needs two axes, so when `columns > 1`:
 |---|---|---|
 | Up / Down | ±1 entry | ±1 **row** (`columns` entries) |
 | Left / Right | previous / next device | ∓1 entry along the row |
-| L2 / R2 | first / last page | previous / next **device** |
-| L1 / R1 | page up / down | unchanged |
+| **L1 / R1** | page up / down | **previous / next device** |
+| L2 / R2 | first / last page | page up / down |
 
-Device switching has to move off Left/Right because the grid needs them. Single
-column themes take the `columns > 1` branch nowhere and behave identically to
-stock — including the page-up-on-scroll-back behaviour, which is deliberately
-preserved rather than replaced with row scrolling.
+A grid needs both d-pad axes for the tiles, so device switching moves to the
+shoulders — L1/R1, which is where most modern UIs put tab switching. Paging
+shifts down to L2/R2, and first/last page is dropped, since paging a grid gets
+you there quickly enough.
+
+Single-column themes take the `columns > 1` branch nowhere and behave
+identically to stock — including the page-up-on-scroll-back behaviour, which is
+deliberately preserved rather than replaced with row scrolling.
 
 ## Sort modes (patch 02)
 
@@ -165,6 +171,25 @@ Two element types read it:
 *current* device's `ART` folder, because that is the only image path OPL exposes.
 A game last played from HDD while you are browsing USB shows its title and falls
 back to `default` for the picture.
+
+## `MenuTabs` (patch 03)
+
+`MenuText` draws only the device you are on, with a pair of arrows implying the
+rest. `MenuTabs` walks the whole device list — the `menu_list_t` chain that
+`drawElem` already receives — and draws every entry whose `visible` is set,
+framing the current one.
+
+| Key | Default | Meaning |
+|---|---|---|
+| `pad` | `10` | Horizontal padding inside each tab |
+| `frame` | `2` | Selection frame thickness, `0` to disable |
+| `sel_color` | `sel_text_color` | Frame and active label colour, so the tab frame need not match the game-grid frame |
+| `icon_prev` / `icon_next` | *(none)* | Theme PNGs drawn at each end, for marking the buttons that move between devices |
+| `width` | `16` | Gap between tabs, not a box width |
+| `height` | `24` | Tab height, which is what the frame encloses |
+
+`aligned=1` with `x=POS_MID` centres the whole strip, measured the same way
+`guiAlignMenuHints` measures the hint row.
 
 ## Files touched
 

@@ -1,0 +1,203 @@
+diff --git a/include/themes.h b/include/themes.h
+index 9cd64d9..77a1507 100644
+--- a/include/themes.h
++++ b/include/themes.h
+@@ -70,6 +70,16 @@ typedef struct
+     char *currentValue;
+ } mutable_text_t;
+ 
++/// MenuTabs: every visible device drawn at once, with the current one framed.
++typedef struct
++{
++    int pad;        //!< horizontal padding inside each tab
++    int frameSize;  //!< selection frame thickness, 0 to disable
++    u64 selColor;   //!< frame and active label colour
++    image_texture_t *iconPrev;
++    image_texture_t *iconNext;
++} menu_tabs_t;
++
+ typedef struct
+ {
+     int displayedItems;
+diff --git a/src/themes.c b/src/themes.c
+index 65713ef..6e11198 100644
+--- a/src/themes.c
++++ b/src/themes.c
+@@ -50,6 +50,7 @@ enum ELEM_ATTRIBUTE_TYPE {
+     ELEM_TYPE_GAME_COUNT_TEXT,
+     ELEM_TYPE_RECENT_IMAGE,
+     ELEM_TYPE_RECENT_TEXT,
++    ELEM_TYPE_MENU_TABS,
+     ELEM_TYPE_COUNT
+ };
+ 
+@@ -80,7 +81,8 @@ static const char *elementsType[ELEM_TYPE_COUNT] = {
+     "BdmIndex",
+     "GameCountText",
+     "RecentImage",
+-    "RecentText"};
++    "RecentText",
++    "MenuTabs"};
+ 
+ // Common functions for Text ////////////////////////////////////////////////////////////////////////////////////////////////
+ 
+@@ -851,6 +853,149 @@ static void drawMenuText(struct menu_list *menu, struct submenu_list *item, conf
+     fntRenderString(elem->font, elem->posX, elem->posY, elem->aligned, 0, 0, menuItemGetText(menu->item), elem->color);
+ }
+ 
++static void drawCellFrame(int x, int y, int w, int h, int t, u64 color);
++
++/* MenuTabs //////////////////////////////////////////////////////////////////
++ *
++ * MenuText shows only the device you are on. This walks the whole device list
++ * and draws every visible one, framing the current entry, so the other
++ * libraries are on screen rather than implied by a pair of arrows.
++ */
++
++static void endMenuTabs(struct theme_element *elem)
++{
++    menu_tabs_t *tabs = (menu_tabs_t *)elem->extended;
++
++    if (tabs) {
++        if (tabs->iconPrev)
++            freeImageTexture(tabs->iconPrev);
++        if (tabs->iconNext)
++            freeImageTexture(tabs->iconNext);
++        free(tabs);
++    }
++
++    free(elem);
++}
++
++/// Width of one tab in virtual units, padding included.
++static int menuTabWidth(theme_element_t *elem, menu_tabs_t *tabs, struct menu_item *item)
++{
++    return rmUnScaleX(fntCalcDimensions(elem->font, menuItemGetText(item))) + (2 * tabs->pad);
++}
++
++static int menuTabIconWidth(image_texture_t *icon, int height)
++{
++    if (!icon || !icon->source.Mem || icon->source.Height == 0)
++        return 0;
++
++    return (icon->source.Width * height) / icon->source.Height;
++}
++
++static void drawMenuTabs(struct menu_list *menu, struct submenu_list *item, config_set_t *config, struct theme_element *elem)
++{
++    menu_tabs_t *tabs = (menu_tabs_t *)elem->extended;
++    struct menu_list *head = menu, *m;
++    int total = 0, count = 0, x, iconW, iconH = 20;
++
++    while (head->prev)
++        head = head->prev;
++
++    for (m = head; m; m = m->next) {
++        if (m->item->visible == 0)
++            continue;
++        total += menuTabWidth(elem, tabs, m->item);
++        count++;
++    }
++
++    if (count == 0)
++        return;
++
++    total += (count - 1) * elem->width; // elem->width is the gap between tabs
++
++    iconW = menuTabIconWidth(tabs->iconPrev, iconH);
++    if (iconW)
++        total += iconW + elem->width;
++    iconW = menuTabIconWidth(tabs->iconNext, iconH);
++    if (iconW)
++        total += iconW + elem->width;
++
++    x = elem->posX;
++    if (elem->aligned)
++        x -= total >> 1;
++
++    iconW = menuTabIconWidth(tabs->iconPrev, iconH);
++    if (iconW) {
++        rmDrawPixmap(&tabs->iconPrev->source, x, elem->posY + (elem->height >> 1), ALIGN_VCENTER, iconW, iconH, elem->scaled, gDefaultCol);
++        x += iconW + elem->width;
++    }
++
++    for (m = head; m; m = m->next) {
++        int w;
++
++        if (m->item->visible == 0)
++            continue;
++
++        w = menuTabWidth(elem, tabs, m->item);
++
++        if (m == menu) {
++            if (tabs->frameSize > 0)
++                drawCellFrame(x, elem->posY, w, elem->height, tabs->frameSize, tabs->selColor);
++            fntRenderString(elem->font, x + tabs->pad, elem->posY + (elem->height >> 1), ALIGN_VCENTER, 0, 0, menuItemGetText(m->item), tabs->selColor);
++        } else
++            fntRenderString(elem->font, x + tabs->pad, elem->posY + (elem->height >> 1), ALIGN_VCENTER, 0, 0, menuItemGetText(m->item), elem->color);
++
++        x += w + elem->width;
++    }
++
++    iconW = menuTabIconWidth(tabs->iconNext, iconH);
++    if (iconW)
++        rmDrawPixmap(&tabs->iconNext->source, x, elem->posY + (elem->height >> 1), ALIGN_VCENTER, iconW, iconH, elem->scaled, gDefaultCol);
++}
++
++static void initMenuTabs(const char *themePath, config_set_t *themeConfig, theme_t *theme, theme_element_t *elem, const char *name)
++{
++    menu_tabs_t *tabs = (menu_tabs_t *)malloc(sizeof(menu_tabs_t));
++    unsigned char charColor[3];
++    const char *value;
++    char elemProp[64];
++
++    tabs->pad = 10;
++    tabs->frameSize = 2;
++    tabs->selColor = gTheme->selTextColor;
++    tabs->iconPrev = NULL;
++    tabs->iconNext = NULL;
++
++    snprintf(elemProp, sizeof(elemProp), "%s_pad", name);
++    configGetInt(themeConfig, elemProp, &tabs->pad);
++    if (tabs->pad < 0)
++        tabs->pad = 0;
++
++    snprintf(elemProp, sizeof(elemProp), "%s_frame", name);
++    configGetInt(themeConfig, elemProp, &tabs->frameSize);
++    if (tabs->frameSize < 0)
++        tabs->frameSize = 0;
++
++    // Its own colour, so the tab frame need not match the game-grid frame.
++    tabs->selColor = theme->selTextColor;
++    snprintf(elemProp, sizeof(elemProp), "%s_sel_color", name);
++    if (configGetColor(themeConfig, elemProp, charColor))
++        tabs->selColor = GS_SETREG_RGBA(charColor[0], charColor[1], charColor[2], 0x80);
++
++    value = NULL;
++    snprintf(elemProp, sizeof(elemProp), "%s_icon_prev", name);
++    if (configGetStr(themeConfig, elemProp, &value) && value)
++        tabs->iconPrev = initImageTexture(themePath, themeConfig, name, value, 0);
++
++    value = NULL;
++    snprintf(elemProp, sizeof(elemProp), "%s_icon_next", name);
++    if (configGetStr(themeConfig, elemProp, &value) && value)
++        tabs->iconNext = initImageTexture(themePath, themeConfig, name, value, 0);
++
++    elem->extended = tabs;
++    elem->endElem = &endMenuTabs;
++    elem->drawElem = &drawMenuTabs;
++}
++
+ static void drawBDMIndex(struct menu_list *menu, struct submenu_list *item, config_set_t *config, struct theme_element *elem)
+ {
+     item_list_t *itemList = menu->item->userdata;
+@@ -1319,6 +1464,9 @@ static int addGUIElem(const char *themePath, config_set_t *themeConfig, theme_t
+             } else if (!strcmp(elementsType[ELEM_TYPE_LOADING_ICON], type)) {
+                 if (!theme->loadingIcon)
+                     theme->loadingIcon = initBasic(themePath, themeConfig, theme, name, ELEM_TYPE_LOADING_ICON, -40, -60, ALIGN_CENTER, DIM_UNDEF, DIM_UNDEF, SCALING_RATIO, gDefaultCol, theme->fonts[0]);
++            } else if (!strcmp(elementsType[ELEM_TYPE_MENU_TABS], type)) {
++                elem = initBasic(themePath, themeConfig, theme, name, ELEM_TYPE_MENU_TABS, screenWidth >> 1, 20, ALIGN_CENTER, 16, 24, SCALING_RATIO, theme->textColor, theme->fonts[0]);
++                initMenuTabs(themePath, themeConfig, theme, elem, name);
+             } else if (!strcmp(elementsType[ELEM_TYPE_RECENT_IMAGE], type)) {
+                 elem = initBasic(themePath, themeConfig, theme, name, ELEM_TYPE_GAME_IMAGE, 0, 0, ALIGN_CENTER, DIM_UNDEF, DIM_UNDEF, SCALING_RATIO, gDefaultCol, theme->fonts[0]);
+                 initRecentImage(themePath, themeConfig, theme, elem, name);

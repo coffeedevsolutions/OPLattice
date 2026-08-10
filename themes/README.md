@@ -79,6 +79,26 @@ So `LIBRARY` is the page title and `MenuText` stays as the source indicator. If
 you would rather drop the device name entirely, delete the `MenuText` element —
 just know that you also lose the only on-screen cue that L2/R2 change the source.
 
+## Controls in a grid theme
+
+| Button | Does |
+|---|---|
+| D-pad | move between tiles, a row at a time vertically |
+| **L1 / R1** | previous / next device — USB, HDD, Ethernet, Apps |
+| L2 / R2 | page up / down |
+| ○ | run |
+| □ | details page, when the theme defines one |
+| △ | per-game options |
+| R3 | cycle sort order |
+| START | OPL menu |
+| SELECT | refresh the list |
+
+`thm_GridHard` shows the devices as a **centred tab strip** rather than one name
+with arrows: every connected device is on screen, the current one framed in
+white, with `L1` and `R1` glyphs at each end marking the buttons that move
+between them. That needs `MenuTabs` from patch 03; the other themes still use
+stock `MenuText`, whose arrows appear only when another device is connected.
+
 ## Widescreen
 
 The grid themes are built so nothing distorts when you switch to 16:9.
