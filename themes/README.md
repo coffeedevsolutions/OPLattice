@@ -46,21 +46,38 @@ Per-game art lives in the **device's `ART` folder**, named `<SERIAL>_<PATTERN>.p
 The grid themes draw `_COV`; `thm_UnifiedLibrary` also uses `_ICO` and `_BG`.
 PNG only — OPL dropped JPG and BMP support on 2024-10-22.
 
-### Size your cover art for the grid
+### Size your cover art for the grid — VRAM is the real limit
 
-The cache holds the **decoded source image**, so drawing a 300×450 cover into a
-100×150 tile wastes 3× the memory for no visible gain. Ten tiles:
+Two budgets matter and the tighter one is **VRAM**, which nothing else models.
+gsKit gets 4 MB (`__VRAM_SIZE`); two 640×480 CT24 double-buffered framebuffers
+take 2.34 MB, leaving **~1.66 MB** for textures. In VRAM a CT24 pixel is a full
+32-bit word, so one 300×450 cover is 527 KB — **three fit at once**.
 
-| Source art | Cache |
-|---|---|
-| 300×450 | 4.05 MB |
-| 150×225 | 1.01 MB |
-| 100×150 | 0.45 MB |
+A grid binds one texture per visible tile *in the same frame*. `thm_GridHard`
+shows 12, so:
 
-On a 32 MB console that difference is worth having. To downscale a whole folder:
+| COV source | VRAM peak | headroom |
+|---|---|---|
+| 300×450 | 6.04 MB | over |
+| 150×225 | 1.79 MB | over |
+| 128×192 | 1.60 MB | 62 KB — too close |
+| **100×150** | **1.29 MB** | **380 KB** |
+
+Go over and it does not fail cleanly: the texture manager evicts and re-uploads
+every frame, which thrashes. The previewer's **PS2 art cache estimate** panel
+measures whatever ART folder you load and shows both figures, so check there
+rather than guessing.
+
+Logos are worth a pass too — a 400×440 `_LGO` is 704 KB, the single largest
+texture in these themes.
+
+The EE-RAM cache is the looser constraint but follows the same rule: it holds
+the decoded source, so a 300×450 cover in a 75×112 tile wastes 9× the memory for
+no visible gain. To downscale a whole folder:
 
 ```bash
-mkdir -p ART-grid && for f in ART/*_COV.png; do magick "$f" -resize 150x225 -strip "ART-grid/$(basename "$f")"; done
+mkdir -p ART-grid && for f in ART/*_COV.png; do magick "$f" -resize 100x150 -strip "ART-grid/$(basename "$f")"; done
+for f in ART/*_LGO.png; do magick "$f" -resize 240x264 -strip "ART-grid/$(basename "$f")"; done
 ```
 
 ## "LIBRARY" is a masthead, not a claim
