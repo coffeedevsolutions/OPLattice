@@ -1560,8 +1560,16 @@ function drawElement(el) {
     case "MenuText":   q = drawMenuText(el); break;
     case "MenuIcon":   q = stubQuad(el, "MenuIcon", 32, 32); break;
     case "BdmIndex":   q = stubQuad(el, "USB 1", 64, 8); break;
-    case "HintText":   q = drawHints(el, [["START","Menu"],["○","Run"],["□","Info"],["△","Options"],["SEL","Refresh"]]); break;
-    case "InfoHintText": q = drawHints(el, [["○","Run"],["✕","Back"]]); break;
+    case "HintText": {
+      // OPL only offers "Info" when the theme actually defines info elements
+      // (opl.c:236), because that is the same condition SQUARE checks.
+      const hints = [["start","Menu"],["circle","Run"]];
+      if ((S.theme.chains.info || []).length) hints.push(["square","Info"]);
+      hints.push(["triangle","Options"], ["select","Refresh"]);
+      q = drawHints(el, hints);
+      break;
+    }
+    case "InfoHintText": q = drawHints(el, [["circle","Run"],["cross","Back"]]); break;
     case "LoadingIcon": q = stubQuad(el, "busy", 32, 32); break;
     default: q = stubQuad(el, el.typeName);
   }
@@ -1732,14 +1740,19 @@ function drawMenuText(el) {
   const spec = fontSpec(el);
   // Arrows appear only when another device is actually connected.
   const hasPrev = S.device > 0, hasNext = S.device < S.deviceCount - 1;
-  const arrow = (x, glyph) => drawStub(setupQuad(x, el.posY, el.aligned, 20, 20, el.scaled, S.aspect), glyph);
+  const arrow = (x, name) => {
+    const q = setupQuad(x, el.posY, el.aligned, 20, 20, el.scaled, S.aspect);
+    const img = themeImage(name);
+    if (img && img.complete && img.naturalWidth) ctx.drawImage(img, q.x, q.y, q.w, q.h);
+    else drawStub(q, name === "left" ? "\u2039" : "\u203a");
+  };
   if (el.aligned) {
     const off = el.width >> 1;
-    if (hasPrev) arrow(el.posX - off, "‹");
-    if (hasNext) arrow(el.posX + off, "›");
+    if (hasPrev) arrow(el.posX - off, "left");
+    if (hasNext) arrow(el.posX + off, "right");
   } else {
-    if (hasPrev) arrow(el.posX - 20, "‹");
-    if (hasNext) arrow(el.posX + el.width, "›");
+    if (hasPrev) arrow(el.posX - 20, "left");
+    if (hasNext) arrow(el.posX + el.width, "right");
   }
   renderString(el, el.posX, el.posY, el.aligned, 0, 0, label, el.color);
   const w = textWidth(label, spec);
@@ -1750,22 +1763,37 @@ function drawMenuText(el) {
  * drawHintText (themes.c:915): icon + label pairs, `width` used as the gap
  * between them, `aligned` centring the whole row (guiAlignMenuHints).
  */
+/**
+ * guiDrawIconAndText (gui.c:1312): the icon is always drawn 20px tall, its width
+ * derived from the source aspect, then the label follows 2px later. A theme can
+ * replace any of these by shipping circle.png, cross.png, triangle.png,
+ * square.png, start.png or select.png, which is how you get plain shapes instead
+ * of OPL's button graphics.
+ */
+function hintIconWidth(name) {
+  const img = themeImage(name);
+  if (img && img.complete && img.naturalHeight) return Math.round(img.naturalWidth * 20 / img.naturalHeight);
+  return 20;
+}
 function drawHints(el, hints) {
   const spec = fontSpec(el);
-  const ICON_W = 22;
   let x = el.posX;
   if (el.aligned) {
     let total = SCREEN_W;
     hints.forEach((h, i) => {
-      total -= ICON_W + 2 + textWidth(h[1], spec);
+      total -= ((hintIconWidth(h[0]) * S.aspect) >> 2) + 2 + textWidth(h[1], spec);
       if (i !== hints.length - 1) total -= el.width;
     });
     x = total >> 1;
   }
   const startX = x;
   for (const [icon, label] of hints) {
-    drawStub({ x, y: el.posY, w: ICON_W, h: 20 }, icon);
-    x += ICON_W + 2;
+    const img = themeImage(icon);
+    const w = hintIconWidth(icon);
+    const q = setupQuad(x, el.posY + 10, ALIGN_CENTER & 2, w, 20, SCALING_RATIO, S.aspect);
+    if (img && img.complete && img.naturalWidth) ctx.drawImage(img, q.x, q.y, q.w, q.h);
+    else drawStub(q, icon.slice(0, 3));
+    x += q.w + 2;
     renderString(el, x, el.posY + 10, ALIGN_CENTER & 2, 0, 0, label, el.color);
     x += textWidth(label, spec) + el.width;
   }

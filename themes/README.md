@@ -11,10 +11,10 @@ Four themes. One runs on stock OPL; three need
 | [`thm_GridEditorial`](thm_GridEditorial/) | patch 01 | Swiss poster. Paper ground, rules, red accent |
 
 The grid themes are 5 columns × 2 rows of 2:3 box art with a 14px gap and a 14px
-caption, so you can compare them like-for-like. `thm_GridHard` also carries a **recently-played band** above the grid: the most
-recent launch as a wide `_BG` banner (141×66, matching that art's 460×215 shape)
-followed by three `_COV` thumbnails at the same 66px height, with the three
-newest titles beside them. That band is what pushes its tiles down to 77×115.
+caption, so you can compare them like-for-like. `thm_GridHard` also carries a **CONTINUE band** above the grid — the single most
+recent launch as a wide `_BG` banner (170×80, matching that art's 460×215 shape)
+with the title beside it — and a **details page**. Its band and grid share a left
+rule at x=122 rather than the page margin.
 
 ## Typeface
 
@@ -124,7 +124,44 @@ the grid box). The selection frame doesn't have this problem — it's drawn with
 Open any of them in `../opl-theme-previewer.html` and drag. It implements the
 patched behaviour and marks every patch-only key with a `PATCHED_ONLY` note.
 
-### Cache order matters
+### The details page (SQUARE)
+
+`thm_GridHard` defines an `info0`–`info17` chain, which is stock OPL — no patch.
+`itemExecSquare` switches to `GUI_SCREEN_INFO` when the theme has info elements,
+and OPL only offers the **Info** hint on the main page under that same condition.
+A theme with no `info<N>` block simply has no details screen, which is why the
+other three don't show one.
+
+It gathers everything OPL can say about a title:
+
+| Element | Shows |
+|---|---|
+| `ItemCover`, `GameImage` with `pattern=LGO` / `SCR` / `SCR2` | the rest of the art collateral |
+| `AttributeText` `Title` `Genre` `Release` `Developer` `#Size` `Description` | metadata from the game's own config |
+| `AttributeImage` `#Media` `#Format` `Rating` | badges picked by the value of that key |
+| `ItemText` | the startup id |
+
+Metadata reflects what your setup actually records. `Size`, `Media` and `Format`
+are filled in by OPL; `Genre`, `Release`, `Developer` and `Description` come from
+whatever art/config pack you use and stay blank otherwise — `display=0` keeps the
+label visible either way.
+
+## Button hints without OPL's button graphics
+
+Any icon in the `BDM_ICON`..`START_ICON` range can be replaced by dropping a PNG
+named after it into the theme folder — `circle.png`, `cross.png`, `triangle.png`,
+`square.png`, `start.png`, `select.png`, `left.png`, `right.png`. No patch.
+
+All four themes ship plain outlines and bars instead of rendered PS2 buttons:
+a ring for ○, two strokes for ✕, outlines for △ and □, a filled bar for START and
+a hollow one for SELECT. Delete one and OPL falls back to its own, because
+`use_default=1`.
+
+`guiDrawIconAndText` always draws the icon 20px tall and derives the width from
+the source aspect, so the way to make a hint smaller is to draw a smaller shape
+inside a 20px canvas — which is what these do.
+
+## Cache order matters
 
 `findDuplicate` gives every element that names a pattern the **first** cache
 created for it, and the first element in the file wins. In `thm_GridHard` the
