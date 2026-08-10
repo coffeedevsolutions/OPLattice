@@ -107,6 +107,14 @@ kbd{font-family:var(--mono);font-size:10.5px;background:#0f1216;border:1px solid
     <button id="btnSnap" title="Snap drags to 8px">Snap</button>
     <button id="btnPlasma" class="on" title="Plasma vs flat bg_color fill">Plasma</button>
     <button id="btnLoad" title="Show the LoadingIcon overlay">Busy icon</button>
+    <span class="sep"></span>
+    <label>Device</label>
+    <select id="device" title="Which device page MenuText names. Arrows only show when another device is connected."></select>
+    <select id="devCount" title="How many devices OPL sees, which decides whether the MenuText arrows appear">
+      <option value="1">1 connected</option><option value="2">2</option>
+      <option value="3" selected>3</option><option value="4">4</option><option value="5">5</option>
+    </select>
+    <button id="btnSort" class="on" title="OPL's autosort setting (conf_opl.cfg). On by default; sorts case-insensitively by title.">A–Z</button>
     <span class="grow"></span>
     <span id="status" style="color:var(--dim)"></span>
     <button id="btnExport">Export conf_theme.cfg</button>
@@ -1174,6 +1182,10 @@ function gameArt(serial, pattern) {
  * release, developer, description) are NOT a game database — they are marked
  * sample strings sized to exercise wrapping and clipping. `size` is real.
  */
+// OPL builds one menu entry per connected device (opl.c:216); the theme renders
+// whichever is selected. Names come from the English string table.
+const DEVICES = ["USB Games", "HDD Games", "ETH Games", "SD Games", "Apps"];
+
 const GAMES = [
   { serial:"SCPS_150.21", title:"Jak and Daxter (JP)",             size:"1392" },
   { serial:"SCPS_150.16", title:"Minna no Golf 3 (JP)",            size:"1416" },
@@ -1196,6 +1208,14 @@ const GAMES = [
   { serial:"SLPS_254.78", title:"SLPS_254.78",                     size:"2048" },
 ];
 const GAME_DESC = "Sample description text. It is deliberately long enough to exercise the word wrapping that OPL applies at load time and the box clipping it applies when an element declares both a width and a height.";
+
+/** The list in the order OPL would show it: autosort is on by default. */
+function gameList() {
+  if (!S.sorted) return GAMES;
+  if (!gameList._c) gameList._c = GAMES.slice().sort((a, b) =>
+    a.title.toLowerCase() < b.title.toLowerCase() ? -1 : a.title.toLowerCase() > b.title.toLowerCase() ? 1 : 0);
+  return gameList._c;
+}
 
 /** Per-game values an AttributeText element can look up. */
 function gameAttr(game, attr) {
@@ -1234,7 +1254,7 @@ const S = {
   files:new Map(), images:new Map(), art:new Map(), themeFonts:new Map(),
   aspect:4, zoom:"fit", smooth:false, grid:false, snap:false, plasma:true,
   showLoading:false, placeholderArt:true,
-  gameIndex:3, pageStart:0, dirHandle:null, live:false, liveTimer:null,
+  gameIndex:3, pageStart:0, device:0, deviceCount:3, sorted:true, dirHandle:null, live:false, liveTimer:null,
   undo:[], redo:[], syncing:false, typing:0,
 };
 
@@ -1362,7 +1382,7 @@ function drawStub(q, label, accent) {
   ctx.setLineDash([3, 2]);
   ctx.strokeRect(q.x + .5, q.y + .5, q.w - 1, q.h - 1);
   ctx.setLineDash([]);
-  if (q.w >= 24 && q.h >= 10) {
+  if (q.w >= 14 && q.h >= 10) {
     ctx.fillStyle = "rgba(128,128,128,0.95)";
     ctx.font = `${Math.min(10, Math.max(7, q.h - 4))}px system-ui,sans-serif`;
     ctx.textAlign = "center"; ctx.textBaseline = "middle";
@@ -1420,7 +1440,7 @@ function drawPlasma(color) {
 const themeImage = name => name ? S.images.get(lower(name + ".png")) || null : null;
 
 function drawElement(el) {
-  const game = GAMES[S.gameIndex];
+  const game = gameList()[S.gameIndex];
   const ex = el.extended || {};
   let q = null;
   // GameCountText and ItemIcon/ItemCover are registered under another internal
@@ -1449,7 +1469,7 @@ function drawElement(el) {
     }
     case "GameImage": {
       // Tile elements render a fixed slot on the page, not the selection.
-      const g2 = ex.useOffset ? GAMES[S.pageStart + ex.offset] : game;
+      const g2 = ex.useOffset ? gameList()[S.pageStart + ex.offset] : game;
       if (ex.useOffset && !g2) { el._rect = { x:el.posX, y:el.posY, w:0, h:0 }; return; }
       let img = ex.pattern ? gameArt(g2.serial, ex.pattern) : null;
       if (!img) img = themeImage(ex.defaultTexture);
@@ -1470,7 +1490,7 @@ function drawElement(el) {
     case "ItemsList":  q = drawItemsList(el); break;
     case "ItemText":   q = drawSingleText(el, game.serial); break;
     case "StaticText": q = drawSingleText(el, ex.value ?? ""); break;
-    case "GameCountText": q = drawSingleText(el, `Files found: ${GAMES.length}`); break;
+    case "GameCountText": q = drawSingleText(el, `Files found: ${gameList().length}`); break;
     case "AttributeText": q = drawAttributeText(el, game); break;
     case "MenuText":   q = drawMenuText(el); break;
     case "MenuIcon":   q = stubQuad(el, "MenuIcon", 32, 32); break;
@@ -1574,7 +1594,7 @@ function drawItemsListGrid(el, posX, posY) {
   if (artW < 1 || artH < 1) return { x:posX, y:posY, w:el.width, h:el.height };
 
   for (let n = 0; n < ex.displayedItems; n++) {
-    const g = GAMES[S.pageStart + n];
+    const g = gameList()[S.pageStart + n];
     if (!g) break;
     const cx = posX + (n % ex.columns) * ex.cellWidth;
     const cy = posY + Math.floor(n / ex.columns) * ex.cellHeight;
@@ -1604,7 +1624,7 @@ function drawItemsList(el) {
   const n = ex.displayedItems;
   if (S.gameIndex < S.pageStart) S.pageStart = S.gameIndex;
   if (S.gameIndex >= S.pageStart + n) S.pageStart = S.gameIndex - n + 1;
-  S.pageStart = Math.max(0, Math.min(S.pageStart, Math.max(0, GAMES.length - n)));
+  S.pageStart = Math.max(0, Math.min(S.pageStart, Math.max(0, gameList().length - n)));
   // The patch scrolls a grid by whole rows, so the page start stays aligned.
   if (ex.columns > 1) S.pageStart -= S.pageStart % ex.columns;
 
@@ -1615,7 +1635,7 @@ function drawItemsList(el) {
   const top = posY;
 
   for (let i = 0; i < n; i++) {
-    const g = GAMES[S.pageStart + i];
+    const g = gameList()[S.pageStart + i];
     if (!g) break;
     const color = (S.pageStart + i === S.gameIndex) ? S.theme.selTextColor : el.color;
     if (ex.decoratorImage) {
@@ -1630,20 +1650,23 @@ function drawItemsList(el) {
     }
     posY += MENU_ITEM_HEIGHT;
   }
-  el._rows = { top, count: Math.min(n, GAMES.length - S.pageStart), x: posX };
+  el._rows = { top, count: Math.min(n, gameList().length - S.pageStart), x: posX };
   return { x: el.aligned ? el.posX - (el.width >> 1) : el.posX, y: top, w: el.width, h: el.height };
 }
 
 function drawMenuText(el) {
-  const label = S.chain.startsWith("apps") ? "Apps" : "USB Games";
+  const label = S.chain.startsWith("apps") ? "Apps" : DEVICES[S.device];
   const spec = fontSpec(el);
+  // Arrows appear only when another device is actually connected.
+  const hasPrev = S.device > 0, hasNext = S.device < S.deviceCount - 1;
+  const arrow = (x, glyph) => drawStub(setupQuad(x, el.posY, el.aligned, 20, 20, el.scaled, S.aspect), glyph);
   if (el.aligned) {
     const off = el.width >> 1;
-    drawStub(setupQuad(el.posX - off, el.posY, el.aligned, 20, 20, el.scaled, S.aspect), "‹");
-    drawStub(setupQuad(el.posX + off, el.posY, el.aligned, 20, 20, el.scaled, S.aspect), "›");
+    if (hasPrev) arrow(el.posX - off, "‹");
+    if (hasNext) arrow(el.posX + off, "›");
   } else {
-    drawStub(setupQuad(el.posX - 20, el.posY, el.aligned, 20, 20, el.scaled, S.aspect), "‹");
-    drawStub(setupQuad(el.posX + el.width, el.posY, el.aligned, 20, 20, el.scaled, S.aspect), "›");
+    if (hasPrev) arrow(el.posX - 20, "‹");
+    if (hasNext) arrow(el.posX + el.width, "›");
   }
   renderString(el, el.posX, el.posY, el.aligned, 0, 0, label, el.color);
   const w = textWidth(label, spec);
@@ -2071,7 +2094,7 @@ function renderTree() {
 function renderGames() {
   const host = document.getElementById("games");
   host.innerHTML = "";
-  GAMES.forEach((g, i) => {
+  gameList().forEach((g, i) => {
     const row = document.createElement("div");
     row.className = "el" + (i === S.gameIndex ? " sel" : "");
     row.innerHTML = `${g.title}<br><span class="n">${g.serial}</span>`;
@@ -2360,6 +2383,27 @@ document.getElementById("btn169").onclick = () => {
   render();
 };
 document.getElementById("zoom").onchange = e => { S.zoom = e.target.value; render(); };
+
+const devSel = document.getElementById("device"), devCount = document.getElementById("devCount");
+DEVICES.forEach((d, i) => devSel.add(new Option(d, String(i))));
+const syncDevices = () => {
+  S.deviceCount = Number(devCount.value);
+  if (S.device >= S.deviceCount) S.device = S.deviceCount - 1;
+  devSel.value = String(S.device);
+  [...devSel.options].forEach((o, i) => o.disabled = i >= S.deviceCount);
+  render();
+};
+devSel.onchange = () => { S.device = Number(devSel.value); render(); };
+devCount.onchange = syncDevices;
+
+// gAutosort defaults to 1 (opl.c:1739) and sorts with strcasecmp on the display
+// text (submenuSort, menusys.c:561). Reproduced so row order matches the console.
+document.getElementById("btnSort").onclick = e => {
+  S.sorted = !S.sorted;
+  e.target.classList.toggle("on", S.sorted);
+  S.gameIndex = 0; S.pageStart = 0;
+  renderGames(); render();
+};
 toggle("btnSmooth", () => S.smooth, v => S.smooth = v);
 toggle("btnGrid", () => S.grid, v => S.grid = v);
 toggle("btnSnap", () => S.snap, v => S.snap = v);

@@ -509,6 +509,29 @@ again on `thmSetGuiValue` only for the built-in theme.
 
 ---
 
+### 8.1 Things a theme cannot control (they live in `conf_opl.cfg`)
+
+Repeatedly mistaken for theme keys. All of these are global OPL settings, edited
+in OPL's own Settings screen or in `conf_opl.cfg`, and no `conf_theme.cfg` key
+influences them.
+
+| Key | Default | What it does |
+|---|---|---|
+| `autosort` | **1 (on)** | Sorts each device's list. `submenuSort` (`menusys.c:561`) is a bubble sort on `strcasecmp` of the displayed title, so **case-insensitive alphabetical**. Runs once per list refresh, after the list is built. |
+| `scrolling` | 1 | **Not** text scrolling and not list scrolling — it is the D-pad auto-repeat delay. `0/1/2` maps to `500/300/100` ms (`gui.c:1636`). |
+| `remember_last` | 0 | Stores one `last_played` string in `conf_last.cfg` and preselects that entry on the device's list (`opl.c:660`, `opl.c:685`). It is a **single** value, not a history. |
+| `autostart_last` | 0 | Launches that entry after a countdown. |
+| `enable_coverart` | 1 | Master switch for all `GameImage` art (`gEnableArt`). With it off, every art element falls back to its `default`. |
+
+**There is no recently-played list in OPL's data.** `OSDHistory.c` does maintain
+the PS2's own OSD history — `name[16]`, `LaunchCount`, `DateStamp` per title —
+but OPL only ever *writes* to it (`AddHistoryRecordUsingFullPath`, `system.c:813`).
+Nothing reads it back for display, and no element type exposes it.
+
+**Sorting is not selectable at runtime.** There is one comparator and no key
+bound to change it. Themes have no input handling of any kind, so a "sort" button
+cannot come from a `conf_theme.cfg`.
+
 ## 9. Rendering geometry
 
 The theme space is a virtual **640×480 square-pixel** canvas
