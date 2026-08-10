@@ -68,16 +68,19 @@ every frame, which thrashes. The previewer's **PS2 art cache estimate** panel
 measures whatever ART folder you load and shows both figures, so check there
 rather than guessing.
 
-Logos are worth a pass too — a 400×440 `_LGO` is 704 KB, the single largest
-texture in these themes.
+`thm_GridHard` deliberately has **no `_LGO` element**. A 400×440 logo is 704 KB
+of VRAM — the largest single texture these themes ever touched — and the hero
+image already identifies the game, so the details page drops it. You do not need
+to ship or downscale `_LGO` files for this theme at all.
 
 The EE-RAM cache is the looser constraint but follows the same rule: it holds
 the decoded source, so a 300×450 cover in a 75×112 tile wastes 9× the memory for
 no visible gain. To downscale a whole folder:
 
 ```bash
-mkdir -p ART-grid && for f in ART/*_COV.png; do magick "$f" -resize 100x150 -strip "ART-grid/$(basename "$f")"; done
-for f in ART/*_LGO.png; do magick "$f" -resize 240x264 -strip "ART-grid/$(basename "$f")"; done
+mkdir -p ART-grid
+for f in ART/*_COV.png; do magick "$f" -resize '100x150>' -strip "ART-grid/$(basename "$f")"; done
+for f in ART/*_BG.png;  do cp "$f" "ART-grid/"; done
 ```
 
 ## "LIBRARY" is a masthead, not a claim
