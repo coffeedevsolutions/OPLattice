@@ -236,7 +236,7 @@ const THEME_DEFAULTS = {                        // §8
 };
 
 // Which keys each cfg type actually reads (§6.6). Used by the inspector and INVALID_ATTR.
-const COMMON_ATTRS = ["enabled","type","x","y","width","height","aligned","scaled","color","font"];
+const COMMON_ATTRS = ["enabled","type","x","y","width","height","aligned","scaled","color","font","x_scaled"];
 const OVERLAY_ATTRS = ["overlay","overlay_ulx","overlay_uly","overlay_urx","overlay_ury",
                        "overlay_llx","overlay_lly","overlay_lrx","overlay_lry"];
 const TYPE_ATTRS = {
@@ -263,7 +263,7 @@ const TYPE_ATTRS = {
 const PATCHED_ATTRS = new Set(["offset","columns","cell_width","cell_height","gap","text","frame",
                                "label_height","index","pad","sel_color","sel_text_color","hint_font",
                                "hint_color","prev_text","next_text","cap_left","cap_right",
-                               "label_bdm","label_eth","label_hdd","label_app","prefix","suffix"]);
+                               "label_bdm","label_eth","label_hdd","label_app","prefix","suffix","x_scaled"]);
 // Element types that only exist in a patched build.
 const PATCHED_TYPES = new Set(["RecentImage","RecentText","MenuTabs"]);
 
@@ -567,6 +567,8 @@ function initBasic(doc, name, typeName, def, theme, diags) {
   } else {
     el.color = def.color === "text" ? theme.textColor : TINT;
   }
+
+  el.xScaled = atoi(getStr(doc, name + "_x_scaled") || "0") !== 0;
 
   el.font = 0;
   const sf = getStr(doc, name + "_font");

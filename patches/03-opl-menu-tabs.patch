@@ -1,5 +1,5 @@
 diff --git a/include/themes.h b/include/themes.h
-index 9cd64d9..764d2a2 100644
+index 9cd64d9..82ad279 100644
 --- a/include/themes.h
 +++ b/include/themes.h
 @@ -62,6 +62,11 @@ typedef struct
@@ -48,8 +48,47 @@ index 9cd64d9..764d2a2 100644
  typedef struct
  {
      int displayedItems;
+@@ -92,6 +124,12 @@ typedef struct theme_element
+     int type;
+     int posX;
+     int posY;
++    /* When set, posX is treated as an offset from screen centre and narrowed by
++     * the same 3/4 that rmDrawPixmap applies to a scaled width. That lets an
++     * element stay aligned with a centred grid, which moves its edges inward in
++     * anamorphic 16:9. Applied at draw time, because toggling widescreen calls
++     * rmSetAspectRatio without reloading the theme (gui.c:633). */
++    short xScaled;
+     short aligned;
+     int width;
+     int height;
+diff --git a/src/menusys.c b/src/menusys.c
+index 0d959ba..064dc8d 100644
+--- a/src/menusys.c
++++ b/src/menusys.c
+@@ -1087,8 +1087,20 @@ static void menuRenderElements(theme_element_t *elem)
+     WaitSema(menuSemaId);
+ 
+     while (elem) {
+-        if (elem->drawElem)
++        if (elem->drawElem) {
++            /* x_scaled elements track the widescreen narrowing. Done here rather
++             * than in each draw function, and restored afterwards so the stored
++             * position stays the one the theme wrote. */
++            int savedX = elem->posX;
++
++            if (elem->xScaled) {
++                int centre = 640 >> 1;
++                elem->posX = centre + rmWideScale(elem->posX - centre);
++            }
++
+             elem->drawElem(selected_item, selected_item->item->current, itemConfig, elem);
++            elem->posX = savedX;
++        }
+ 
+         elem = elem->next;
+     }
 diff --git a/src/themes.c b/src/themes.c
-index 65713ef..97d10cd 100644
+index 65713ef..11f0645 100644
 --- a/src/themes.c
 +++ b/src/themes.c
 @@ -50,6 +50,7 @@ enum ELEM_ATTRIBUTE_TYPE {
@@ -123,7 +162,19 @@ index 65713ef..97d10cd 100644
      elem->endElem = &endMutableText;
      elem->drawElem = &drawGameCountText;
  }
-@@ -851,6 +876,231 @@ static void drawMenuText(struct menu_list *menu, struct submenu_list *item, conf
+@@ -773,6 +798,11 @@ static theme_element_t *initBasic(const char *themePath, config_set_t *themeConf
+     else
+         elem->color = color;
+ 
++    elem->xScaled = 0;
++    snprintf(elemProp, sizeof(elemProp), "%s_x_scaled", name);
++    if (configGetInt(themeConfig, elemProp, &intValue))
++        elem->xScaled = (intValue != 0);
++
+     elem->font = font;
+     snprintf(elemProp, sizeof(elemProp), "%s_font", name);
+     if (configGetInt(themeConfig, elemProp, &intValue)) {
+@@ -851,6 +881,231 @@ static void drawMenuText(struct menu_list *menu, struct submenu_list *item, conf
      fntRenderString(elem->font, elem->posX, elem->posY, elem->aligned, 0, 0, menuItemGetText(menu->item), elem->color);
  }
  
@@ -355,7 +406,7 @@ index 65713ef..97d10cd 100644
  static void drawBDMIndex(struct menu_list *menu, struct submenu_list *item, config_set_t *config, struct theme_element *elem)
  {
      item_list_t *itemList = menu->item->userdata;
-@@ -1319,6 +1569,9 @@ static int addGUIElem(const char *themePath, config_set_t *themeConfig, theme_t
+@@ -1319,6 +1574,9 @@ static int addGUIElem(const char *themePath, config_set_t *themeConfig, theme_t
              } else if (!strcmp(elementsType[ELEM_TYPE_LOADING_ICON], type)) {
                  if (!theme->loadingIcon)
                      theme->loadingIcon = initBasic(themePath, themeConfig, theme, name, ELEM_TYPE_LOADING_ICON, -40, -60, ALIGN_CENTER, DIM_UNDEF, DIM_UNDEF, SCALING_RATIO, gDefaultCol, theme->fonts[0]);

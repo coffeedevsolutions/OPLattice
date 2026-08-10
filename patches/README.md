@@ -8,7 +8,7 @@ the second builds on the first.
 |---|---|
 | `01-opl-tile-grid.patch` | Tile grids: `columns`, `cell_width`, `cell_height`, `gap`, `text`, `label_height`, `frame` on `ItemsList`; `offset` on `GameImage`; two-axis navigation |
 | `02-opl-sort-and-recent.patch` | Sort modes cycled with **R3**; a persistent recently-played list; `RecentImage` and `RecentText` element types; widescreen correction for the grid |
-| `03-opl-menu-tabs.patch` | `MenuTabs` — every visible device drawn at once with a capsule behind the active one; per-device label overrides; `prefix`/`suffix` on `GameCountText` |
+| `03-opl-menu-tabs.patch` | `MenuTabs` — every visible device drawn at once with a capsule behind the active one; per-device label overrides; `prefix`/`suffix` on `GameCountText`; `x_scaled` for widescreen-aware alignment |
 
 ```bash
 git clone https://github.com/ps2homebrew/Open-PS2-Loader
@@ -202,6 +202,27 @@ rectangle. The caps are drawn scaled, which narrows them by 3/4 in anamorphic
 wrapped around its label in both aspects. Cap art should be white: the tint is
 halved before it reaches the GS, because a textured draw multiplies by the vertex
 colour with `0x80` as unity and a full-value tint would come out doubled.
+
+### `x_scaled` — keeping alignment in widescreen
+
+A centred grid moves its edges *inward* in anamorphic 16:9, because the cell
+pitch narrows by 3/4 along with the tiles. An element placed at a fixed `x` does
+not move with it, so a heading aligned to the grid's left edge in 4:3 drifts
+away from it in widescreen.
+
+`x_scaled=1` on any element treats its `x` as an offset from screen centre and
+narrows that offset by the same rule, so it tracks a centred grid in both
+aspects.
+
+Two details make it exact rather than approximate:
+
+- It is applied **at draw time**, in `menuRenderElements`, and restored
+  afterwards. It cannot be baked in at load: toggling widescreen calls
+  `rmSetAspectRatio` without reloading the theme (`gui.c:633`), so a value
+  computed once would go stale.
+- `rmWideScale` is integer `(n * 3) >> 2`, so make the grid's `cell_width` a
+  multiple of 4 and both the grid edge and the tracking element land on the same
+  whole pixel. `thm_GridHard` uses 88 for exactly this reason.
 
 ### `GameCountText` prefix and suffix
 
