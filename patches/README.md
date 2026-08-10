@@ -11,10 +11,35 @@ git apply /path/to/opl-tile-grid.patch
 make
 ```
 
-**Not built or run on hardware.** I have no PS2 toolchain here. The new code was
-type-checked against stub headers with host `gcc -Wall -Wextra` and reviewed, but
-it has never been compiled by `ee-gcc` or executed. Treat it as a reviewed draft,
-not a tested build.
+## Build status
+
+**Compiles and links.** Built with the real toolchain (`ps2dev/ps2dev`,
+`mips64r5900el-ps2-elf-gcc 15.2.0`), `make` exit 0, **zero warnings** on both
+patched files. A ready binary is in [`build/OPNPS2LD.ELF`](build/OPNPS2LD.ELF).
+
+Verified the patch is actually in the output by diffing against an unpatched
+build of the same tree:
+
+| | baseline | patched | Δ |
+|---|---|---|---|
+| `obj/themes.o` .text | 19184 | 20825 | +1641 |
+| `obj/menusys.o` .text | 12689 | 13921 | +1232 |
+| `OPNPS2LD.ELF` | 1360324 | 1361588 | +1264 |
+
+Reproduce:
+
+```bash
+docker run --rm --network host -v "$PWD":/src -w /src ps2dev/ps2dev:latest sh -c '
+  apk add --no-cache make python3 py3-yaml git curl bash
+  bash ./download_lwNBD.sh; bash ./download_cfla.sh
+  make -j4'
+```
+
+(`TRANSLATIONS=` skips the language pack download if it fails.)
+
+**Still not run on hardware or in an emulator.** It builds; nobody has booted it.
+The runtime behaviour below — navigation feel, scroll edges, art pop-in — is
+reasoned from the code, not observed. Test it on something you can recover.
 
 ## Why a patch is needed at all
 
@@ -97,7 +122,7 @@ of a theme need this build. Four themes in [`../themes/`](../themes/) use it.
 
 ## Known gaps
 
-- Not compiled or run. See above.
+- Built but never booted. See Build status.
 - No horizontal scrolling; the grid pages vertically only.
 - `frame` draws around the art, not the label. If `text=1` the frame does not
   enclose the caption.

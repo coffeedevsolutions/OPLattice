@@ -44,6 +44,22 @@ On a 32 MB console that difference is worth having. To downscale a whole folder:
 mkdir -p ART-grid && for f in ART/*_COV.png; do magick "$f" -resize 150x225 -strip "ART-grid/$(basename "$f")"; done
 ```
 
+## "LIBRARY" is a masthead, not a claim
+
+The grid themes show `LIBRARY` in large type with the device name (`USB Games`,
+`HDD Games`, …) small and dim beside it. That split is deliberate.
+
+The grid renders **one device at a time** — that is the OPL limitation the patch
+does not remove. `MenuText` is the only element that knows which device you are
+on, and its left/right arrows are the only hint that the others exist. Replacing
+it outright with a static `LIBRARY` would look tidier and would be a lie: it
+would read "Library" while showing you the USB list only, with nothing on screen
+saying so.
+
+So `LIBRARY` is the page title and `MenuText` stays as the source indicator. If
+you would rather drop the device name entirely, delete the `MenuText` element —
+just know that you also lose the only on-screen cue that L2/R2 change the source.
+
 ## Design notes
 
 **No fades.** Every panel in these three is a flat fill with a hard border —

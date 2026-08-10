@@ -129,8 +129,9 @@ Stock OPL hands every element the same "currently selected game" pointer, and it
 only list widget is a hard-coded single 19px column. So a grid of covers is not
 reachable from a cfg. The patch adds `columns`/`cell_width`/`cell_height`/`gap`/
 `text`/`frame` to `ItemsList`, an `offset` key to `GameImage` for free-form tile
-placement, and two-axis navigation. **It is type-checked but never compiled or
-run on hardware** — see the patch README.
+placement, and two-axis navigation. **It builds clean with the real PS2 toolchain
+(`make` exit 0, zero warnings) and a ready `OPNPS2LD.ELF` is included, but it has
+never been booted** — see the patch README.
 
 The previewer implements the patched behaviour and flags every patch-only key
 with a `PATCHED_ONLY` note, so a theme can't quietly depend on a build you don't
