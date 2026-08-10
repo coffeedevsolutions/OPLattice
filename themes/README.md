@@ -140,6 +140,28 @@ stays centred. That last row is the one compromise: individually placed elements
 have their x coordinates stretched by the display, and no theme key changes
 that — it is how every OPL element has always behaved.
 
+## What a theme does *not* cover
+
+The START menu and every settings dialog are drawn by OPL itself, not from
+`conf_theme.cfg`. `menuRenderMenu` (`menusys.c:908`) paints the plasma, then
+centres its items at x=320 with 25px spacing — there are no elements to place
+and no way to move them.
+
+Four theme keys still reach those screens, which is why they are worth setting
+even though the layout is fixed:
+
+| Key | Where it lands |
+|---|---|
+| `bg_color` | the plasma behind the START menu |
+| `text_color` | unselected menu items, and plain labels in settings |
+| `sel_text_color` | the selected menu item |
+| `ui_text_color` | **interactive** items in settings dialogs (`dia.c:421`) |
+| `default_font` | all of it — slot 0 only |
+
+`ui_text_color` is the one people miss. It defaults to OPL's blue `#5868B4`,
+which clashes with most themes; each theme here sets it to something that reads
+as "editable" against its own `text_color`.
+
 ## Design notes
 
 **No fades.** Every panel in these three is a flat fill with a hard border —
