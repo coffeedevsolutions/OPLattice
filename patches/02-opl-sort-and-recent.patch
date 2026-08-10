@@ -1,0 +1,531 @@
+diff --git a/include/config.h b/include/config.h
+index 3cf4be7..28f4adc 100644
+--- a/include/config.h
++++ b/include/config.h
+@@ -82,6 +82,7 @@ enum CONFIG_INDEX {
+ #define CONFIG_OPL_HDD_GAME_LIST_CACHE  "hdd_game_list_cache"
+ #define CONFIG_OPL_EXIT_PATH            "exit_path"
+ #define CONFIG_OPL_AUTO_SORT            "autosort"
++#define CONFIG_OPL_SORT_MODE            "sort_mode"
+ #define CONFIG_OPL_AUTO_REFRESH         "autorefresh"
+ #define CONFIG_OPL_DEFAULT_DEVICE       "default_device"
+ #define CONFIG_OPL_ENABLE_WRITE         "enable_delete_rename"
+diff --git a/include/menusys.h b/include/menusys.h
+index 0cbf9bf..e2ef117 100644
+--- a/include/menusys.h
++++ b/include/menusys.h
+@@ -93,7 +93,7 @@ void submenuRebuildCache(submenu_list_t *submenu);
+ submenu_list_t *submenuAppendItem(submenu_list_t **submenu, int icon_id, char *text, int id, int text_id);
+ void submenuRemoveItem(submenu_list_t **submenu, int id);
+ void submenuDestroy(submenu_list_t **submenu);
+-void submenuSort(submenu_list_t **submenu);
++void submenuSort(submenu_list_t **submenu, item_list_t *list);
+ 
+ char *submenuItemGetText(submenu_item_t *it);
+ char *menuItemGetText(menu_item_t *it);
+diff --git a/include/opl.h b/include/opl.h
+index 0d56a6b..900cb36 100644
+--- a/include/opl.h
++++ b/include/opl.h
+@@ -128,6 +128,26 @@ extern int gEnableMX4SIO;
+ extern int gEnableBdmHDD;
+ 
+ extern int gAutosort;
++
++/// Order the game list is presented in. Cycled at runtime with R3.
++enum SORT_MODE {
++    SORT_TITLE_ASC = 0, //!< A to Z, OPL's historical behaviour
++    SORT_TITLE_DESC,    //!< Z to A
++    SORT_RECENT,        //!< most recently launched first, then A to Z
++    SORT_NONE,          //!< as scanned from the device
++    SORT_MODE_COUNT
++};
++extern int gSortMode;
++
++/// Most-recently-launched list, newest first. Persisted in conf_last.cfg.
++#define OPL_RECENT_MAX 8
++void oplRecentPush(const char *startup, const char *title);
++void oplRecentLoad(void);
++int oplRecentCount(void);
++const char *oplRecentStartup(int index);
++const char *oplRecentTitle(int index);
++/// Position of `startup` in the recent list, or OPL_RECENT_MAX when absent.
++int oplRecentRank(const char *startup);
+ extern int gAutoRefresh;
+ extern int gEnableNotifications;
+ extern int gEnableArt;
+diff --git a/include/themes.h b/include/themes.h
+index 4829085..9cd64d9 100644
+--- a/include/themes.h
++++ b/include/themes.h
+@@ -42,6 +42,12 @@ typedef struct
+     int offset;
+     int useOffset;
+ 
++    // Attributes for: RecentImage. One cache slot per element, because a recent
++    // entry is not a submenu item and so has nowhere else to keep them.
++    int recentIndex;
++    int recentCacheId;
++    int recentUid;
++
+     // Attributes for: AttributeImage & GameImage & StaticImage
+     image_texture_t *defaultTexture;
+     int defaultTextureLinked;
+diff --git a/src/bdmsupport.c b/src/bdmsupport.c
+index b181dec..d834e95 100644
+--- a/src/bdmsupport.c
++++ b/src/bdmsupport.c
+@@ -510,6 +510,8 @@ void bdmLaunchGame(item_list_t *itemList, int id, config_set_t *configSet)
+         saveConfig(CONFIG_LAST, 0);
+     }
+ 
++    oplRecentPush(game->startup, game->name);
++
+     if (configGetStrCopy(configSet, CONFIG_ITEM_ALTSTARTUP, filename, sizeof(filename)) == 0)
+         strcpy(filename, game->startup);
+ 
+diff --git a/src/ethsupport.c b/src/ethsupport.c
+index f0462fa..4330f1e 100644
+--- a/src/ethsupport.c
++++ b/src/ethsupport.c
+@@ -635,6 +635,8 @@ static void ethLaunchGame(item_list_t *itemList, int id, config_set_t *configSet
+         saveConfig(CONFIG_LAST, 0);
+     }
+ 
++    oplRecentPush(game->startup, game->name);
++
+     compatmask = sbPrepare(game, configSet, size_smb_cdvdman_irx, smb_cdvdman_irx, &i);
+ 
+     if ((result = sbLoadCheats(ethPrefix, game->startup)) < 0) {
+diff --git a/src/gui.c b/src/gui.c
+index 1054228..72f28fe 100644
+--- a/src/gui.c
++++ b/src/gui.c
+@@ -1039,7 +1039,7 @@ static void guiHandleOp(struct gui_update_t *item)
+             break;
+ 
+         case GUI_OP_SORT:
+-            submenuSort(item->menu.subMenu);
++            submenuSort(item->menu.subMenu, item->menu.menu->userdata);
+             item->menu.menu->submenu = *item->menu.subMenu;
+ 
+             if (!item->menu.menu->remindLast)
+diff --git a/src/hddsupport.c b/src/hddsupport.c
+index 1f3eaef..5b4f464 100644
+--- a/src/hddsupport.c
++++ b/src/hddsupport.c
+@@ -531,6 +531,8 @@ void hddLaunchGame(item_list_t *itemList, int id, config_set_t *configSet)
+         saveConfig(CONFIG_LAST, 0);
+     }
+ 
++    oplRecentPush(game->startup, game->name);
++
+     char gid[5];
+     configGetDiscIDBinary(configSet, gid);
+ 
+diff --git a/src/menusys.c b/src/menusys.c
+index b875bf1..26dde88 100644
+--- a/src/menusys.c
++++ b/src/menusys.c
+@@ -558,16 +558,67 @@ static void swap(submenu_list_t *a, submenu_list_t *b)
+ }
+ 
+ // Sorts the given submenu by comparing the on-screen titles
+-void submenuSort(submenu_list_t **submenu)
++/**
++ * Ordering key for one entry. `list` may be NULL, in which case SORT_RECENT
++ * degrades to a title sort rather than misordering.
++ */
++static int submenuRank(item_list_t *list, submenu_item_t *item, char *startup, size_t startupLen)
++{
++    startup[0] = '\0';
++
++    if (list != NULL && list->itemGetStartup != NULL) {
++        char *value = list->itemGetStartup(list, item->id);
++        if (value != NULL) {
++            strncpy(startup, value, startupLen - 1);
++            startup[startupLen - 1] = '\0';
++        }
++    }
++
++    return oplRecentRank(startup);
++}
++
++/** Negative when `a` sorts before `b`. */
++static int submenuCompare(item_list_t *list, submenu_item_t *a, submenu_item_t *b)
++{
++    char startupA[32], startupB[32];
++    int byTitle, rankA, rankB;
++
++    // Copy the display text before the second lookup: some backends hand back a
++    // pointer into shared storage.
++    char titleA[64];
++    strncpy(titleA, submenuItemGetText(a), sizeof(titleA) - 1);
++    titleA[sizeof(titleA) - 1] = '\0';
++    byTitle = strcasecmp(titleA, submenuItemGetText(b));
++
++    switch (gSortMode) {
++        case SORT_TITLE_DESC:
++            return -byTitle;
++
++        case SORT_RECENT:
++            rankA = submenuRank(list, a, startupA, sizeof(startupA));
++            rankB = submenuRank(list, b, startupB, sizeof(startupB));
++            if (rankA != rankB)
++                return rankA - rankB;
++            return byTitle;
++
++        case SORT_TITLE_ASC:
++        default:
++            return byTitle;
++    }
++}
++
++void submenuSort(submenu_list_t **submenu, item_list_t *list)
+ {
+     // a simple bubblesort
+-    // *submenu = mergeSort(*submenu);
+     submenu_list_t *head;
+     int sorted = 0;
+ 
+     if ((submenu == NULL) || (*submenu == NULL) || ((*submenu)->next == NULL))
+         return;
+ 
++    if (gSortMode == SORT_NONE) // leave the device's own order alone
++        return;
++
+     head = *submenu;
+ 
+     while (!sorted) {
+@@ -578,12 +629,7 @@ void submenuSort(submenu_list_t **submenu)
+         while (tip->next) {
+             submenu_list_t *nxt = tip->next;
+ 
+-            char *txt1 = submenuItemGetText(&tip->item);
+-            char *txt2 = submenuItemGetText(&nxt->item);
+-
+-            int cmp = strcasecmp(txt1, txt2);
+-
+-            if (cmp > 0) {
++            if (submenuCompare(list, &tip->item, &nxt->item) > 0) {
+                 swap(tip, nxt);
+ 
+                 if (tip == head)
+@@ -599,6 +645,28 @@ void submenuSort(submenu_list_t **submenu)
+     *submenu = head;
+ }
+ 
++/** R3 on the main screen: cycle the order and re-sort in place. */
++static void menuCycleSort(void)
++{
++    opl_io_module_t *mod;
++    item_list_t *list = selected_item->item->userdata;
++
++    gSortMode = (gSortMode + 1) % SORT_MODE_COUNT;
++    sfxPlay(SFX_CURSOR);
++
++    if (list != NULL && (mod = (opl_io_module_t *)list->owner) != NULL) {
++        // Sort the module's own head pointer, then re-point the menu at it, so
++        // the two never disagree about where the list starts.
++        submenuSort(&mod->subMenu, list);
++        selected_item->item->submenu = mod->subMenu;
++        selected_item->item->current = mod->subMenu;
++        selected_item->item->pagestart = mod->subMenu;
++    }
++
++    configSetInt(configGetByType(CONFIG_OPL), CONFIG_OPL_SORT_MODE, gSortMode);
++    saveConfig(CONFIG_OPL, 0);
++}
++
+ static void menuNextH()
+ {
+     struct menu_list *next = selected_item->next;
+@@ -1072,6 +1140,8 @@ void menuHandleInputMain()
+         // reinit main menu - show/hide items valid in the active context
+         menuInitMainMenu();
+         guiSwitchScreen(GUI_SCREEN_MENU);
++    } else if (getKeyOn(KEY_R3)) {
++        menuCycleSort();
+     } else if (getKeyOn(KEY_SELECT)) {
+         selected_item->item->refresh(selected_item->item);
+     } else if (getKey(KEY_L1)) {
+diff --git a/src/opl.c b/src/opl.c
+index a6d8fa3..20c6256 100644
+--- a/src/opl.c
++++ b/src/opl.c
+@@ -140,6 +140,7 @@ int gEnableILK;
+ int gEnableMX4SIO;
+ int gEnableBdmHDD;
+ int gAutosort;
++int gSortMode;
+ int gAutoRefresh;
+ int gEnableNotifications;
+ int gEnableArt;
+@@ -656,6 +657,7 @@ static void updateMenuFromGameList(opl_io_module_t *mdl)
+     clearMenuGameList(mdl);
+ 
+     const char *temp = NULL;
++    oplRecentLoad();
+     if (gRememberLastPlayed)
+         configGetStr(configGetByType(CONFIG_LAST), "last_played", &temp);
+ 
+@@ -941,6 +943,9 @@ static void _loadConfig()
+             configGetInt(configOPL, CONFIG_OPL_HDD_GAME_LIST_CACHE, &gHDDGameListCache);
+             configGetStrCopy(configOPL, CONFIG_OPL_EXIT_PATH, gExitPath, sizeof(gExitPath));
+             configGetInt(configOPL, CONFIG_OPL_AUTO_SORT, &gAutosort);
++            configGetInt(configOPL, CONFIG_OPL_SORT_MODE, &gSortMode);
++            if (gSortMode < 0 || gSortMode >= SORT_MODE_COUNT)
++                gSortMode = SORT_TITLE_ASC;
+             configGetInt(configOPL, CONFIG_OPL_AUTO_REFRESH, &gAutoRefresh);
+             configGetInt(configOPL, CONFIG_OPL_DEFAULT_DEVICE, &gDefaultDevice);
+             configGetInt(configOPL, CONFIG_OPL_ENABLE_WRITE, &gEnableWrite);
+@@ -1108,6 +1113,7 @@ static void _saveConfig()
+         configSetInt(configOPL, CONFIG_OPL_HDD_GAME_LIST_CACHE, gHDDGameListCache);
+         configSetStr(configOPL, CONFIG_OPL_EXIT_PATH, gExitPath);
+         configSetInt(configOPL, CONFIG_OPL_AUTO_SORT, gAutosort);
++        configSetInt(configOPL, CONFIG_OPL_SORT_MODE, gSortMode);
+         configSetInt(configOPL, CONFIG_OPL_AUTO_REFRESH, gAutoRefresh);
+         configSetInt(configOPL, CONFIG_OPL_DEFAULT_DEVICE, gDefaultDevice);
+         configSetInt(configOPL, CONFIG_OPL_ENABLE_WRITE, gEnableWrite);
+@@ -1668,6 +1674,101 @@ void deinit(int exception, int modeSelected)
+     configEnd();
+ }
+ 
++/* ------------------------------------------------------------------------- *
++ * Recently played list.
++ *
++ * OPL already records a single `last_played` startup id. This keeps a short
++ * ordered list alongside it, newest first, in the same conf_last.cfg. Titles
++ * are stored with the ids so a header can render them without having to search
++ * the current device's list for a game that may live on another device.
++ * ------------------------------------------------------------------------- */
++
++static char recentStartup[OPL_RECENT_MAX][32];
++static char recentTitle[OPL_RECENT_MAX][64];
++static int recentCount = 0;
++
++int oplRecentCount(void) { return recentCount; }
++const char *oplRecentStartup(int index) { return (index >= 0 && index < recentCount) ? recentStartup[index] : NULL; }
++const char *oplRecentTitle(int index) { return (index >= 0 && index < recentCount) ? recentTitle[index] : NULL; }
++
++int oplRecentRank(const char *startup)
++{
++    int i;
++
++    if (startup != NULL) {
++        for (i = 0; i < recentCount; i++) {
++            if (strcmp(recentStartup[i], startup) == 0)
++                return i;
++        }
++    }
++
++    return OPL_RECENT_MAX;
++}
++
++void oplRecentLoad(void)
++{
++    config_set_t *configLast = configGetByType(CONFIG_LAST);
++    char key[32];
++    const char *value;
++    int i;
++
++    recentCount = 0;
++    for (i = 0; i < OPL_RECENT_MAX; i++) {
++        snprintf(key, sizeof(key), "recent%d_id", i);
++        if (!configGetStr(configLast, key, &value) || value[0] == '\0')
++            break;
++
++        strncpy(recentStartup[recentCount], value, sizeof(recentStartup[0]) - 1);
++        recentStartup[recentCount][sizeof(recentStartup[0]) - 1] = '\0';
++
++        snprintf(key, sizeof(key), "recent%d_title", i);
++        if (configGetStr(configLast, key, &value)) {
++            strncpy(recentTitle[recentCount], value, sizeof(recentTitle[0]) - 1);
++            recentTitle[recentCount][sizeof(recentTitle[0]) - 1] = '\0';
++        } else
++            recentTitle[recentCount][0] = '\0';
++
++        recentCount++;
++    }
++}
++
++void oplRecentPush(const char *startup, const char *title)
++{
++    config_set_t *configLast = configGetByType(CONFIG_LAST);
++    char key[32];
++    int i, existing;
++
++    if (startup == NULL || startup[0] == '\0')
++        return;
++
++    // Move an existing entry to the front rather than duplicating it.
++    existing = oplRecentRank(startup);
++    if (existing >= recentCount)
++        existing = (recentCount < OPL_RECENT_MAX) ? recentCount++ : OPL_RECENT_MAX - 1;
++
++    for (i = existing; i > 0; i--) {
++        memcpy(recentStartup[i], recentStartup[i - 1], sizeof(recentStartup[0]));
++        memcpy(recentTitle[i], recentTitle[i - 1], sizeof(recentTitle[0]));
++    }
++
++    strncpy(recentStartup[0], startup, sizeof(recentStartup[0]) - 1);
++    recentStartup[0][sizeof(recentStartup[0]) - 1] = '\0';
++    if (title != NULL) {
++        strncpy(recentTitle[0], title, sizeof(recentTitle[0]) - 1);
++        recentTitle[0][sizeof(recentTitle[0]) - 1] = '\0';
++    } else
++        recentTitle[0][0] = '\0';
++
++    for (i = 0; i < recentCount; i++) {
++        snprintf(key, sizeof(key), "recent%d_id", i);
++        configSetStr(configLast, key, recentStartup[i]);
++        snprintf(key, sizeof(key), "recent%d_title", i);
++        configSetStr(configLast, key, recentTitle[i]);
++    }
++
++    saveConfig(CONFIG_LAST, 0);
++}
++
+ void setDefaultColors(void)
+ {
+     gDefaultBgColor[0] = 0x28;
+@@ -1737,6 +1838,7 @@ static void setDefaults(void)
+     gExitPath[0] = '\0';
+     gDefaultDevice = APP_MODE;
+     gAutosort = 1;
++    gSortMode = SORT_TITLE_ASC;
+     gAutoRefresh = 0;
+     gEnableDebug = 0;
+     gPS2Logo = 0;
+diff --git a/src/themes.c b/src/themes.c
+index 34f4e95..cc60aa2 100644
+--- a/src/themes.c
++++ b/src/themes.c
+@@ -48,6 +48,8 @@ enum ELEM_ATTRIBUTE_TYPE {
+     ELEM_TYPE_LOADING_ICON,
+     ELEM_TYPE_BDM_INDEX,
+     ELEM_TYPE_GAME_COUNT_TEXT,
++    ELEM_TYPE_RECENT_IMAGE,
++    ELEM_TYPE_RECENT_TEXT,
+     ELEM_TYPE_COUNT
+ };
+ 
+@@ -76,7 +78,9 @@ static const char *elementsType[ELEM_TYPE_COUNT] = {
+     "InfoHintText",
+     "LoadingIcon",
+     "BdmIndex",
+-    "GameCountText"};
++    "GameCountText",
++    "RecentImage",
++    "RecentText"};
+ 
+ // Common functions for Text ////////////////////////////////////////////////////////////////////////////////////////////////
+ 
+@@ -468,6 +472,9 @@ static mutable_image_t *initMutableImage(const char *themePath, config_set_t *th
+     mutableImage->overlayTextureLinked = 0;
+     mutableImage->offset = 0;
+     mutableImage->useOffset = 0;
++    mutableImage->recentIndex = 0;
++    mutableImage->recentCacheId = -1;
++    mutableImage->recentUid = -1;
+ 
+     char elemProp[64];
+ 
+@@ -917,6 +924,84 @@ static void drawItemsListGrid(struct menu_list *menu, struct submenu_list *item,
+     }
+ }
+ 
++/* RecentImage / RecentText //////////////////////////////////////////////////
++ *
++ * These render the most-recently-launched list, which is global and outlives
++ * any one device. The entry is identified by its startup id, so the art is
++ * looked up through the CURRENT device's ART folder -- a game last played from
++ * another device shows its title but falls back to `default` for the picture.
++ */
++
++static void drawRecentImage(struct menu_list *menu, struct submenu_list *item, config_set_t *config, struct theme_element *elem)
++{
++    mutable_image_t *recentImage = (mutable_image_t *)elem->extended;
++    const char *startup = oplRecentStartup(recentImage->recentIndex);
++    GSTEXTURE *texture = NULL;
++
++    if (startup != NULL && gEnableArt) {
++        texture = cacheGetTexture(recentImage->cache, menu->item->userdata,
++                                  &recentImage->recentCacheId, &recentImage->recentUid, (char *)startup);
++    }
++
++    if ((!texture || !texture->Mem) && recentImage->defaultTexture)
++        texture = &recentImage->defaultTexture->source;
++
++    if (texture && texture->Mem)
++        rmDrawPixmap(texture, elem->posX, elem->posY, elem->aligned, elem->width, elem->height, elem->scaled, gDefaultCol);
++}
++
++static void initRecentImage(const char *themePath, config_set_t *themeConfig, theme_t *theme, theme_element_t *elem, const char *name)
++{
++    mutable_image_t *mutableImage = initMutableImage(themePath, themeConfig, theme, name, ELEM_TYPE_GAME_IMAGE, "COV", 1, NULL, NULL);
++    char elemProp[64];
++
++    elem->extended = mutableImage;
++    elem->endElem = &endMutableImage;
++
++    snprintf(elemProp, sizeof(elemProp), "%s_index", name);
++    configGetInt(themeConfig, elemProp, &mutableImage->recentIndex);
++    if (mutableImage->recentIndex < 0)
++        mutableImage->recentIndex = 0;
++
++    if (mutableImage->cache)
++        elem->drawElem = &drawRecentImage;
++    else
++        LOG("THEMES RecentImage %s: NO pattern, elem disabled !!\n", name);
++}
++
++static void drawRecentText(struct menu_list *menu, struct submenu_list *item, config_set_t *config, struct theme_element *elem)
++{
++    mutable_text_t *mutableText = (mutable_text_t *)elem->extended;
++    const char *title = oplRecentTitle(mutableText->displayMode);
++
++    if (title == NULL || title[0] == '\0')
++        return;
++
++    if (mutableText->sizingMode == SIZING_NONE)
++        fntRenderString(elem->font, elem->posX, elem->posY, elem->aligned, 0, 0, title, elem->color);
++    else
++        fntRenderString(elem->font, elem->posX, elem->posY, elem->aligned, elem->width, elem->height, title, elem->color);
++}
++
++static void initRecentText(const char *themePath, config_set_t *themeConfig, theme_t *theme, theme_element_t *elem, const char *name)
++{
++    char elemProp[64];
++    int index = 0;
++
++    // Reuses mutable_text_t. `displayMode` carries the recent index, because a
++    // RecentText has no use for the label/value display rules.
++    elem->extended = initMutableText(themePath, themeConfig, theme, name, ELEM_TYPE_STATIC_TEXT, elem, "", NULL, DISPLAY_ALWAYS, SIZING_NONE);
++    elem->endElem = &endMutableText;
++
++    snprintf(elemProp, sizeof(elemProp), "%s_index", name);
++    configGetInt(themeConfig, elemProp, &index);
++    if (index < 0)
++        index = 0;
++    ((mutable_text_t *)elem->extended)->displayMode = index;
++
++    elem->drawElem = &drawRecentText;
++}
++
+ static void drawItemsList(struct menu_list *menu, struct submenu_list *item, config_set_t *config, struct theme_element *elem)
+ {
+     if (item) {
+@@ -1214,6 +1299,12 @@ static int addGUIElem(const char *themePath, config_set_t *themeConfig, theme_t
+             } else if (!strcmp(elementsType[ELEM_TYPE_LOADING_ICON], type)) {
+                 if (!theme->loadingIcon)
+                     theme->loadingIcon = initBasic(themePath, themeConfig, theme, name, ELEM_TYPE_LOADING_ICON, -40, -60, ALIGN_CENTER, DIM_UNDEF, DIM_UNDEF, SCALING_RATIO, gDefaultCol, theme->fonts[0]);
++            } else if (!strcmp(elementsType[ELEM_TYPE_RECENT_IMAGE], type)) {
++                elem = initBasic(themePath, themeConfig, theme, name, ELEM_TYPE_GAME_IMAGE, 0, 0, ALIGN_CENTER, DIM_UNDEF, DIM_UNDEF, SCALING_RATIO, gDefaultCol, theme->fonts[0]);
++                initRecentImage(themePath, themeConfig, theme, elem, name);
++            } else if (!strcmp(elementsType[ELEM_TYPE_RECENT_TEXT], type)) {
++                elem = initBasic(themePath, themeConfig, theme, name, ELEM_TYPE_STATIC_TEXT, 0, 0, ALIGN_CENTER, DIM_UNDEF, DIM_UNDEF, SCALING_RATIO, theme->textColor, theme->fonts[0]);
++                initRecentText(themePath, themeConfig, theme, elem, name);
+             } else if (!strcmp(elementsType[ELEM_TYPE_BDM_INDEX], type)) {
+                 elem = initBasic(themePath, themeConfig, theme, name, ELEM_TYPE_BDM_INDEX, screenWidth >> 1, 355, ALIGN_CENTER, DIM_UNDEF, DIM_UNDEF, SCALING_RATIO, gDefaultCol, theme->fonts[0]);
+                 elem->drawElem = &drawBDMIndex;

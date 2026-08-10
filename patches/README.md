@@ -1,13 +1,20 @@
-# `opl-tile-grid.patch`
+# OPL patches
 
-Adds tile-grid support to Open PS2 Loader's theme engine. Against
-`ps2homebrew/Open-PS2-Loader` @ `3e3f34e` (v1.2.0-Beta).
+Two patches for Open PS2 Loader's theme engine, against
+`ps2homebrew/Open-PS2-Loader` @ `3e3f34e` (v1.2.0-Beta). **Apply in order** —
+the second builds on the first.
+
+| Patch | Adds |
+|---|---|
+| `01-opl-tile-grid.patch` | Tile grids: `columns`, `cell_width`, `cell_height`, `gap`, `text`, `label_height`, `frame` on `ItemsList`; `offset` on `GameImage`; two-axis navigation |
+| `02-opl-sort-and-recent.patch` | Sort modes cycled with **R3**; a persistent recently-played list; `RecentImage` and `RecentText` element types |
 
 ```bash
 git clone https://github.com/ps2homebrew/Open-PS2-Loader
 cd Open-PS2-Loader
 git checkout 3e3f34e
-git apply /path/to/opl-tile-grid.patch
+git apply /path/to/01-opl-tile-grid.patch
+git apply /path/to/02-opl-sort-and-recent.patch
 make
 ```
 
@@ -24,7 +31,8 @@ build of the same tree:
 |---|---|---|---|
 | `obj/themes.o` .text | 19184 | 20825 | +1641 |
 | `obj/menusys.o` .text | 12689 | 13921 | +1232 |
-| `OPNPS2LD.ELF` | 1360324 | 1361588 | +1264 |
+| `OPNPS2LD.ELF` (grid only) | 1360324 | 1361588 | +1264 |
+| `OPNPS2LD.ELF` (both patches) | 1360324 | 1362356 | +2032 |
 
 Reproduce:
 
@@ -106,13 +114,53 @@ column themes take the `columns > 1` branch nowhere and behave identically to
 stock — including the page-up-on-scroll-back behaviour, which is deliberately
 preserved rather than replaced with row scrolling.
 
+## Sort modes (patch 02)
+
+`R3` on the main screen cycles the order and saves it as `sort_mode` in
+`conf_opl.cfg`. It re-sorts the module's own list head and re-points the menu at
+it, so the two never disagree about where the list starts.
+
+| Mode | Order |
+|---|---|
+| 0 | Title A→Z — stock OPL's behaviour |
+| 1 | Title Z→A |
+| 2 | Most recently launched first, then A→Z |
+| 3 | As scanned from the device, no sorting |
+
+`autosort` still gates whether sorting happens at all; `sort_mode` chooses which.
+
+## Recently played (patch 02)
+
+OPL already stored a single `last_played` id. This keeps an ordered list of the
+last **8**, newest first, in the same `conf_last.cfg`, written on launch by all
+three game backends. Titles are stored alongside the ids so a header can render
+them without searching a device list for a game that may live elsewhere.
+
+Two element types read it:
+
+| Type | Attributes | Draws |
+|---|---|---|
+| `RecentImage` | `pattern` (default `COV`), `count`, `default`, `index` | Art for the `index`-th most recent launch |
+| `RecentText` | `index` | Its stored title |
+
+`index` 0 is the most recent. Elements past the end of the list draw nothing
+(`RecentText`) or fall back to `default` (`RecentImage`).
+
+**Cross-device caveat.** The list is global, but art is resolved through the
+*current* device's `ART` folder, because that is the only image path OPL exposes.
+A game last played from HDD while you are browsing USB shows its title and falls
+back to `default` for the picture.
+
 ## Files touched
 
 | File | Change |
 |---|---|
 | `include/themes.h` | `offset`/`useOffset` on `mutable_image_t`; grid fields on `items_list_t` |
 | `src/themes.c` | read the new keys; `drawCellFrame`; `drawItemsListGrid`; offset walk in `drawGameImage` |
-| `src/menusys.c` | `menuRowStep`, step helpers, row-wise `menuNextV`/`menuPrevV`, `menuNextItem`/`menuPrevItem`, input remap |
+| `src/menusys.c` | `menuRowStep`, step helpers, row-wise `menuNextV`/`menuPrevV`, `menuNextItem`/`menuPrevItem`, input remap, `submenuCompare`, `menuCycleSort` |
+| `src/opl.c` | the recent list, `gSortMode` load/save |
+| `src/bdmsupport.c`, `src/hddsupport.c`, `src/ethsupport.c` | record a launch into the recent list |
+| `include/opl.h`, `include/config.h`, `include/menusys.h` | declarations |
 
 ## Designing against it
 
@@ -130,3 +178,8 @@ of a theme need this build. Four themes in [`../themes/`](../themes/) use it.
   does not apply the aspect correction `rmDrawPixmap` does. Worth re-checking on
   a real 16:9 console.
 - Grid mode and `offset` on the same page are untested together.
+- The sort is still OPL's original bubble sort, now with a comparator switch. It
+  is O(n²); a 500-game list is ~250k `strcasecmp` calls per re-sort, and R3 makes
+  that interactive rather than once at boot.
+- `RecentImage` holds one cache slot per element, so four of them means four
+  entries in that pattern's cache. Size `count` accordingly.

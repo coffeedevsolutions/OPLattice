@@ -114,7 +114,11 @@ kbd{font-family:var(--mono);font-size:10.5px;background:#0f1216;border:1px solid
       <option value="1">1 connected</option><option value="2">2</option>
       <option value="3" selected>3</option><option value="4">4</option><option value="5">5</option>
     </select>
-    <button id="btnSort" class="on" title="OPL's autosort setting (conf_opl.cfg). On by default; sorts case-insensitively by title.">A–Z</button>
+    <label>Sort</label>
+    <select id="sortMode" title="Matches the patch's sort modes, cycled on hardware with R3. A–Z is stock OPL's autosort.">
+      <option value="0" selected>A–Z</option><option value="1">Z–A</option>
+      <option value="2">Recent first</option><option value="3">Unsorted</option>
+    </select>
     <span class="grow"></span>
     <span id="status" style="color:var(--dim)"></span>
     <button id="btnExport">Export conf_theme.cfg</button>
@@ -189,7 +193,7 @@ const TINT = { r: 0x80, g: 0x80, b: 0x80 };     // gDefaultCol — neutral multi
 // elementsType[] in declaration order (themes.c:62). Case-sensitive.
 const ELEMENT_TYPES = ["AttributeText","StaticText","AttributeImage","GameImage","StaticImage",
   "Background","MenuIcon","MenuText","ItemsList","ItemIcon","ItemCover","ItemText","HintText",
-  "InfoHintText","LoadingIcon","BdmIndex","GameCountText"];
+  "InfoHintText","LoadingIcon","BdmIndex","GameCountText","RecentImage","RecentText"];
 
 // Per-type defaults, transcribed from addGUIElem (themes.c:1023-1083) — see §7.
 // `color:'text'` = theme textColor, `color:'tint'` = gDefaultCol.
@@ -213,6 +217,8 @@ const ELEMENT_DEFAULTS = {
   InfoHintText:   D(16,-HINT_HEIGHT,ALIGN_NONE,12,20,SCALING_RATIO,"text","InfoHintText"),
   LoadingIcon:    D(-40,-60,ALIGN_CENTER,DIM_UNDEF,DIM_UNDEF,SCALING_RATIO,"tint","LoadingIcon"),
   BdmIndex:       D(320,355,ALIGN_CENTER,DIM_UNDEF,DIM_UNDEF,SCALING_RATIO,"tint","BdmIndex"),
+  RecentImage:    D(0,0,ALIGN_CENTER,DIM_UNDEF,DIM_UNDEF,SCALING_RATIO,"tint","RecentImage",{pattern:"COV",count:1}),
+  RecentText:     D(0,0,ALIGN_CENTER,DIM_UNDEF,DIM_UNDEF,SCALING_RATIO,"text","RecentText"),
 };
 // The 2nd ItemsList in a theme is built from different defaults (themes.c:1058).
 const ITEMSLIST_2ND = D(42,42,ALIGN_NONE,400,360,SCALING_RATIO,"text","ItemsList");
@@ -241,13 +247,18 @@ const TYPE_ATTRS = {
   ItemIcon:       ["pattern","count","default","offset",...OVERLAY_ATTRS],
   ItemCover:      ["pattern","count","default","offset",...OVERLAY_ATTRS],
   Background:     ["pattern","count","default"],
-  ItemsList:      ["decorator","columns","cell_width","cell_height","gap","text","frame"],
+  ItemsList:      ["decorator","columns","cell_width","cell_height","gap","text","frame","label_height"],
+  RecentImage:    ["pattern","count","default","index"],
+  RecentText:     ["index"],
   MenuIcon:[], MenuText:[], ItemText:[], HintText:[], InfoHintText:[], LoadingIcon:[], BdmIndex:[],
 };
 // Attributes added by patches/opl-tile-grid.patch. Stock OPL ignores them
 // silently, so the previewer names them rather than letting a theme look right
 // here and wrong on an unpatched console.
-const PATCHED_ATTRS = new Set(["offset","columns","cell_width","cell_height","gap","text","frame"]);
+const PATCHED_ATTRS = new Set(["offset","columns","cell_width","cell_height","gap","text","frame",
+                               "label_height","index"]);
+// Element types that only exist in a patched build.
+const PATCHED_TYPES = new Set(["RecentImage","RecentText"]);
 
 const REQUIRED_ATTR = {   // missing ⇒ element is built but never draws
   StaticText:"value", AttributeText:"attribute", AttributeImage:"attribute",
@@ -607,7 +618,7 @@ function initImage(doc, name, el, typeName, def, theme, diags) {
   if (typeName === "AttributeImage") {
     m.pattern = getStr(doc, name + "_attribute");
     m.count = 1;
-  } else if (def.internal === "GameImage" || def.internal === "Background") {
+  } else if (def.internal === "GameImage" || def.internal === "Background" || def.internal === "RecentImage") {
     m.pattern = def.pattern ?? null;
     const sp = getStr(doc, name + "_pattern");
     if (sp !== null) m.pattern = sp;
@@ -664,6 +675,7 @@ function initItemsList(doc, name, el) {
   const gap = Math.max(0, num("gap", 4));
   const showText = num("text", 1);
   const frameSize = Math.max(0, num("frame", columns > 1 ? 2 : 0));
+  const labelHeight = Math.max(1, num("label_height", MENU_ITEM_HEIGHT));
 
   let cellWidth, cellHeight, displayedItems;
   if (columns > 1) {
@@ -677,7 +689,7 @@ function initItemsList(doc, name, el) {
   }
 
   el.extended = {
-    displayedItems, columns, cellWidth, cellHeight, gap, showText, frameSize,
+    displayedItems, columns, cellWidth, cellHeight, gap, showText, frameSize, labelHeight,
     decorator: getStr(doc, name + "_decorator"),
     decoratorImage: null,
   };
@@ -732,8 +744,13 @@ function addGUIElem(doc, name, theme, chain, diags) {
     case "StaticText": case "AttributeText": case "GameCountText":
       initText(doc, name, el, typeName, diags); break;
     case "StaticImage": case "AttributeImage": case "GameImage":
-    case "ItemIcon": case "ItemCover": case "Background":
-      initImage(doc, name, el, typeName, def, theme, diags); break;
+    case "ItemIcon": case "ItemCover": case "Background": case "RecentImage":
+      initImage(doc, name, el, typeName, def, theme, diags);
+      if (typeName === "RecentImage") el.extended.recentIndex = Math.max(0, getInt(doc, name + "_index", 0));
+      break;
+    case "RecentText":
+      el.extended = { recentIndex: Math.max(0, getInt(doc, name + "_index", 0)), sizingMode: SIZING_NONE };
+      break;
     case "ItemsList":
       initItemsList(doc, name, el);
       el.slot = theme.itemsListCount === 0 ? "games" : "apps";
@@ -922,6 +939,11 @@ function validateTheme(doc, theme, assets) {
           `${el.name}_${k} is not read by ${el.typeName} elements; it has no effect.`,
           lineOf(doc, el.name + "_" + k), el.name));
     }
+    if (PATCHED_TYPES.has(el.typeName))
+      diags.push(dg("info","PATCHED_ONLY",
+        `${el.name} is a ${el.typeName}, which only exists with patches/02-opl-sort-and-recent.patch. Stock OPL treats it as an unknown type and drops the element.`,
+        lineOf(doc, el.name + "_type"), el.name));
+
     for (const k of el.explicit) {
       if (PATCHED_ATTRS.has(k) && allowed.has(k))
         diags.push(dg("info","PATCHED_ONLY",
@@ -1209,12 +1231,32 @@ const GAMES = [
 ];
 const GAME_DESC = "Sample description text. It is deliberately long enough to exercise the word wrapping that OPL applies at load time and the box clipping it applies when an element declares both a width and a height.";
 
+/**
+ * Stand-in for OPL's recently-played list. Selecting a game here pushes it to
+ * the front, which is what launching one does on the console.
+ */
+function recentList() {
+  return S.recent.map(serial => GAMES.find(g => g.serial === serial)).filter(Boolean);
+}
+function pushRecent(serial) {
+  S.recent = [serial, ...S.recent.filter(s => s !== serial)].slice(0, 8);
+}
+
 /** The list in the order OPL would show it: autosort is on by default. */
 function gameList() {
-  if (!S.sorted) return GAMES;
-  if (!gameList._c) gameList._c = GAMES.slice().sort((a, b) =>
-    a.title.toLowerCase() < b.title.toLowerCase() ? -1 : a.title.toLowerCase() > b.title.toLowerCase() ? 1 : 0);
-  return gameList._c;
+  const byTitle = (a, b) => {
+    const x = a.title.toLowerCase(), y = b.title.toLowerCase();
+    return x < y ? -1 : x > y ? 1 : 0;
+  };
+  switch (S.sortMode) {
+    case 1: return GAMES.slice().sort((a, b) => -byTitle(a, b));
+    case 2: {                                     // recent first, then A-Z
+      const rank = s => { const i = S.recent.indexOf(s); return i < 0 ? 99 : i; };
+      return GAMES.slice().sort((a, b) => (rank(a.serial) - rank(b.serial)) || byTitle(a, b));
+    }
+    case 3: return GAMES;                          // as scanned
+    default: return GAMES.slice().sort(byTitle);
+  }
 }
 
 /** Per-game values an AttributeText element can look up. */
@@ -1254,7 +1296,8 @@ const S = {
   files:new Map(), images:new Map(), art:new Map(), themeFonts:new Map(),
   aspect:4, zoom:"fit", smooth:false, grid:false, snap:false, plasma:true,
   showLoading:false, placeholderArt:true,
-  gameIndex:3, pageStart:0, device:0, deviceCount:3, sorted:true, dirHandle:null, live:false, liveTimer:null,
+  gameIndex:3, pageStart:0, device:0, deviceCount:3, sortMode:0,
+  recent:["SLPM_657.90","SCPS_150.56","SLPS_250.50","SLPM_654.88"], dirHandle:null, live:false, liveTimer:null,
   undo:[], redo:[], syncing:false, typing:0,
 };
 
@@ -1487,6 +1530,20 @@ function drawElement(el) {
       else q = stubQuad(el, v ? `${(ex.pattern||"").replace(/^#/,"")}=${v}` : (ex.pattern || "attr"));
       break;
     }
+    case "RecentImage": {
+      const g3 = recentList()[ex.recentIndex];
+      let img = g3 && ex.pattern ? gameArt(g3.serial, ex.pattern) : null;
+      if (!img) img = themeImage(ex.defaultTexture);
+      if (img && img.complete && img.naturalWidth)
+        q = drawPixmap(el, img, el.posX, el.posY, el.aligned, el.width, el.height, el.scaled, el.color);
+      else q = stubQuad(el, "recent " + ex.recentIndex);
+      break;
+    }
+    case "RecentText": {
+      const g4 = recentList()[ex.recentIndex];
+      q = drawSingleText(el, g4 ? g4.title : "");
+      break;
+    }
     case "ItemsList":  q = drawItemsList(el); break;
     case "ItemText":   q = drawSingleText(el, game.serial); break;
     case "StaticText": q = drawSingleText(el, ex.value ?? ""); break;
@@ -1588,7 +1645,7 @@ function markSelectedTile(q) {
 /** Grid branch of drawItemsList — see patches/opl-tile-grid.patch. */
 function drawItemsListGrid(el, posX, posY) {
   const ex = el.extended;
-  const labelH = ex.showText ? MENU_ITEM_HEIGHT : 0;
+  const labelH = ex.showText ? ex.labelHeight : 0;
   const artW = ex.cellWidth - ex.gap, artH = ex.cellHeight - ex.gap - labelH;
   el._cells = [];
   if (artW < 1 || artH < 1) return { x:posX, y:posY, w:el.width, h:el.height };
@@ -1610,7 +1667,7 @@ function drawItemsListGrid(el, posX, posY) {
     if (selected && ex.frameSize > 0)
       drawCellFrame(q.x, q.y, q.w, q.h, ex.frameSize, S.theme.selTextColor);
     if (ex.showText)
-      renderString(el, cx, cy + artH, ALIGN_NONE, artW, MENU_ITEM_HEIGHT, g.title,
+      renderString(el, cx, cy + artH, ALIGN_NONE, artW, ex.labelHeight, g.title,
                    selected ? S.theme.selTextColor : el.color);
 
     el._cells.push({ x:q.x, y:cy, w:q.w, h:ex.cellHeight, index:S.pageStart + n });
@@ -1826,10 +1883,10 @@ cOverlay.addEventListener("pointerdown", ev => {
     if (!S.sel) return;
     if (S.sel.internal === "ItemsList" && S.sel._cells) {
       const cell = S.sel._cells.find(c => pt.x >= c.x && pt.x <= c.x + c.w && pt.y >= c.y && pt.y <= c.y + c.h);
-      if (cell) { S.gameIndex = cell.index; renderGames(); render(); }
+      if (cell) { S.gameIndex = cell.index; pushRecent(gameList()[cell.index].serial); renderGames(); render(); }
     } else if (S.sel.internal === "ItemsList" && S.sel._rows) {
       const row = Math.floor((pt.y - S.sel._rows.top) / MENU_ITEM_HEIGHT);
-      if (row >= 0 && row < S.sel._rows.count) { S.gameIndex = S.pageStart + row; renderGames(); render(); }
+      if (row >= 0 && row < S.sel._rows.count) { S.gameIndex = S.pageStart + row; pushRecent(gameList()[S.gameIndex].serial); renderGames(); render(); }
     }
   }
   if (!S.sel || S.sel.injected) { if (S.sel && S.sel.injected) setStatus("Injected defaults aren't in the file yet — set a value in the inspector to create it."); return; }
@@ -2098,7 +2155,7 @@ function renderGames() {
     const row = document.createElement("div");
     row.className = "el" + (i === S.gameIndex ? " sel" : "");
     row.innerHTML = `${g.title}<br><span class="n">${g.serial}</span>`;
-    row.onclick = () => { S.gameIndex = i; renderGames(); render(); };
+    row.onclick = () => { S.gameIndex = i; pushRecent(g.serial); renderGames(); render(); };
     host.appendChild(row);
   });
 }
@@ -2398,9 +2455,8 @@ devCount.onchange = syncDevices;
 
 // gAutosort defaults to 1 (opl.c:1739) and sorts with strcasecmp on the display
 // text (submenuSort, menusys.c:561). Reproduced so row order matches the console.
-document.getElementById("btnSort").onclick = e => {
-  S.sorted = !S.sorted;
-  e.target.classList.toggle("on", S.sorted);
+document.getElementById("sortMode").onchange = e => {
+  S.sortMode = Number(e.target.value);
   S.gameIndex = 0; S.pageStart = 0;
   renderGames(); render();
 };

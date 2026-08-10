@@ -530,7 +530,9 @@ Nothing reads it back for display, and no element type exposes it.
 
 **Sorting is not selectable at runtime.** There is one comparator and no key
 bound to change it. Themes have no input handling of any kind, so a "sort" button
-cannot come from a `conf_theme.cfg`.
+cannot come from a `conf_theme.cfg`. (`patches/02-opl-sort-and-recent.patch` adds
+a `sort_mode` setting cycled with R3, and a real recently-played list with
+`RecentImage`/`RecentText` elements to display it.)
 
 ## 9. Rendering geometry
 

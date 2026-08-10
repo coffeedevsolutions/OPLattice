@@ -123,15 +123,16 @@ an element is inherited and what editing it will affect.
 ## Themes and the tile-grid patch
 
 [`themes/`](themes/) holds four ready themes, and [`patches/`](patches/README.md)
-holds an OPL patch that adds tile-grid support the stock renderer does not have.
+holds two OPL patches adding what the stock renderer cannot do.
 
 Stock OPL hands every element the same "currently selected game" pointer, and its
 only list widget is a hard-coded single 19px column. So a grid of covers is not
-reachable from a cfg. The patch adds `columns`/`cell_width`/`cell_height`/`gap`/
-`text`/`frame` to `ItemsList`, an `offset` key to `GameImage` for free-form tile
-placement, and two-axis navigation. **It builds clean with the real PS2 toolchain
-(`make` exit 0, zero warnings) and a ready `OPNPS2LD.ELF` is included, but it has
-never been booted** — see the patch README.
+reachable from a cfg. Patch 01 adds grid keys to `ItemsList`, an `offset` key to
+`GameImage`, and two-axis navigation. Patch 02 adds R3-cycled sort modes, a
+persistent recently-played list, and `RecentImage`/`RecentText` elements to show
+it. **Both build clean with the real PS2 toolchain (`make` exit 0, zero warnings)
+and a ready `OPNPS2LD.ELF` is included, but neither has been booted** — see the
+patch README.
 
 The previewer implements the patched behaviour and flags every patch-only key
 with a `PATCHED_ONLY` note, so a theme can't quietly depend on a build you don't

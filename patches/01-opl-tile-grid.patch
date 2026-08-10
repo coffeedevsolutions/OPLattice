@@ -1,5 +1,5 @@
 diff --git a/include/themes.h b/include/themes.h
-index b0cd3c9..8bb45a1 100644
+index b0cd3c9..4829085 100644
 --- a/include/themes.h
 +++ b/include/themes.h
 @@ -36,6 +36,12 @@ typedef struct
@@ -15,7 +15,7 @@ index b0cd3c9..8bb45a1 100644
      // Attributes for: AttributeImage & GameImage & StaticImage
      image_texture_t *defaultTexture;
      int defaultTextureLinked;
-@@ -62,6 +68,14 @@ typedef struct
+@@ -62,6 +68,15 @@ typedef struct
  {
      int displayedItems;
  
@@ -25,6 +25,7 @@ index b0cd3c9..8bb45a1 100644
 +    int cellHeight;
 +    int gap;        //!< inset between the cell pitch and the drawn art
 +    int showText;   //!< reserve a label line at the bottom of each cell
++    int labelHeight; //!< height of that line; shrink it when using a small font
 +    int frameSize;  //!< selection frame thickness in virtual pixels, 0 to disable
 +
      const char *decorator;
@@ -227,7 +228,7 @@ index 972f332..b875bf1 100644
  
      // Last Played Auto Start
 diff --git a/src/themes.c b/src/themes.c
-index 338dcb1..a695b92 100644
+index 338dcb1..34f4e95 100644
 --- a/src/themes.c
 +++ b/src/themes.c
 @@ -466,6 +466,8 @@ static mutable_image_t *initMutableImage(const char *themePath, config_set_t *th
@@ -297,7 +298,7 @@ index 338dcb1..a695b92 100644
 +
 +static void drawItemsListGrid(struct menu_list *menu, struct submenu_list *item, struct theme_element *elem, items_list_t *itemsList, int posX, int posY)
 +{
-+    int labelH = itemsList->showText ? MENU_ITEM_HEIGHT : 0;
++    int labelH = itemsList->showText ? itemsList->labelHeight : 0;
 +    int artW = itemsList->cellWidth - itemsList->gap;
 +    int artH = itemsList->cellHeight - itemsList->gap - labelH;
 +
@@ -330,7 +331,7 @@ index 338dcb1..a695b92 100644
 +        }
 +
 +        if (itemsList->showText)
-+            fntRenderString(elem->font, cx, cy + artH, ALIGN_NONE, artW, MENU_ITEM_HEIGHT, submenuItemGetText(&ps->item), color);
++            fntRenderString(elem->font, cx, cy + artH, ALIGN_NONE, artW, itemsList->labelHeight, submenuItemGetText(&ps->item), color);
 +
 +        n++;
 +        ps = ps->next;
@@ -352,7 +353,7 @@ index 338dcb1..a695b92 100644
          submenu_list_t *ps = menu->item->pagestart;
          int others = 0;
          u64 color;
-@@ -887,8 +972,54 @@ static void initItemsList(const char *themePath, config_set_t *themeConfig, them
+@@ -887,8 +972,60 @@ static void initItemsList(const char *themePath, config_set_t *themeConfig, them
      if (elem->height == DIM_UNDEF)
          elem->height = theme->usedHeight - (MENU_POS_V + HINT_HEIGHT);
  
@@ -373,6 +374,12 @@ index 338dcb1..a695b92 100644
 +    itemsList->showText = 1;
 +    snprintf(elemProp, sizeof(elemProp), "%s_text", name);
 +    configGetInt(themeConfig, elemProp, &itemsList->showText);
++
++    itemsList->labelHeight = MENU_ITEM_HEIGHT;
++    snprintf(elemProp, sizeof(elemProp), "%s_label_height", name);
++    configGetInt(themeConfig, elemProp, &itemsList->labelHeight);
++    if (itemsList->labelHeight < 1)
++        itemsList->labelHeight = MENU_ITEM_HEIGHT;
 +
 +    itemsList->frameSize = (itemsList->columns > 1) ? 2 : 0;
 +    snprintf(elemProp, sizeof(elemProp), "%s_frame", name);

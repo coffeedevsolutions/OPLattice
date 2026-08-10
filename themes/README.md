@@ -3,16 +3,34 @@
 Four themes. One runs on stock OPL; three need
 [`../patches/opl-tile-grid.patch`](../patches/README.md).
 
-| Theme | Stock OPL | Look |
+| Theme | Needs | Look |
 |---|---|---|
-| [`thm_UnifiedLibrary`](thm_UnifiedLibrary/) | ✅ | List with row icons, big cover, per-game wallpaper |
-| [`thm_GridHard`](thm_GridHard/) | ❌ patch | Brutalist. Opaque slabs, 3px accent frame, zero gradients |
-| [`thm_GridGlass`](thm_GridGlass/) | ❌ patch | Flat glass. Translucent bars over per-game wallpaper |
-| [`thm_GridEditorial`](thm_GridEditorial/) | ❌ patch | Swiss poster. Paper ground, rules, red accent |
+| [`thm_UnifiedLibrary`](thm_UnifiedLibrary/) | stock OPL | List with row icons, big cover, per-game wallpaper |
+| [`thm_GridHard`](thm_GridHard/) | patches 01+02 | Brutalist. Opaque slabs, 3px accent frame, recently-played strip |
+| [`thm_GridGlass`](thm_GridGlass/) | patch 01 | Flat glass. Translucent bars over per-game wallpaper |
+| [`thm_GridEditorial`](thm_GridEditorial/) | patch 01 | Swiss poster. Paper ground, rules, red accent |
 
-All four share the same grid geometry so you can compare them like-for-like:
-5 columns × 2 rows, 114×183 cells, 100×150 art (2:3, box-art ratio), 14px gap,
-19px caption.
+The grid themes are 5 columns × 2 rows of 2:3 box art with a 14px gap and a 14px
+caption, so you can compare them like-for-like. `thm_GridHard` also carries a
+four-cover recently-played strip in its header, which is what pushes its tiles
+down to 100×148.
+
+## Typeface
+
+All four use **Noto Sans Bold**, subset to Latin (631 KB → 21 KB) because OPL
+reads the whole font file into EE RAM *once per slot*. Three slots of the full
+font would cost 1.9 MB; the subset costs 63 KB. See
+[`../assets/FONT-LICENSE.md`](../assets/FONT-LICENSE.md).
+
+| Slot | Size | Used for |
+|---|---|---|
+| `default_font` | 17 | Hints, device name |
+| `font1` | 26–30 | The `LIBRARY` masthead |
+| `font2` | 12 | Tile captions and the game count |
+
+The captions use slot 2 at 12px with `label_height=14` rather than the default
+19px, which both fits more of each title before `fntRenderString` clips the line
+and hands the 5 reclaimed pixels back to the artwork.
 
 ## Install
 
