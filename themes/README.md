@@ -11,9 +11,10 @@ Four themes. One runs on stock OPL; three need
 | [`thm_GridEditorial`](thm_GridEditorial/) | patch 01 | Swiss poster. Paper ground, rules, red accent |
 
 The grid themes are 5 columns × 2 rows of 2:3 box art with a 14px gap and a 14px
-caption, so you can compare them like-for-like. `thm_GridHard` also carries a
-four-cover recently-played strip in its header, which is what pushes its tiles
-down to 100×148.
+caption, so you can compare them like-for-like. `thm_GridHard` also carries a **recently-played band** above the grid: the most
+recent launch as a wide `_BG` banner (141×66, matching that art's 460×215 shape)
+followed by three `_COV` thumbnails at the same 66px height, with the three
+newest titles beside them. That band is what pushes its tiles down to 77×115.
 
 ## Typeface
 
@@ -78,6 +79,22 @@ So `LIBRARY` is the page title and `MenuText` stays as the source indicator. If
 you would rather drop the device name entirely, delete the `MenuText` element —
 just know that you also lose the only on-screen cue that L2/R2 change the source.
 
+## Widescreen
+
+The grid themes are built so nothing distorts when you switch to 16:9.
+
+| Part | `scaled` | 16:9 behaviour |
+|---|---|---|
+| Header / footer bars | `0` + `DIM_INF` | Stretch edge to edge; their contents spread out with the screen |
+| Grid tiles | `1` (default) | Tiles keep 2:3 **and** the cell pitch narrows to match, so the grid stays a block rather than spreading |
+| All text | n/a | Never stretches — OPL rasterises glyphs at 3/4 width in anamorphic mode |
+| Recent thumbnails | `1` | Keep their shape, but the gaps between them widen |
+
+The grid is centred with `aligned=1` + `x=POS_MID` so that when it narrows it
+stays centred. That last row is the one compromise: individually placed elements
+have their x coordinates stretched by the display, and no theme key changes
+that — it is how every OPL element has always behaved.
+
 ## Design notes
 
 **No fades.** Every panel in these three is a flat fill with a hard border —
@@ -106,6 +123,16 @@ the grid box). The selection frame doesn't have this problem — it's drawn with
 
 Open any of them in `../opl-theme-previewer.html` and drag. It implements the
 patched behaviour and marks every patch-only key with a `PATCHED_ONLY` note.
+
+### Cache order matters
+
+`findDuplicate` gives every element that names a pattern the **first** cache
+created for it, and the first element in the file wins. In `thm_GridHard` the
+invisible `ItemCover` is declared before the recent band for exactly this
+reason: it sizes the shared `COV` cache for the 10 grid tiles *plus* the 3
+thumbnails. Move it after them and the cache is created at the thumbnails' size,
+and OPL silently drops the grid's row art. The previewer reports that as
+`DECORATOR_DROPPED`.
 
 | Want | Change |
 |---|---|

@@ -179,7 +179,9 @@ Honest list. Nothing here affects layout decisions, but you should know.
   active video mode's pixel aspect ratio (`fntUpdateAspectRatio`). This tool
   targets the VGA-like 1:1 case. On an interlaced NTSC/PAL console, text is
   scaled vertically by the same factor as everything else — relative layout is
-  unaffected.
+  unaffected. The **anamorphic 16:9** part of that same calculation *is*
+  reproduced: glyphs render 3/4 as wide, so text does not stretch in widescreen,
+  matching the console.
 * **The plasma background is static.** OPL's is an animated Perlin field that
   updates 6 rows a frame and eases toward `bg_color` over time. This draws a
   converged, stable approximation of it — a layout tool wants a still image.

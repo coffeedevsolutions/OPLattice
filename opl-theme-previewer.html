@@ -1332,13 +1332,18 @@ function useFont(spec) { ctx.font = `${spec.size}px "${spec.family}", sans-serif
  * per-glyph advances reproduces that, unlike measuring the whole string.
  */
 function glyphMetrics(ch, spec) {
-  const key = spec.family + "|" + spec.size + "|" + ch;
+  // fntUpdateAspectRatio sets the horizontal DPI to fDPI * PAR, and PAR picks up
+  // a 0.75 factor in anamorphic 16:9 — so OPL re-rasterises glyphs 3/4 as wide
+  // and text comes out undistorted after the display stretch. Metrics have to
+  // follow, or centring and clipping land in the wrong place.
+  const sx = S.aspect / 4;
+  const key = spec.family + "|" + spec.size + "|" + sx + "|" + ch;
   let m = glyphCache.get(key);
   if (!m) {
     useFont(spec);
     const t = ctx.measureText(ch);
-    m = { adv: Math.round(t.width),
-          ink: Math.ceil((t.actualBoundingBoxRight || t.width) + (t.actualBoundingBoxLeft || 0)) };
+    m = { adv: Math.round(t.width * sx),
+          ink: Math.ceil(((t.actualBoundingBoxRight || t.width) + (t.actualBoundingBoxLeft || 0)) * sx) };
     glyphCache.set(key, m);
   }
   return m;
@@ -1364,6 +1369,8 @@ function renderString(el, x, y, aligned, width, height, string, color) {
 
   let pen = x;
   const xmax = x + width, ymax = y + height;
+  const sx = S.aspect / 4;
+  if (sx !== 1) { ctx.save(); ctx.scale(sx, 1); }   // squeeze glyphs, not positions
   for (const ch of string) {
     const g = glyphMetrics(ch, spec);
     if (width) {
@@ -1371,9 +1378,10 @@ function renderString(el, x, y, aligned, width, height, string, color) {
       if (y > ymax) break;
       if (pen + g.ink > xmax) { pen = xmax + 1; continue; }   // rest of the line is dropped
     }
-    if (ch !== "\n") ctx.fillText(ch, pen, y);
+    if (ch !== "\n") ctx.fillText(ch, pen / sx, y);
     pen += g.adv;
   }
+  if (sx !== 1) ctx.restore();
   return pen;
 }
 
@@ -1650,10 +1658,18 @@ function drawItemsListGrid(el, posX, posY) {
   el._cells = [];
   if (artW < 1 || artH < 1) return { x:posX, y:posY, w:el.width, h:el.height };
 
+  // Narrow the pitch by the same 3/4 rmDrawPixmap applies to a scaled image,
+  // so the tiles keep their shape AND the grid keeps its proportions in 16:9.
+  const wide = (el.scaled & SCALING_RATIO) !== 0;
+  const pitchX = wide ? (ex.cellWidth * S.aspect) >> 2 : ex.cellWidth;
+  const drawnW = wide ? (artW * S.aspect) >> 2 : artW;
+  const gridW = pitchX * ex.columns;
+  if (el.aligned) { posX -= gridW >> 1; posY -= el.height >> 1; }
+
   for (let n = 0; n < ex.displayedItems; n++) {
     const g = gameList()[S.pageStart + n];
     if (!g) break;
-    const cx = posX + (n % ex.columns) * ex.cellWidth;
+    const cx = posX + (n % ex.columns) * pitchX;
     const cy = posY + Math.floor(n / ex.columns) * ex.cellHeight;
     const selected = (S.pageStart + n === S.gameIndex);
     const q = setupQuad(cx, cy, ALIGN_NONE, artW, artH, el.scaled, S.aspect);
@@ -1667,12 +1683,12 @@ function drawItemsListGrid(el, posX, posY) {
     if (selected && ex.frameSize > 0)
       drawCellFrame(q.x, q.y, q.w, q.h, ex.frameSize, S.theme.selTextColor);
     if (ex.showText)
-      renderString(el, cx, cy + artH, ALIGN_NONE, artW, ex.labelHeight, g.title,
+      renderString(el, cx, cy + artH, ALIGN_NONE, drawnW, ex.labelHeight, g.title,
                    selected ? S.theme.selTextColor : el.color);
 
     el._cells.push({ x:q.x, y:cy, w:q.w, h:ex.cellHeight, index:S.pageStart + n });
   }
-  return { x:posX, y:posY, w:el.width, h:el.height };
+  return { x:posX, y:posY, w:gridW, h:el.height };
 }
 
 /** drawItemsList (themes.c:840) — §5.2, including the decorator/text mismatch. */
@@ -1685,9 +1701,9 @@ function drawItemsList(el) {
   // The patch scrolls a grid by whole rows, so the page start stays aligned.
   if (ex.columns > 1) S.pageStart -= S.pageStart % ex.columns;
 
+  if (ex.columns > 1) return drawItemsListGrid(el, el.posX, el.posY);
   let posX = el.posX, posY = el.posY;
   if (el.aligned) { posX -= el.width >> 1; posY -= el.height >> 1; }
-  if (ex.columns > 1) return drawItemsListGrid(el, posX, posY);
   el._cells = null;
   const top = posY;
 

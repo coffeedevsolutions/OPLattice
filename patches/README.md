@@ -7,7 +7,7 @@ the second builds on the first.
 | Patch | Adds |
 |---|---|
 | `01-opl-tile-grid.patch` | Tile grids: `columns`, `cell_width`, `cell_height`, `gap`, `text`, `label_height`, `frame` on `ItemsList`; `offset` on `GameImage`; two-axis navigation |
-| `02-opl-sort-and-recent.patch` | Sort modes cycled with **R3**; a persistent recently-played list; `RecentImage` and `RecentText` element types |
+| `02-opl-sort-and-recent.patch` | Sort modes cycled with **R3**; a persistent recently-played list; `RecentImage` and `RecentText` element types; widescreen correction for the grid |
 
 ```bash
 git clone https://github.com/ps2homebrew/Open-PS2-Loader
@@ -85,6 +85,21 @@ for; caching, async loading, LRU eviction and the IO queue are untouched.
 `displayedItems` becomes `(height / cell_height) × columns`. The selection frame
 is four filled `rmDrawRect` calls in `sel_text_color` — hard edges, no rounding,
 no glow. Art comes from the element the `decorator` points at, exactly as before.
+
+**Widescreen** (refined in patch 02). In anamorphic 16:9 `rmDrawPixmap` narrows a
+`scaled=1` image to 3/4 so it survives the display stretch undistorted. The cell
+*pitch* and the centring offset are narrowed by the same factor, so the tiles
+keep their shape **and** the grid keeps its proportions instead of spreading out.
+Centre a grid with `aligned=1` + `x=POS_MID` and it stays centred in both aspects.
+
+Text needs no correction at all: `fntUpdateAspectRatio` already rasterises glyphs
+at 3/4 width in anamorphic mode, so OPL text never stretches. Only the clip box
+is converted.
+
+What does *not* self-correct is an individually placed element — a row of
+`RecentImage` thumbnails keeps each thumbnail's shape but the gaps between them
+widen, because element x coordinates are never aspect-corrected. That is stock
+OPL behaviour for every element, not something the patch introduces.
 
 ### `GameImage` slot binding
 

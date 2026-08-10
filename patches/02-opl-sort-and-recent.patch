@@ -398,7 +398,7 @@ index a6d8fa3..20c6256 100644
      gEnableDebug = 0;
      gPS2Logo = 0;
 diff --git a/src/themes.c b/src/themes.c
-index 34f4e95..cc60aa2 100644
+index 34f4e95..65713ef 100644
 --- a/src/themes.c
 +++ b/src/themes.c
 @@ -48,6 +48,8 @@ enum ELEM_ATTRIBUTE_TYPE {
@@ -431,7 +431,62 @@ index 34f4e95..cc60aa2 100644
  
      char elemProp[64];
  
-@@ -917,6 +924,84 @@ static void drawItemsListGrid(struct menu_list *menu, struct submenu_list *item,
+@@ -881,14 +888,33 @@ static void drawItemsListGrid(struct menu_list *menu, struct submenu_list *item,
+     int artW = itemsList->cellWidth - itemsList->gap;
+     int artH = itemsList->cellHeight - itemsList->gap - labelH;
+ 
++    /* In anamorphic 16:9 rmDrawPixmap narrows a SCALING_RATIO image to 3/4 so it
++     * survives the display stretch undistorted. The cell pitch has to shrink by
++     * the same factor, otherwise the tiles keep their shape but the grid spreads
++     * out. Text needs no correction: fntUpdateAspectRatio already rasterises
++     * glyphs at 3/4 width, so only the clip box is converted here.
++     */
++    int wide = (elem->scaled & SCALING_RATIO);
++    int pitchX = wide ? rmWideScale(itemsList->cellWidth) : itemsList->cellWidth;
++    int drawnW = wide ? rmWideScale(artW) : artW;
++    int gridW = pitchX * itemsList->columns;
++
++    submenu_list_t *ps;
++    int n = 0;
++
+     if (artW < 1 || artH < 1)
+         return;
+ 
+-    submenu_list_t *ps = menu->item->pagestart;
+-    int n = 0;
++    // Centre on the corrected width, so a centred grid stays centred in 16:9.
++    if (elem->aligned) {
++        posX -= gridW >> 1;
++        posY -= elem->height >> 1;
++    }
++
++    ps = menu->item->pagestart;
+ 
+     while (ps && (n < itemsList->displayedItems)) {
+-        int cx = posX + (n % itemsList->columns) * itemsList->cellWidth;
++        int cx = posX + (n % itemsList->columns) * pitchX;
+         int cy = posY + (n / itemsList->columns) * itemsList->cellHeight;
+         int selected = (ps == item);
+         u64 color = selected ? gTheme->selTextColor : elem->color;
+@@ -902,37 +928,116 @@ static void drawItemsListGrid(struct menu_list *menu, struct submenu_list *item,
+                 rmDrawPixmap(tex, cx, cy, ALIGN_NONE, artW, artH, elem->scaled, gDefaultCol);
+         }
+ 
+-        if (selected && itemsList->frameSize > 0) {
+-            // rmDrawRect does not apply the widescreen width correction that
+-            // rmDrawPixmap does, so match the art's drawn width by hand.
+-            int frameW = (elem->scaled & SCALING_RATIO) ? rmWideScale(artW) : artW;
+-            drawCellFrame(cx, cy, frameW, artH, itemsList->frameSize, gTheme->selTextColor);
+-        }
++        if (selected && itemsList->frameSize > 0)
++            drawCellFrame(cx, cy, drawnW, artH, itemsList->frameSize, gTheme->selTextColor);
+ 
+         if (itemsList->showText)
+-            fntRenderString(elem->font, cx, cy + artH, ALIGN_NONE, artW, itemsList->labelHeight, submenuItemGetText(&ps->item), color);
++            fntRenderString(elem->font, cx, cy + artH, ALIGN_NONE, drawnW, itemsList->labelHeight, submenuItemGetText(&ps->item), color);
+ 
+         n++;
+         ps = ps->next;
      }
  }
  
@@ -516,7 +571,34 @@ index 34f4e95..cc60aa2 100644
  static void drawItemsList(struct menu_list *menu, struct submenu_list *item, config_set_t *config, struct theme_element *elem)
  {
      if (item) {
-@@ -1214,6 +1299,12 @@ static int addGUIElem(const char *themePath, config_set_t *themeConfig, theme_t
+         items_list_t *itemsList = (items_list_t *)elem->extended;
+ 
+-        int posX = elem->posX, posY = elem->posY;
+-        if (elem->aligned) {
+-            posX -= elem->width >> 1;
+-            posY -= elem->height >> 1;
+-        }
++        int posX, posY;
+ 
+         if (itemsList->columns > 1) {
+-            drawItemsListGrid(menu, item, elem, itemsList, posX, posY);
++            // Grid mode does its own alignment: it has to centre on the
++            // widescreen-corrected width, not the declared one.
++            drawItemsListGrid(menu, item, elem, itemsList, elem->posX, elem->posY);
+             return;
+         }
+ 
++        posX = elem->posX;
++        posY = elem->posY;
++        if (elem->aligned) {
++            posX -= elem->width >> 1;
++            posY -= elem->height >> 1;
++        }
++
+         submenu_list_t *ps = menu->item->pagestart;
+         int others = 0;
+         u64 color;
+@@ -1214,6 +1319,12 @@ static int addGUIElem(const char *themePath, config_set_t *themeConfig, theme_t
              } else if (!strcmp(elementsType[ELEM_TYPE_LOADING_ICON], type)) {
                  if (!theme->loadingIcon)
                      theme->loadingIcon = initBasic(themePath, themeConfig, theme, name, ELEM_TYPE_LOADING_ICON, -40, -60, ALIGN_CENTER, DIM_UNDEF, DIM_UNDEF, SCALING_RATIO, gDefaultCol, theme->fonts[0]);
