@@ -523,6 +523,27 @@ export function specs(C, fixtures, t) {
     ok(r.memory.total > 30e6);
   });
 
+  t.test("VRAM peak counts one texture per tile, at source size x4", () => {
+    // 4 MB minus two 640x480 CT24 framebuffers.
+    eq(C.VRAM_FOR_TEXTURES, 4 * 1024 * 1024 - 2 * 640 * 480 * 4);
+    const r = withArt("main0_type=Background\nmain1_type=ItemCover\nmain1_count=12\n" +
+                      "main2_type=ItemsList\nmain2_columns=6\nmain2_cell_width=88\nmain2_cell_height=137\n" +
+                      "main2_height=274\nmain2_decorator=COV\n",
+                      { COV: { w:300, h:450 } });
+    const grid = r.vram.rows.find(x => x.concurrent === 12);
+    ok(grid, "the grid contributes one texture per tile");
+    eq(grid.bytes, 12 * 300 * 450 * 4);
+    eq(r.vram.level, "err", "12 covers at 300x450 cannot be resident at once");
+  });
+
+  t.test("smaller source art brings the same grid inside the VRAM budget", () => {
+    const cfg = "main0_type=Background\nmain1_type=ItemCover\nmain1_count=12\n" +
+                "main2_type=ItemsList\nmain2_columns=6\nmain2_cell_width=88\nmain2_cell_height=137\n" +
+                "main2_height=274\nmain2_decorator=COV\n";
+    ok(withArt(cfg, { COV: { w:300, h:450 } }).vram.total > C.VRAM_FOR_TEXTURES);
+    ok(withArt(cfg, { COV: { w:100, h:150 } }).vram.total < C.VRAM_FOR_TEXTURES);
+  });
+
   t.test("a shared pattern is counted once (findDuplicate, §6.4)", () => {
     const r = val("main0_type=Background\nmain1_type=ItemCover\nmain1_width=100\nmain1_height=100\n" +
                   "main2_type=ItemCover\nmain2_width=100\nmain2_height=100\n", null);

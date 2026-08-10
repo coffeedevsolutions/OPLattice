@@ -1018,7 +1018,8 @@ function validateTheme(doc, theme, assets) {
         `Font slot ${slot} references "${file}", which is not in the theme folder. OPL falls back to its built-in font.`,
         lineOf(doc, slot === 0 ? "default_font" : "font" + slot)));
 
-  return { diags: dedupeDiags(diags), memory: estimateMemory(theme, assets) };
+  return { diags: dedupeDiags(diags), memory: estimateMemory(theme, assets),
+           vram: estimateVram(theme, assets) };
 }
 
 /**
@@ -1030,6 +1031,61 @@ function validateTheme(doc, theme, assets) {
 // figure is a hardware-safety estimate — measured art always overrides it.
 const PATTERN_SIZE = { COV:{w:300,h:450}, COV2:{w:300,h:450}, ICO:{w:64,h:64}, BG:{w:460,h:215},
                        SCR:{w:250,h:188}, SCR2:{w:250,h:188}, LGO:{w:400,h:278} };
+/**
+ * VRAM is the tighter budget and the one nothing else models. gsKit is given
+ * 4 MB (`__VRAM_SIZE`, renderman.c:15); OPL takes two 640x480 double-buffered
+ * CT24 framebuffers out of it with Z-buffering off, leaving roughly this much
+ * for textures. CT24 occupies a full 32-bit word per pixel in VRAM.
+ */
+const VRAM_TOTAL = 4 * 1024 * 1024;
+const VRAM_FRAMEBUFFERS = 2 * 640 * 480 * 4;
+const VRAM_FOR_TEXTURES = VRAM_TOTAL - VRAM_FRAMEBUFFERS;   // ~1.66 MB
+
+/**
+ * Textures that must be resident in the same frame. A grid binds one per tile,
+ * everything else binds one. Exceeding this does not fail cleanly — the texture
+ * manager evicts and re-uploads every frame, which thrashes.
+ */
+function estimateVram(theme, assets) {
+  // Per screen, not per theme: main and info are never drawn in the same frame,
+  // so the peak is the worst single chain rather than their sum.
+  const perChain = {};
+
+  for (const key of Object.keys(theme.chains)) {
+    const rows = [];
+    let total = 0;
+
+    for (const el of theme.chains[key]) {
+      const ex = el.extended || {};
+      let pattern = null, concurrent = 1;
+
+      if (el.internal === "ItemsList" && ex.decoratorImage) {
+        pattern = ex.decoratorImage.extended.pattern;
+        concurrent = ex.displayedItems;
+      } else if (ex.pattern && (el.internal === "GameImage" || el.internal === "Background" || el.internal === "RecentImage")) {
+        pattern = ex.pattern;
+      }
+      if (!pattern) continue;
+
+      const measured = assets && assets.artSize && assets.artSize.get(pattern);
+      const nat = measured || PATTERN_SIZE[pattern] || { w:256, h:256 };
+      const bytes = concurrent * nat.w * nat.h * 4;
+      total += bytes;
+      rows.push({ el: el.name, pattern, concurrent, w:nat.w, h:nat.h, bytes });
+    }
+
+    rows.sort((a, b) => b.bytes - a.bytes);
+    perChain[key] = { rows, total };
+  }
+
+  let worst = "main", total = 0;
+  for (const key of Object.keys(perChain))
+    if (perChain[key].total > total) { total = perChain[key].total; worst = key; }
+
+  return { chain: worst, rows: perChain[worst].rows, perChain, total, budget: VRAM_FOR_TEXTURES,
+           level: total > VRAM_FOR_TEXTURES ? "err" : total > VRAM_FOR_TEXTURES * 0.75 ? "warn" : "ok" };
+}
+
 function estimateMemory(theme, assets) {
   const rows = [];
   let total = 0;
@@ -1101,7 +1157,7 @@ const OPLCore = {
   INJECTED_BG, INJECTED_IL, THEME_DEFAULTS, COMMON_ATTRS, TYPE_ATTRS, REQUIRED_ATTR,
   atoi, parseColor, colorToHex, parseConfig, writeConfig, getStr, getInt, hasKey,
   setKey, deleteKey, reindex, splitKey, cloneDoc, buildTheme, validateTheme,
-  estimateMemory, fitString, textBaselineOffset, setupQuad, lineOf,
+  estimateMemory, estimateVram, VRAM_FOR_TEXTURES, fitString, textBaselineOffset, setupQuad, lineOf,
 };
 // ===== OPL-CORE-END =====
 
@@ -2346,8 +2402,19 @@ function renderMemory() {
   const m = S.validation && S.validation.memory;
   if (!m || !m.rows.length) { host.innerHTML = '<div class="empty">No art caches in this theme.</div>'; return; }
   const mb = b => (b / 1048576).toFixed(2) + " MB";
+  const v = S.validation.vram;
+  const vmb = b => (b / 1048576).toFixed(2) + " MB";
   host.innerHTML =
-    `<table id="memTable"><tr><th>pattern</th><th>count</th><th>size</th><th class="n">RAM</th></tr>` +
+    (v ? `<table id="memTable"><tr><th>drawn together</th><th>at once</th><th>size</th><th class="n">VRAM</th></tr>` +
+      v.rows.map(r => `<tr><td>${r.el} ${r.pattern}</td><td>${r.concurrent}</td>` +
+        `<td>${r.w}×${r.h}</td><td class="n">${vmb(r.bytes)}</td></tr>`).join("") +
+      `<tr><td colspan="3"><b>VRAM peak (${v.chain})</b></td><td class="n mem-${v.level}"><b>${vmb(v.total)}</b></td></tr>` +
+      `<tr><td colspan="3">budget</td><td class="n">${vmb(v.budget)}</td></tr></table>` +
+      `<div class="hint" style="padding:6px 9px 10px">Textures resident in one frame, at <b>source</b> size × 4 bytes. ` +
+      `gsKit gets 4 MB; two 640×480 CT24 buffers leave about 1.66 MB. ` +
+      (v.level === "err" ? `<span style="color:var(--err)">Over budget — the texture manager will evict and re-upload every frame. Shrink the art files.</span>`
+       : v.level === "warn" ? `<span style="color:var(--warn)">Close to the limit.</span>` : `Fits.`) + `</div>` : "") +
+    `<table id="memTable"><tr><th>pattern</th><th>count</th><th>size</th><th class="n">EE RAM</th></tr>` +
     m.rows.map(r => `<tr><td>${r.pattern}${r.shared ? " ×" + r.users.length : ""}</td><td>${r.count}</td>` +
       `<td title="${r.basis}">${r.w}×${r.h}</td><td class="n">${mb(r.bytes)}</td></tr>`).join("") +
     `<tr><td colspan="3"><b>total</b></td><td class="n mem-${m.level}"><b>${mb(m.total)}</b></td></tr></table>` +
