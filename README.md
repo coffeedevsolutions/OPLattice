@@ -120,6 +120,22 @@ mirror the main pages by index unless you define an `appsMain<N>` block with the
 same number, which is easy to get wrong by hand — the inspector tells you when
 an element is inherited and what editing it will affect.
 
+## Themes and the tile-grid patch
+
+[`themes/`](themes/) holds four ready themes, and [`patches/`](patches/README.md)
+holds an OPL patch that adds tile-grid support the stock renderer does not have.
+
+Stock OPL hands every element the same "currently selected game" pointer, and its
+only list widget is a hard-coded single 19px column. So a grid of covers is not
+reachable from a cfg. The patch adds `columns`/`cell_width`/`cell_height`/`gap`/
+`text`/`frame` to `ItemsList`, an `offset` key to `GameImage` for free-form tile
+placement, and two-axis navigation. **It is type-checked but never compiled or
+run on hardware** — see the patch README.
+
+The previewer implements the patched behaviour and flags every patch-only key
+with a `PATCHED_ONLY` note, so a theme can't quietly depend on a build you don't
+have.
+
 ## Fixtures
 
 | Folder | What it's for |

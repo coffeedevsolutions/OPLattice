@@ -1,0 +1,83 @@
+# Themes
+
+Four themes. One runs on stock OPL; three need
+[`../patches/opl-tile-grid.patch`](../patches/README.md).
+
+| Theme | Stock OPL | Look |
+|---|---|---|
+| [`thm_UnifiedLibrary`](thm_UnifiedLibrary/) | ✅ | List with row icons, big cover, per-game wallpaper |
+| [`thm_GridHard`](thm_GridHard/) | ❌ patch | Brutalist. Opaque slabs, 3px accent frame, zero gradients |
+| [`thm_GridGlass`](thm_GridGlass/) | ❌ patch | Flat glass. Translucent bars over per-game wallpaper |
+| [`thm_GridEditorial`](thm_GridEditorial/) | ❌ patch | Swiss poster. Paper ground, rules, red accent |
+
+All four share the same grid geometry so you can compare them like-for-like:
+5 columns × 2 rows, 114×183 cells, 100×150 art (2:3, box-art ratio), 14px gap,
+19px caption.
+
+## Install
+
+Copy the folder next to your other OPL themes and pick it in **Settings →
+Theme**. The `thm_` prefix must stay — OPL only scans directories containing it.
+`README.md` and `ART-ico/` are ignored by OPL; delete them from the copy if you
+like.
+
+## Art
+
+Per-game art lives in the **device's `ART` folder**, named `<SERIAL>_<PATTERN>.png`.
+The grid themes draw `_COV`; `thm_UnifiedLibrary` also uses `_ICO` and `_BG`.
+PNG only — OPL dropped JPG and BMP support on 2024-10-22.
+
+### Size your cover art for the grid
+
+The cache holds the **decoded source image**, so drawing a 300×450 cover into a
+100×150 tile wastes 3× the memory for no visible gain. Ten tiles:
+
+| Source art | Cache |
+|---|---|
+| 300×450 | 4.05 MB |
+| 150×225 | 1.01 MB |
+| 100×150 | 0.45 MB |
+
+On a 32 MB console that difference is worth having. To downscale a whole folder:
+
+```bash
+mkdir -p ART-grid && for f in ART/*_COV.png; do magick "$f" -resize 150x225 -strip "ART-grid/$(basename "$f")"; done
+```
+
+## Design notes
+
+**No fades.** Every panel in these three is a flat fill with a hard border —
+`scrim.png` in `thm_UnifiedLibrary` is the one gradient in the repo, and the grid
+themes deliberately avoid that approach.
+
+**Glassmorphism is approximate.** Real frosted glass needs a backdrop blur, which
+means sampling the framebuffer as a texture. OPL's renderer has no call for that
+(`renderman.c` draws sprites, quads, rects and lines, nothing else). `thm_GridGlass`
+uses translucent panels with 1px bright borders — tinted acrylic rather than
+frosted glass. Over a busy wallpaper it reads convincingly; over a flat one it
+just looks like a tinted box.
+
+**Captions clip mid-word.** `fntRenderString` drops the rest of the line once a
+glyph would cross the box edge — no ellipsis, no scrolling. "Grand Theft Auto:
+Vice City (JP)" becomes "Grand Theft". Set `text=0` for a pure art grid if that
+bothers you more than losing the labels.
+
+**Borders and the 1px problem.** A 1px border in a source image drawn at a
+different size resamples to a soft line. Where a crisp edge matters the asset is
+generated at exactly the size it is drawn (`thm_GridGlass/panel.png` is 570×366,
+the grid box). The selection frame doesn't have this problem — it's drawn with
+`rmDrawRect`, so it's always exact.
+
+## Tuning
+
+Open any of them in `../opl-theme-previewer.html` and drag. It implements the
+patched behaviour and marks every patch-only key with a `PATCHED_ONLY` note.
+
+| Want | Change |
+|---|---|
+| Bigger tiles, fewer of them | `cell_width` / `cell_height`, keep `cell − gap − 19` at 2:3 |
+| More columns | `columns`, and `cell_width` to `width / columns` |
+| No captions | `text=0`, then reclaim the 19px in `cell_height` |
+| Thicker selection | `frame` |
+| Different accent | `sel_text_color` — it is the only colour the frame and selected caption use |
+| Fewer cached covers | lower `count` on the invisible `ItemCover`, but never below the visible tile count |

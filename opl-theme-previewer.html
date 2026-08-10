@@ -228,14 +228,19 @@ const TYPE_ATTRS = {
   StaticText:     ["value","title","display","wrap"],
   GameCountText:  ["title","display","wrap"],
   AttributeImage: ["attribute","default",...OVERLAY_ATTRS],
-  GameImage:      ["pattern","count","default",...OVERLAY_ATTRS],
+  GameImage:      ["pattern","count","default","offset",...OVERLAY_ATTRS],
   StaticImage:    ["default",...OVERLAY_ATTRS],
-  ItemIcon:       ["pattern","count","default",...OVERLAY_ATTRS],
-  ItemCover:      ["pattern","count","default",...OVERLAY_ATTRS],
+  ItemIcon:       ["pattern","count","default","offset",...OVERLAY_ATTRS],
+  ItemCover:      ["pattern","count","default","offset",...OVERLAY_ATTRS],
   Background:     ["pattern","count","default"],
-  ItemsList:      ["decorator"],
+  ItemsList:      ["decorator","columns","cell_width","cell_height","gap","text","frame"],
   MenuIcon:[], MenuText:[], ItemText:[], HintText:[], InfoHintText:[], LoadingIcon:[], BdmIndex:[],
 };
+// Attributes added by patches/opl-tile-grid.patch. Stock OPL ignores them
+// silently, so the previewer names them rather than letting a theme look right
+// here and wrong on an unpatched console.
+const PATCHED_ATTRS = new Set(["offset","columns","cell_width","cell_height","gap","text","frame"]);
+
 const REQUIRED_ATTR = {   // missing ⇒ element is built but never draws
   StaticText:"value", AttributeText:"attribute", AttributeImage:"attribute",
   GameImage:"pattern", StaticImage:"default",
@@ -589,7 +594,8 @@ function initText(doc, name, el, kind, diags) {
 
 /** initMutableImage (themes.c:457). `theme.caches` implements findDuplicate sharing. */
 function initImage(doc, name, el, typeName, def, theme, diags) {
-  const m = { pattern:null, count:def.count ?? 1, defaultTexture:null, overlay:null, overlayRect:null, cacheShared:false };
+  const m = { pattern:null, count:def.count ?? 1, defaultTexture:null, overlay:null, overlayRect:null,
+              cacheShared:false, offset:0, useOffset:false };
   if (typeName === "AttributeImage") {
     m.pattern = getStr(doc, name + "_attribute");
     m.count = 1;
@@ -599,6 +605,14 @@ function initImage(doc, name, el, typeName, def, theme, diags) {
     if (sp !== null) m.pattern = sp;
     const sc = getStr(doc, name + "_count");
     if (sc !== null) m.count = atoi(sc);
+  }
+
+  // Tile placement (patched builds only): bind to a fixed slot on the page
+  // instead of to the highlighted entry.
+  const so = getStr(doc, name + "_offset");
+  if (so !== null && (def.internal === "GameImage" || def.internal === "Background")) {
+    m.useOffset = true;
+    m.offset = Math.max(0, atoi(so));
   }
 
   m.defaultTexture = getStr(doc, name + "_default");
@@ -636,8 +650,26 @@ function initImage(doc, name, el, typeName, def, theme, diags) {
 function initItemsList(doc, name, el) {
   if (el.width === DIM_UNDEF) el.width = SCREEN_W;
   if (el.height === DIM_UNDEF) el.height = 480 - (MENU_POS_V + HINT_HEIGHT);   // 398
+
+  const num = (key, dflt) => { const v = getStr(doc, name + "_" + key); return v === null ? dflt : atoi(v); };
+  const columns = Math.max(1, num("columns", 1));
+  const gap = Math.max(0, num("gap", 4));
+  const showText = num("text", 1);
+  const frameSize = Math.max(0, num("frame", columns > 1 ? 2 : 0));
+
+  let cellWidth, cellHeight, displayedItems;
+  if (columns > 1) {
+    cellWidth = Math.max(1, num("cell_width", Math.floor(el.width / columns)));
+    cellHeight = Math.max(1, num("cell_height", cellWidth));
+    displayedItems = Math.max(1, Math.floor(el.height / cellHeight)) * columns;
+  } else {
+    cellWidth = el.width;
+    cellHeight = MENU_ITEM_HEIGHT;
+    displayedItems = Math.floor(el.height / MENU_ITEM_HEIGHT);
+  }
+
   el.extended = {
-    displayedItems: Math.floor(el.height / MENU_ITEM_HEIGHT),
+    displayedItems, columns, cellWidth, cellHeight, gap, showText, frameSize,
     decorator: getStr(doc, name + "_decorator"),
     decoratorImage: null,
   };
@@ -882,6 +914,13 @@ function validateTheme(doc, theme, assets) {
           `${el.name}_${k} is not read by ${el.typeName} elements; it has no effect.`,
           lineOf(doc, el.name + "_" + k), el.name));
     }
+    for (const k of el.explicit) {
+      if (PATCHED_ATTRS.has(k) && allowed.has(k))
+        diags.push(dg("info","PATCHED_ONLY",
+          `${el.name}_${k} needs patches/opl-tile-grid.patch. Stock OPL ignores it, so on an unpatched build this element falls back to its non-grid behaviour.`,
+          lineOf(doc, el.name + "_" + k), el.name));
+    }
+
     const ex = el.extended || {};
     for (const [attr, val] of [["default", ex.defaultTexture], ["overlay", ex.overlay]]) {
       if (!val) continue;
@@ -1315,14 +1354,16 @@ function tintedCopy(img, tint) {
 function drawStub(q, label, accent) {
   if (q.w <= 0 || q.h <= 0) return;
   ctx.save();
-  ctx.fillStyle = accent || "#ffffff1c";
+  // Mid-grey with alpha so the stub stays visible on both dark and paper-white
+  // themes — a white stub vanished entirely on light backgrounds.
+  ctx.fillStyle = accent || "rgba(128,128,128,0.22)";
   ctx.fillRect(q.x, q.y, q.w, q.h);
-  ctx.strokeStyle = "#ffffff59"; ctx.lineWidth = 1;
+  ctx.strokeStyle = "rgba(128,128,128,0.8)"; ctx.lineWidth = 1;
   ctx.setLineDash([3, 2]);
   ctx.strokeRect(q.x + .5, q.y + .5, q.w - 1, q.h - 1);
   ctx.setLineDash([]);
   if (q.w >= 24 && q.h >= 10) {
-    ctx.fillStyle = "#ffffffcc";
+    ctx.fillStyle = "rgba(128,128,128,0.95)";
     ctx.font = `${Math.min(10, Math.max(7, q.h - 4))}px system-ui,sans-serif`;
     ctx.textAlign = "center"; ctx.textBaseline = "middle";
     ctx.fillText(label, q.x + q.w / 2, q.y + q.h / 2, q.w - 4);
@@ -1407,12 +1448,16 @@ function drawElement(el) {
       break;
     }
     case "GameImage": {
-      let img = ex.pattern ? gameArt(game.serial, ex.pattern) : null;
+      // Tile elements render a fixed slot on the page, not the selection.
+      const g2 = ex.useOffset ? GAMES[S.pageStart + ex.offset] : game;
+      if (ex.useOffset && !g2) { el._rect = { x:el.posX, y:el.posY, w:0, h:0 }; return; }
+      let img = ex.pattern ? gameArt(g2.serial, ex.pattern) : null;
       if (!img) img = themeImage(ex.defaultTexture);
       if (img && img.complete && img.naturalWidth)
         q = drawPixmap(el, img, el.posX, el.posY, el.aligned, el.width, el.height, el.scaled, el.color);
-      else q = stubQuad(el, ex.pattern || "art");
+      else q = stubQuad(el, (ex.pattern || "art") + (ex.useOffset ? " #" + ex.offset : ""));
       if (ex.overlay) drawOverlay(el, q);
+      if (ex.useOffset && S.pageStart + ex.offset === S.gameIndex) markSelectedTile(q);
       break;
     }
     case "AttributeImage": {
@@ -1507,6 +1552,52 @@ function textRect(el, str, box) {
   return { x, y: top - spec.size + 3, w: Math.max(w, 4), h };
 }
 
+/** A hard 2px selection frame, four filled rects — no rounding, no glow. */
+function drawCellFrame(x, y, w, h, t, color) {
+  if (t <= 0 || w <= 0 || h <= 0) return;
+  ctx.fillStyle = rgb(color);
+  ctx.fillRect(x, y, w, t);
+  ctx.fillRect(x, y + h - t, w, t);
+  ctx.fillRect(x, y + t, t, h - 2 * t);
+  ctx.fillRect(x + w - t, y + t, t, h - 2 * t);
+}
+function markSelectedTile(q) {
+  drawCellFrame(q.x, q.y, q.w, q.h, 2, S.theme.selTextColor);
+}
+
+/** Grid branch of drawItemsList — see patches/opl-tile-grid.patch. */
+function drawItemsListGrid(el, posX, posY) {
+  const ex = el.extended;
+  const labelH = ex.showText ? MENU_ITEM_HEIGHT : 0;
+  const artW = ex.cellWidth - ex.gap, artH = ex.cellHeight - ex.gap - labelH;
+  el._cells = [];
+  if (artW < 1 || artH < 1) return { x:posX, y:posY, w:el.width, h:el.height };
+
+  for (let n = 0; n < ex.displayedItems; n++) {
+    const g = GAMES[S.pageStart + n];
+    if (!g) break;
+    const cx = posX + (n % ex.columns) * ex.cellWidth;
+    const cy = posY + Math.floor(n / ex.columns) * ex.cellHeight;
+    const selected = (S.pageStart + n === S.gameIndex);
+    const q = setupQuad(cx, cy, ALIGN_NONE, artW, artH, el.scaled, S.aspect);
+
+    if (ex.decoratorImage) {
+      const img = gameArt(g.serial, ex.decoratorImage.extended.pattern)
+               || themeImage(ex.decoratorImage.extended.defaultTexture);
+      if (img && img.complete && img.naturalWidth) ctx.drawImage(img, q.x, q.y, q.w, q.h);
+      else drawStub(q, ex.decoratorImage.extended.pattern || "");
+    }
+    if (selected && ex.frameSize > 0)
+      drawCellFrame(q.x, q.y, q.w, q.h, ex.frameSize, S.theme.selTextColor);
+    if (ex.showText)
+      renderString(el, cx, cy + artH, ALIGN_NONE, artW, MENU_ITEM_HEIGHT, g.title,
+                   selected ? S.theme.selTextColor : el.color);
+
+    el._cells.push({ x:q.x, y:cy, w:q.w, h:ex.cellHeight, index:S.pageStart + n });
+  }
+  return { x:posX, y:posY, w:el.width, h:el.height };
+}
+
 /** drawItemsList (themes.c:840) — §5.2, including the decorator/text mismatch. */
 function drawItemsList(el) {
   const ex = el.extended;
@@ -1514,9 +1605,13 @@ function drawItemsList(el) {
   if (S.gameIndex < S.pageStart) S.pageStart = S.gameIndex;
   if (S.gameIndex >= S.pageStart + n) S.pageStart = S.gameIndex - n + 1;
   S.pageStart = Math.max(0, Math.min(S.pageStart, Math.max(0, GAMES.length - n)));
+  // The patch scrolls a grid by whole rows, so the page start stays aligned.
+  if (ex.columns > 1) S.pageStart -= S.pageStart % ex.columns;
 
   let posX = el.posX, posY = el.posY;
   if (el.aligned) { posX -= el.width >> 1; posY -= el.height >> 1; }
+  if (ex.columns > 1) return drawItemsListGrid(el, posX, posY);
+  el._cells = null;
   const top = posY;
 
   for (let i = 0; i < n; i++) {
@@ -1706,7 +1801,10 @@ cOverlay.addEventListener("pointerdown", ev => {
     const hit = hitTest(pt);
     if (hit !== S.sel) select(hit);
     if (!S.sel) return;
-    if (S.sel.internal === "ItemsList" && S.sel._rows) {
+    if (S.sel.internal === "ItemsList" && S.sel._cells) {
+      const cell = S.sel._cells.find(c => pt.x >= c.x && pt.x <= c.x + c.w && pt.y >= c.y && pt.y <= c.y + c.h);
+      if (cell) { S.gameIndex = cell.index; renderGames(); render(); }
+    } else if (S.sel.internal === "ItemsList" && S.sel._rows) {
       const row = Math.floor((pt.y - S.sel._rows.top) / MENU_ITEM_HEIGHT);
       if (row >= 0 && row < S.sel._rows.count) { S.gameIndex = S.pageStart + row; renderGames(); render(); }
     }
