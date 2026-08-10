@@ -148,13 +148,26 @@ art/config pack you use. They carry **no labels** — `display=2` prints the val
 alone, and an empty value draws nothing at all, so absent fields leave no gap
 rather than a stranded "Genre:".
 
-### The hero and widescreen
+### The hero, and why it is 399 rows tall
 
-The hero is `scaled=1` and centred, so it keeps its shape rather than stretching.
-In 4:3 that fills the screen exactly; in 16:9 it is a centred band with the flat
-backdrop showing at the edges. Filling the width in *both* would mean distorting
-it in one — the source art has only one shape. Swap to `scaled=0` if you would
-rather have full width and accept the stretch.
+A rect cannot be undistorted in both aspects, and it is worth understanding why
+before changing it. The 640×480 buffer is stretched to fill a 16:9 screen, so a
+full-width rect *displays* 4/3 wider than it measures. For 460×215 source art to
+come out correct at full width it needs **399** rows in 16:9, but only **299** in
+4:3.
+
+`thm_GridHard` is tuned for **16:9**: the hero is `scaled=0` at `height=399`, so
+it fills the width and keeps its shape there. On a 4:3 screen it looks
+vertically stretched. One line flips it:
+
+| Target | `info1_height` |
+|---|---|
+| 16:9 | `399` (shipped) |
+| 4:3 | `299` |
+
+The content sits on an opaque band from row 300, which hides the part of the
+hero the layout doesn't need and gives the text a predictable ground — cover art
+is far too unpredictable to put text on directly.
 
 ### Screenshots
 
