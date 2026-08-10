@@ -219,3 +219,20 @@ tests/                     spec + node runner + browser runner
 
 `assets/PoeVeticaNew.ttf` is vendored from the Open-PS2-Loader tree
 (`thirdparty/`) and carries its own licence.
+
+## Putting it on a console
+
+`tools/check-art.py <ps2-dir>` first. It mounts each ISO the way OPL does —
+reading `BOOT2` out of `SYSTEM.CNF` (`supportbase.c:335`) — and checks that an
+`ART/<STARTUP>_COV.png` exists under that exact name. Filenames on disk are
+irrelevant to OPL; this is the one mismatch that silently produces a grid of
+placeholder tiles.
+
+`tools/stage-device.sh [art-dir] [out-dir]` then builds the device tree into
+`_deploy/`: the seven folders OPL creates for itself, the theme under
+`THM/thm_GridHard/`, and the art with covers downscaled to 100x150 and `_LGO`
+dropped. ISOs are not staged — they are far too large to copy twice.
+
+The patched `OPNPS2LD.ELF` is left at the root of `_deploy` rather than placed,
+because it belongs wherever your chip already boots OPL from (usually
+`mc0:/OPL/OPNPS2LD.ELF`), not on the storage device.
