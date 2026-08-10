@@ -188,7 +188,14 @@ framing the current one.
 | `frame` | `2` | Outline thickness used **only** when no caps are supplied |
 | `prev_text` / `next_text` | *(none)* | Button hints drawn at each end, e.g. `L1` / `R1` |
 | `hint_font`, `hint_color` | element's | So the hints can be smaller and dimmer than the tabs |
-| `label_bdm`, `label_eth`, `label_hdd`, `label_app` | *(none)* | Replace OPL's device names, e.g. `USB` for "USB Games" |
+| `label_usb`, `label_ilink`, `label_mx4sio`, `label_bdm`, `label_eth`, `label_hdd`, `label_app` | *(none)* | Replace OPL's device names, e.g. `USB` for "USB Games" |
+
+Labels are keyed on the device's **text id**, not its mode. `BDM_MODE0`..`BDM_MODE4`
+are connection *slots*, so a USB stick and an MX4SIO card are both BDM devices
+and a mode-keyed override would give them the same name. `bdmGetTextId`
+(`bdmsupport.c:594`) already tells them apart by driver — `usb`, `sd` (iLink),
+`sdc` (MX4SIO), `ata` (BDM ATA) — so the override follows that. `label_bdm` is
+the fallback for anything unrecognised, including device types added later.
 | `width` | `16` | Gap between tabs, not a box width |
 | `height` | `24` | Tab height, which is what the capsule encloses |
 

@@ -254,7 +254,8 @@ const TYPE_ATTRS = {
   RecentText:     ["index"],
   MenuTabs:       ["pad","frame","sel_color","sel_text_color","hint_font","hint_color",
                    "prev_text","next_text","cap_left","cap_right",
-                   "label_bdm","label_eth","label_hdd","label_app"],
+                   "label_usb","label_ilink","label_mx4sio","label_bdm",
+                   "label_eth","label_hdd","label_app"],
   MenuIcon:[], MenuText:[], ItemText:[], HintText:[], InfoHintText:[], LoadingIcon:[], BdmIndex:[],
 };
 // Attributes added by patches/opl-tile-grid.patch. Stock OPL ignores them
@@ -263,7 +264,8 @@ const TYPE_ATTRS = {
 const PATCHED_ATTRS = new Set(["offset","columns","cell_width","cell_height","gap","text","frame",
                                "label_height","index","pad","sel_color","sel_text_color","hint_font",
                                "hint_color","prev_text","next_text","cap_left","cap_right",
-                               "label_bdm","label_eth","label_hdd","label_app","prefix","suffix","x_scaled"]);
+                               "label_usb","label_ilink","label_mx4sio","label_bdm","label_eth",
+                               "label_hdd","label_app","prefix","suffix","x_scaled"]);
 // Element types that only exist in a patched build.
 const PATCHED_TYPES = new Set(["RecentImage","RecentText","MenuTabs"]);
 
@@ -784,8 +786,10 @@ function addGUIElem(doc, name, theme, chain, diags) {
         nextText: getStr(doc, name + "_next_text"),
         capLeft: getStr(doc, name + "_cap_left"),
         capRight: getStr(doc, name + "_cap_right"),
-        labels: { bdm:getStr(doc, name + "_label_bdm"), eth:getStr(doc, name + "_label_eth"),
-                  hdd:getStr(doc, name + "_label_hdd"), app:getStr(doc, name + "_label_app") },
+        labels: { usb:getStr(doc, name + "_label_usb"), ilink:getStr(doc, name + "_label_ilink"),
+                  mx4sio:getStr(doc, name + "_label_mx4sio"), bdm:getStr(doc, name + "_label_bdm"),
+                  eth:getStr(doc, name + "_label_eth"), hdd:getStr(doc, name + "_label_hdd"),
+                  app:getStr(doc, name + "_label_app") },
       };
       break;
     }
@@ -1310,12 +1314,14 @@ function gameArt(serial, pattern) {
  */
 // OPL builds one menu entry per connected device (opl.c:216); the theme renders
 // whichever is selected. Names come from the English string table.
+// kind matches OPL's text id, not its mode: BDM_MODE0..4 are connection slots,
+// so a USB stick and an MX4SIO card are both BDM but name themselves apart.
 const DEVICES = [
-  { name:"USB Games", kind:"bdm" },
-  { name:"HDD Games", kind:"hdd" },
-  { name:"ETH Games", kind:"eth" },
-  { name:"SD Games",  kind:"bdm" },
-  { name:"Apps",      kind:"app" },
+  { name:"USB Games",    kind:"usb" },
+  { name:"MX4SIO Games", kind:"mx4sio" },
+  { name:"HDD Games",    kind:"hdd" },
+  { name:"NET Games",    kind:"eth" },
+  { name:"Apps",         kind:"app" },
 ];
 const deviceName = i => DEVICES[i].name;
 

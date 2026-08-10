@@ -113,6 +113,11 @@ just know that you also lose the only on-screen cue that L2/R2 change the source
 | START | OPL menu |
 | SELECT | refresh the list |
 
+Every device OPL can see gets a tab, including an **MX4SIO / SIO2SD microSD card
+in the memory card slot** — that is a BDM device (`sdc` driver) and needs nothing
+special from the theme. Labels are set per device type, so USB and SD read
+differently rather than sharing one name.
+
 `thm_GridHard` shows the devices as a **centred tab strip** rather than one name
 with arrows: every connected device is on screen, the current one framed in
 white, with `L1` and `R1` glyphs at each end marking the buttons that move

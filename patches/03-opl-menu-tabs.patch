@@ -1,5 +1,5 @@
 diff --git a/include/themes.h b/include/themes.h
-index 9cd64d9..82ad279 100644
+index 9cd64d9..308f807 100644
 --- a/include/themes.h
 +++ b/include/themes.h
 @@ -62,6 +62,11 @@ typedef struct
@@ -14,7 +14,7 @@ index 9cd64d9..82ad279 100644
      // Attributes for: AttributeText
      char *alias;
      int displayMode;
-@@ -70,6 +75,33 @@ typedef struct
+@@ -70,6 +75,39 @@ typedef struct
      char *currentValue;
  } mutable_text_t;
  
@@ -38,7 +38,13 @@ index 9cd64d9..82ad279 100644
 +    image_texture_t *capRight;
 +
 +    /* Per-device label overrides, so a theme can say "USB" where OPL's string
-+     * table says "USB Games". NULL falls back to the localised name. */
++     * table says "USB Games". Keyed on the device's own text id rather than its
++     * mode, because BDM_MODE0..4 are connection slots -- a USB stick and an
++     * MX4SIO card are both BDM devices and would otherwise share one label.
++     * NULL falls back to the localised name. */
++    char *labelUsb;
++    char *labelIlink;
++    char *labelMx4sio;
 +    char *labelBdm;
 +    char *labelEth;
 +    char *labelHdd;
@@ -48,7 +54,7 @@ index 9cd64d9..82ad279 100644
  typedef struct
  {
      int displayedItems;
-@@ -92,6 +124,12 @@ typedef struct theme_element
+@@ -92,6 +130,12 @@ typedef struct theme_element
      int type;
      int posX;
      int posY;
@@ -88,7 +94,7 @@ index 0d959ba..064dc8d 100644
          elem = elem->next;
      }
 diff --git a/src/themes.c b/src/themes.c
-index 65713ef..11f0645 100644
+index 65713ef..5538091 100644
 --- a/src/themes.c
 +++ b/src/themes.c
 @@ -50,6 +50,7 @@ enum ELEM_ATTRIBUTE_TYPE {
@@ -174,7 +180,7 @@ index 65713ef..11f0645 100644
      elem->font = font;
      snprintf(elemProp, sizeof(elemProp), "%s_font", name);
      if (configGetInt(themeConfig, elemProp, &intValue)) {
-@@ -851,6 +881,231 @@ static void drawMenuText(struct menu_list *menu, struct submenu_list *item, conf
+@@ -851,6 +881,253 @@ static void drawMenuText(struct menu_list *menu, struct submenu_list *item, conf
      fntRenderString(elem->font, elem->posX, elem->posY, elem->aligned, 0, 0, menuItemGetText(menu->item), elem->color);
  }
  
@@ -205,20 +211,36 @@ index 65713ef..11f0645 100644
 +/// Theme override for a device's name, else OPL's localised one.
 +static const char *menuTabLabel(menu_tabs_t *tabs, struct menu_item *item)
 +{
-+    item_list_t *list = (item_list_t *)item->userdata;
++    const char *label = NULL;
 +
-+    if (list) {
-+        if (list->mode == ETH_MODE && tabs->labelEth)
-+            return tabs->labelEth;
-+        if (list->mode == HDD_MODE && tabs->labelHdd)
-+            return tabs->labelHdd;
-+        if (list->mode == APP_MODE && tabs->labelApp)
-+            return tabs->labelApp;
-+        if (list->mode < ETH_MODE && tabs->labelBdm)
-+            return tabs->labelBdm;
++    /* text_id already distinguishes the mass-storage devices from one another,
++     * which the mode does not: BDM_MODE0..4 are connection slots, so a USB
++     * stick and an MX4SIO card would otherwise be given the same name. */
++    switch (item->text_id) {
++        case _STR_USB_GAMES:
++            label = tabs->labelUsb;
++            break;
++        case _STR_ILINK_GAMES:
++            label = tabs->labelIlink;
++            break;
++        case _STR_MX4SIO_GAMES:
++            label = tabs->labelMx4sio;
++            break;
++        case _STR_HDD_GAMES:
++            label = tabs->labelHdd;
++            break;
++        case _STR_NET_GAMES:
++            label = tabs->labelEth;
++            break;
++        case _STR_APPS:
++            label = tabs->labelApp;
++            break;
++        default: // _STR_BDM_GAMES, and any device type added later
++            label = tabs->labelBdm;
++            break;
 +    }
 +
-+    return menuItemGetText(item);
++    return label ? label : menuItemGetText(item);
 +}
 +
 +/// Width of a string in virtual units, for the given font slot.
@@ -345,6 +367,9 @@ index 65713ef..11f0645 100644
 +    tabs->nextText = NULL;
 +    tabs->capLeft = NULL;
 +    tabs->capRight = NULL;
++    tabs->labelUsb = NULL;
++    tabs->labelIlink = NULL;
++    tabs->labelMx4sio = NULL;
 +    tabs->labelBdm = NULL;
 +    tabs->labelEth = NULL;
 +    tabs->labelHdd = NULL;
@@ -383,6 +408,9 @@ index 65713ef..11f0645 100644
 +
 +    tabs->prevText = themeStrDup(themeConfig, name, "prev_text");
 +    tabs->nextText = themeStrDup(themeConfig, name, "next_text");
++    tabs->labelUsb = themeStrDup(themeConfig, name, "label_usb");
++    tabs->labelIlink = themeStrDup(themeConfig, name, "label_ilink");
++    tabs->labelMx4sio = themeStrDup(themeConfig, name, "label_mx4sio");
 +    tabs->labelBdm = themeStrDup(themeConfig, name, "label_bdm");
 +    tabs->labelEth = themeStrDup(themeConfig, name, "label_eth");
 +    tabs->labelHdd = themeStrDup(themeConfig, name, "label_hdd");
@@ -406,7 +434,7 @@ index 65713ef..11f0645 100644
  static void drawBDMIndex(struct menu_list *menu, struct submenu_list *item, config_set_t *config, struct theme_element *elem)
  {
      item_list_t *itemList = menu->item->userdata;
-@@ -1319,6 +1574,9 @@ static int addGUIElem(const char *themePath, config_set_t *themeConfig, theme_t
+@@ -1319,6 +1596,9 @@ static int addGUIElem(const char *themePath, config_set_t *themeConfig, theme_t
              } else if (!strcmp(elementsType[ELEM_TYPE_LOADING_ICON], type)) {
                  if (!theme->loadingIcon)
                      theme->loadingIcon = initBasic(themePath, themeConfig, theme, name, ELEM_TYPE_LOADING_ICON, -40, -60, ALIGN_CENTER, DIM_UNDEF, DIM_UNDEF, SCALING_RATIO, gDefaultCol, theme->fonts[0]);
