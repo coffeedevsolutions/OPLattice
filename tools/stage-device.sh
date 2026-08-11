@@ -72,14 +72,18 @@ echo "  art       $cov COV (-> ${COV_W}x${COV_H}), $bg BG, $other other, $skippe
 build=${BUILD:-MMCE}
 elf="$root/patches/build/OPNPS2LD-$build.ELF"
 [ -f "$elf" ] || { echo "no such build: $elf" >&2; exit 1; }
-cp "$elf" "$out/OPNPS2LD.ELF"
-echo "  loader    $(du -h "$out/OPNPS2LD.ELF" | cut -f1 | tr -d ' ') ($build)"
+cp "$elf" "$out/APPS/OPNPS2LD.ELF"
+echo "  loader    $(du -h "$out/APPS/OPNPS2LD.ELF" | cut -f1 | tr -d ' ') ($build) -> APPS/"
 
 echo
 echo "size (without ISOs): $(du -sh "$out" | cut -f1 | tr -d ' ')"
 echo
 echo "still to do by hand:"
-echo "  1. copy OPNPS2LD.ELF to where your chip boots OPL from"
-echo "  2. copy the rest of $out to the root of the drive"
-echo "  3. copy your ISOs into DVD/ on the drive (CD/ only for CD-based games)"
-echo "  4. first boot: Settings -> Interface -> Theme -> GridHard, then save"
+echo "  1. copy all of $out to the root of the drive"
+echo "  2. copy your ISOs into DVD/ on the drive (CD/ only for CD-based games)"
+echo "  3. first boot: Settings -> Interface -> Theme -> GridHard, then save"
+echo
+echo "The loader goes in APPS/ on the drive, not on the memory card."
+echo "PS2BBL tries mass:/APPS/OPNPS2LD.ELF before either mc? path, so the drive"
+echo "wins on a normal boot and the card is never touched. To revert, delete"
+echo "that one file and the next boot falls through to the card as before."
