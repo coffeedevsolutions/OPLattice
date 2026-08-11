@@ -272,3 +272,41 @@ of a theme need this build. Four themes in [`../themes/`](../themes/) use it.
   that interactive rather than once at boot.
 - `RecentImage` holds one cache slot per element, so four of them means four
   entries in that pattern's cache. Size `count` accordingly.
+
+## Building for the MMCE fork
+
+The theme patches were developed against mainline, but a mainline ELF has **no
+MMCE support at all** — no `MMCE_MODE`, no `mmcesupport.c`. Flashing one on an
+MMCE setup makes the memory-card SD disappear. Build from the fork instead.
+
+```bash
+git clone --depth 1 --branch OPL-MMCE-beta-2 \
+  https://github.com/ps2-mmce/Open-PS2-Loader opl-mmce
+cd opl-mmce
+python3 ../patches/04-mmce-fork-toolchain.py .
+for p in 01-opl-tile-grid 02-opl-sort-and-recent 03-opl-menu-tabs \
+         05-mmce-device-integration; do git apply --3way ../patches/$p.patch; done
+docker run --rm -v "$PWD":/src -w /src ps2dev/ps2dev:latest sh -c \
+  'apk add --no-cache make git bash python3 py3-yaml >/dev/null && \
+   git config --global --add safe.directory /src && make RELEASE=1'
+```
+
+`04` must run first. The fork branched in January 2025 and never rebased, so it
+does not compile on a current toolchain: GCC 15 defaults to C23 (where `f()`
+declares *no* parameters), gsKit's vsync callback gained an argument, and
+`iopfixup` now rejects a module whose exported stub sits at `.text` offset 0.
+Every fix in `04` is one mainline already made, and none changes behaviour.
+
+The SDK is **not** the problem — `mmceman.irx`, `mmcedrv.irx` and `mmceigr.irx`
+were upstreamed into ps2sdk and are in current images. Only the older digest
+pinned in the fork's own CI predates them, which is why building with that image
+fails on a missing `mmceman.irx`.
+
+Build serially. Under `-j` the export-table steps race and fail spuriously.
+
+Verify the result with `strings -a opl.elf` (the packed `OPNPS2LD.ELF` shows
+nothing): expect `OPL-MMCE-beta-2`, ~165 `mmce` hits, and the theme keys
+`_cell_width`, `_x_scaled`, `label_mmce`, `MenuTabs`, `RecentImage`. Also check
+`find modules -name '*.irx' -newer .git/HEAD | wc -l` equals the total — a failed
+run can leave an `.irx` from another toolchain behind and `make` will happily
+link it.

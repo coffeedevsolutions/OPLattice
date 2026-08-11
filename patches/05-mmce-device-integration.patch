@@ -1,0 +1,88 @@
+MMCE device integration, for ps2-mmce/Open-PS2-Loader.
+
+Apply after 04 and 01-03. Three things:
+
+1. oplRecentPush in mmceLaunchGame, matching the bdm/eth/hdd hooks. Without it
+   a game launched from the memory-card SD never reaches the CONTINUE band.
+
+2. A label_mmce key and an _STR_MMCE_GAMES case in menuTabLabel. Without its own
+   case an MMCE device falls through to label_bdm and reads "MASS", which is the
+   exact device-name collision patch 03 exists to prevent.
+
+3. endMenuTabs frees the strings it owns. Every label is a themeStrDup and the
+   struct was being released without them, leaking on each theme reload -- and
+   reloads happen on device insertion, not only when the theme is changed.
+
+Item 3 is a fix to patch 03 rather than anything MMCE-specific, and is bundled
+here only because it touches the same function as item 2. A mainline build from
+01-03 alone still has that leak.
+---
+--- a/include/themes.h
++++ b/include/themes.h
+@@ -102,6 +102,7 @@
+     char *labelUsb;
+     char *labelIlink;
+     char *labelMx4sio;
++    char *labelMmce;
+     char *labelBdm;
+     char *labelEth;
+     char *labelHdd;
+--- a/src/themes.c
++++ b/src/themes.c
+@@ -899,6 +899,19 @@
+             freeImageTexture(tabs->capLeft);
+         if (tabs->capRight)
+             freeImageTexture(tabs->capRight);
++
++        /* Every one of these is a themeStrDup, so the struct cannot just be
++         * released -- a theme reload happens on each device insertion too, not
++         * only when the user picks a new theme. */
++        char *owned[] = {tabs->prevText, tabs->nextText, tabs->labelUsb,
++                         tabs->labelIlink, tabs->labelMx4sio, tabs->labelMmce,
++                         tabs->labelBdm, tabs->labelEth, tabs->labelHdd,
++                         tabs->labelApp};
++        for (int i = 0; i < (int)(sizeof(owned) / sizeof(owned[0])); i++) {
++            if (owned[i])
++                free(owned[i]);
++        }
++
+         free(tabs);
+     }
+ 
+@@ -922,6 +935,9 @@
+             break;
+         case _STR_MX4SIO_GAMES:
+             label = tabs->labelMx4sio;
++            break;
++        case _STR_MMCE_GAMES:
++            label = tabs->labelMmce;
+             break;
+         case _STR_HDD_GAMES:
+             label = tabs->labelHdd;
+@@ -1067,6 +1083,7 @@
+     tabs->labelUsb = NULL;
+     tabs->labelIlink = NULL;
+     tabs->labelMx4sio = NULL;
++    tabs->labelMmce = NULL;
+     tabs->labelBdm = NULL;
+     tabs->labelEth = NULL;
+     tabs->labelHdd = NULL;
+@@ -1108,6 +1125,7 @@
+     tabs->labelUsb = themeStrDup(themeConfig, name, "label_usb");
+     tabs->labelIlink = themeStrDup(themeConfig, name, "label_ilink");
+     tabs->labelMx4sio = themeStrDup(themeConfig, name, "label_mx4sio");
++    tabs->labelMmce = themeStrDup(themeConfig, name, "label_mmce");
+     tabs->labelBdm = themeStrDup(themeConfig, name, "label_bdm");
+     tabs->labelEth = themeStrDup(themeConfig, name, "label_eth");
+     tabs->labelHdd = themeStrDup(themeConfig, name, "label_hdd");
+--- a/src/mmcesupport.c
++++ b/src/mmcesupport.c
+@@ -302,6 +302,8 @@
+         configSetStr(configGetByType(CONFIG_LAST), "last_played", game->startup);
+         saveConfig(CONFIG_LAST, 0);
+     }
++
++    oplRecentPush(game->startup, game->name);
+ 
+     if (configGetStrCopy(configSet, CONFIG_ITEM_ALTSTARTUP, filename, sizeof(filename)) == 0)
+         strcpy(filename, game->startup);

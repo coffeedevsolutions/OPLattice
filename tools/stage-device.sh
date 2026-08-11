@@ -65,8 +65,15 @@ echo "  art       $cov COV (-> ${COV_W}x${COV_H}), $bg BG, $other other, $skippe
 # --- the loader ---------------------------------------------------------------
 # Left at the root for you to place. It goes wherever your chip already boots
 # OPL from -- usually mc0:/OPL/OPNPS2LD.ELF -- not on the device itself.
-cp "$root/patches/build/OPNPS2LD.ELF" "$out/OPNPS2LD.ELF"
-echo "  loader    $(du -h "$out/OPNPS2LD.ELF" | cut -f1 | tr -d ' ')"
+#
+# MMCE by default: a mainline build has no memory-card-SD support at all, so
+# flashing one would make that device disappear. Pass BUILD=mainline only if
+# you know you are not using MMCE.
+build=${BUILD:-MMCE}
+elf="$root/patches/build/OPNPS2LD-$build.ELF"
+[ -f "$elf" ] || { echo "no such build: $elf" >&2; exit 1; }
+cp "$elf" "$out/OPNPS2LD.ELF"
+echo "  loader    $(du -h "$out/OPNPS2LD.ELF" | cut -f1 | tr -d ' ') ($build)"
 
 echo
 echo "size (without ISOs): $(du -sh "$out" | cut -f1 | tr -d ' ')"
