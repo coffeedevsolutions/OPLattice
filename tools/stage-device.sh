@@ -49,8 +49,12 @@ for f in "$art"/*.png; do
     base=$(basename "$f")
     case "$base" in
         *_COV.png)
+            # Two copies at two resolutions. The grid keeps twelve covers
+            # resident, so its source has to stay small; the info page shows one
+            # and reads a separate pattern, so it gets the art at full size.
             cp "$f" "$out/ART/$base"
             sips -z "$COV_H" "$COV_W" "$out/ART/$base" >/dev/null
+            cp "$f" "$out/ART/${base%_COV.png}_COVHD.png"
             cov=$((cov + 1)) ;;
         *_LGO.png)
             skipped=$((skipped + 1)) ;;
@@ -60,7 +64,7 @@ for f in "$art"/*.png; do
             cp "$f" "$out/ART/$base"; other=$((other + 1)) ;;
     esac
 done
-echo "  art       $cov COV (-> ${COV_W}x${COV_H}), $bg BG, $other other, $skipped LGO skipped"
+echo "  art       $cov COV (-> ${COV_W}x${COV_H}) + $cov COVHD (full size), $bg BG, $skipped LGO skipped"
 
 # --- the loader ---------------------------------------------------------------
 # Left at the root for you to place. It goes wherever your chip already boots
