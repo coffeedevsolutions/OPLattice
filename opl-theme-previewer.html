@@ -1383,16 +1383,19 @@ function gameAttr(game, attr) {
     // No "Title" case on purpose. OPL never writes that key -- the display name
     // is CONFIG_ITEM_NAME, "#Name" -- so a theme asking for Title must come back
     // empty here too, or the previewer hides the bug instead of showing it.
-    case "genre": return "Sample genre";
-    case "release": return "20XX-XX-XX";
-    case "developer": return "Sample developer";
+    // Shaped like the real thing, not like filler. These are the longest values
+    // the generated metadata actually produces, so a box that looks roomy here
+    // is roomy on hardware, and one that clips here clips there.
+    case "genre": return "Action Adventure";
+    case "release": return "2003";
+    case "developer": return "Insomniac Games";
     case "size": return game.size;              // real, from the dump manifest
     case "description": return GAME_DESC;
     case "name": case "longname": return game.title;
     case "startup": return game.serial;
     case "media": return "DVD";
     case "format": return "ISO";
-    case "rating": return "4";
+    case "rating": return "CERO B";
     case "vmode": return "NTSC";
     case "aspect": return "4:3";
     case "scan": return "480p";
