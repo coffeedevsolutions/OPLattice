@@ -16,6 +16,13 @@ for 96 KB of VRAM.
 Also writes fade.png, a horizontal transparent-to-background ramp that covers
 the right edge of the BG so it dissolves into the page instead of ending on a
 hard line.
+
+Dark logos get a white plate baked in behind them. Roughly half this library is
+artwork drawn for a light background -- MGS2 and MGS3 measure luminance 8 and 9,
+which is invisible against a #0A0C0F page. The plate is chosen per logo from the
+mean luminance of its own ink and is only ever black or white, so the result is
+always maximum contrast rather than a colour that might or might not work. Light
+logos get nothing, because the page is already their black.
 """
 import os
 import struct
@@ -23,6 +30,8 @@ import sys
 import zlib
 
 CANVAS_W, CANVAS_H = 200, 120
+PLATE_LUMA = 128      # below mid-grey, the logo needs a light plate to read on
+PLATE_PAD = 8         # margin around the logo's ink
 FADE_W, FADE_H = 45, 180
 BG_RGB = (0x0A, 0x0C, 0x0F)
 
@@ -112,11 +121,50 @@ def box_scale(sw, sh, rows, dw, dh):
     return out
 
 
+def plate_if_dark(canvas, w, h):
+    """Composite a dark logo over a white slab so it reads on a dark page.
+
+    Only two outcomes by design: a white plate, or nothing. A sampled colour
+    could land anywhere and would sometimes be worse than the page it replaces;
+    black-or-white is always the maximum-contrast answer.
+    """
+    lum = alpha = 0.0
+    x0, y0, x1, y1 = w, h, -1, -1
+    for y in range(h):
+        row = canvas[y]
+        for x in range(w):
+            r, g, b, a = row[x*4:x*4+4]
+            if a < 24:
+                continue
+            f = a / 255
+            lum += (0.2126*r + 0.7152*g + 0.0722*b) * f
+            alpha += f
+            if x < x0: x0 = x
+            if x > x1: x1 = x
+            if y < y0: y0 = y
+            if y > y1: y1 = y
+    if alpha == 0:
+        return None
+    mean = lum / alpha
+    if mean >= PLATE_LUMA:
+        return mean                                  # light enough already
+    x0 = max(0, x0 - PLATE_PAD); y0 = max(0, y0 - PLATE_PAD)
+    x1 = min(w - 1, x1 + PLATE_PAD); y1 = min(h - 1, y1 + PLATE_PAD)
+    for y in range(y0, y1 + 1):
+        row = canvas[y]
+        for x in range(x0, x1 + 1):
+            r, g, b, a = row[x*4:x*4+4]
+            f = a / 255
+            row[x*4:x*4+4] = bytes((
+                int(r*f + 255*(1-f)), int(g*f + 255*(1-f)), int(b*f + 255*(1-f)), 255))
+    return -mean                                     # negative marks "plated"
+
+
 art = sys.argv[1] if len(sys.argv) > 1 else os.path.expanduser("~/Documents/PS2/art-out")
 out = sys.argv[2] if len(sys.argv) > 2 else "_deploy/ART"
 os.makedirs(out, exist_ok=True)
 
-n = 0
+n = plated = 0
 for fn in sorted(os.listdir(art)):
     if not fn.endswith("_LGO.png"):
         continue
@@ -129,9 +177,12 @@ for fn in sorted(os.listdir(art)):
     ox, oy = (CANVAS_W - tw) // 2, (CANVAS_H - th) // 2
     for y in range(th):
         canvas[oy + y][ox * 4:(ox + tw) * 4] = small[y]
+    mark = plate_if_dark(canvas, CANVAS_W, CANVAS_H)
     write_png(os.path.join(out, fn), CANVAS_W, CANVAS_H, canvas)
     n += 1
-    print(f"  {fn:<26} {sw}x{sh} -> {tw}x{th} on {CANVAS_W}x{CANVAS_H}")
+    if mark is not None and mark < 0:
+        plated += 1
+        print(f"  {fn:<26} {sw}x{sh} -> {tw}x{th}   luma {-mark:5.1f}  WHITE PLATE")
 
 # The fade. Transparent at the left so the art shows through, fully background
 # at the right so the edge of the BG dissolves rather than stopping.
@@ -147,5 +198,5 @@ for _ in range(FADE_H):
         row[x * 4:x * 4 + 4] = bytes((*BG_RGB, a))
     fade.append(row)
 write_png("themes/thm_GridHard/fade.png", FADE_W, FADE_H, fade)
-print(f"\n{n} logos on a {CANVAS_W}x{CANVAS_H} canvas -> {out}")
+print(f"\n{n} logos on a {CANVAS_W}x{CANVAS_H} canvas -> {out}; {plated} given a white plate")
 print(f"fade.png {FADE_W}x{FADE_H} -> themes/thm_GridHard/")
