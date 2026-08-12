@@ -566,8 +566,11 @@ export function specs(C, fixtures, t) {
   });
 
   t.test("VRAM peak counts one texture per tile, at source size x4", () => {
-    // 4 MB minus two 640x480 CT24 framebuffers.
-    eq(C.VRAM_FOR_TEXTURES, 4 * 1024 * 1024 - 2 * 640 * 480 * 4);
+    // 4 MB minus two 640x448 CT24 framebuffers. NTSC is 448 tall
+    // (renderman.c rm_mode_table); 480 is the virtual space the theme is
+    // authored in, and using it here understated the real texture budget by
+    // 163,840 bytes -- this assertion was pinning that mistake in place.
+    eq(C.VRAM_FOR_TEXTURES, 4 * 1024 * 1024 - 2 * 640 * 448 * 4);
     const r = withArt("main0_type=Background\nmain1_type=ItemCover\nmain1_count=12\n" +
                       "main2_type=ItemsList\nmain2_columns=6\nmain2_cell_width=88\nmain2_cell_height=137\n" +
                       "main2_height=274\nmain2_decorator=COV\n",

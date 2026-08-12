@@ -1046,7 +1046,11 @@ const PATTERN_SIZE = { COV:{w:300,h:450}, COV2:{w:300,h:450}, ICO:{w:64,h:64}, B
  * for textures. CT24 occupies a full 32-bit word per pixel in VRAM.
  */
 const VRAM_TOTAL = 4 * 1024 * 1024;
-const VRAM_FRAMEBUFFERS = 2 * 640 * 480 * 4;
+// NTSC is 640x448 (renderman.c rm_mode_table), not 640x480. The 480 here is
+// the virtual coordinate space the theme is authored in; the framebuffer that
+// actually occupies VRAM is 448 tall, so this was under-reporting the texture
+// budget by 163,840 bytes.
+const VRAM_FRAMEBUFFERS = 2 * 640 * 448 * 4;
 const VRAM_FOR_TEXTURES = VRAM_TOTAL - VRAM_FRAMEBUFFERS;   // ~1.66 MB
 
 /**
