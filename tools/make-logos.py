@@ -23,7 +23,7 @@ import sys
 import zlib
 
 CANVAS_W, CANVAS_H = 200, 120
-FADE_W, FADE_H = 90, 215
+FADE_W, FADE_H = 45, 215
 BG_RGB = (0x0A, 0x0C, 0x0F)
 
 
