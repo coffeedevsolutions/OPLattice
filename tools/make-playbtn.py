@@ -22,6 +22,7 @@ Also writes themes/thm_GridHard/playbtn.png as the fallback for any game with no
 BG art, using the theme's accent.
 """
 import colorsys
+import math
 import os
 import struct
 import sys
@@ -32,7 +33,7 @@ INK = (0x0A, 0x0C, 0x0F)      # triangle, in the page background colour
 SS = 4                        # supersample the caps and the diagonal
 ACCENT = (0xFF, 0x4D, 0x2E)   # theme accent, used when there is no BG to sample
 
-MIN_V, MIN_S = 0.78, 0.55     # floor for legibility of the dark triangle
+MIN_V, MIN_S = 0.92, 0.72     # what the sampled hue is rendered at
 
 
 def read_png(path):
@@ -81,12 +82,25 @@ def read_png(path):
     return w, h, rows
 
 
-def accent_of(path, step=2):
-    """Strongest saturated hue in the image, forced bright enough to read on."""
+def accent_of(path, step=1):
+    """Dominant hue of an image, vivified to something a button can be.
+
+    Two things this gets right that the obvious version does not.
+
+    The saturation floor is 0.15, not 0.35. Gundam's logo green is #A0E0A0 at
+    saturation 0.29 -- a pale brand colour, and the dominant one in the mark --
+    which a 0.35 floor excluded entirely, leaving a 300-pixel red detail to win.
+
+    And the winning bucket contributes its circular-mean *hue*, not a mean of
+    its RGB. Averaging colour across a bucket pulls toward grey and produced
+    muddy browns; taking the hue and then imposing a fixed saturation and value
+    keeps the colour recognisable as the game's.
+    """
     w, h, rows = read_png(path)
-    BUCKETS = 24
-    weight = [0.0] * BUCKETS
-    acc = [[0.0, 0.0, 0.0] for _ in range(BUCKETS)]
+    B = 24
+    weight = [0.0] * B
+    cx = [0.0] * B
+    cy = [0.0] * B
     for y in range(0, h, step):
         row = rows[y]
         for x in range(0, w, step):
@@ -94,20 +108,19 @@ def accent_of(path, step=2):
             if a < 128:
                 continue
             hh, ss, vv = colorsys.rgb_to_hsv(r/255, g/255, b/255)
-            if ss < 0.35 or vv < 0.25:      # washed out or nearly black
+            if ss < 0.15 or vv < 0.22:      # grey, black or white carries no hue
                 continue
-            k = min(BUCKETS - 1, int(hh * BUCKETS))
+            k = min(B - 1, int(hh * B))
             wgt = ss * vv
             weight[k] += wgt
-            acc[k][0] += r * wgt; acc[k][1] += g * wgt; acc[k][2] += b * wgt
-    k = max(range(BUCKETS), key=lambda i: weight[i])
-    if weight[k] <= 0:
-        return ACCENT, "no saturated colour"
-    r, g, b = (c / weight[k] / 255 for c in acc[k])
-    hh, ss, vv = colorsys.rgb_to_hsv(r, g, b)
-    ss, vv = max(ss, MIN_S), max(vv, MIN_V)   # keep the dark triangle legible
-    r, g, b = colorsys.hsv_to_rgb(hh, ss, vv)
-    return (round(r*255), round(g*255), round(b*255)), None
+            cx[k] += math.cos(hh * 2 * math.pi) * wgt
+            cy[k] += math.sin(hh * 2 * math.pi) * wgt
+    if sum(weight) <= 0:
+        return None
+    k = max(range(B), key=lambda i: weight[i])
+    hue = (math.atan2(cy[k], cx[k]) / (2 * math.pi)) % 1.0
+    r, g, b = colorsys.hsv_to_rgb(hue, MIN_S, MIN_V)
+    return (round(r*255), round(g*255), round(b*255))
 
 
 def draw(path, fill):
@@ -150,10 +163,18 @@ for fn in sorted(os.listdir(art)):
     if not fn.endswith("_BG.png"):
         continue
     serial = fn[:-7]
-    fill, why = accent_of(os.path.join(art, fn))
+    src = "LGO"
+    fill = None
+    lgo = os.path.join(art, f"{serial}_LGO.png")
+    if os.path.exists(lgo):
+        fill = accent_of(lgo)
+    if fill is None:
+        fill, src = accent_of(os.path.join(art, fn)), "BG"
+    if fill is None:
+        fill, src = ACCENT, "theme accent"
     draw(os.path.join(art, f"{serial}_BTN.png"), fill)
     made += 1
-    print(f"  {serial:<14} #{fill[0]:02X}{fill[1]:02X}{fill[2]:02X}" + (f"  ({why})" if why else ""))
+    print(f"  {serial:<14} #{fill[0]:02X}{fill[1]:02X}{fill[2]:02X}  from {src}")
 
 draw("themes/thm_GridHard/playbtn.png", ACCENT)
 print(f"\n{made} per-game buttons, plus the theme fallback at #{ACCENT[0]:02X}{ACCENT[1]:02X}{ACCENT[2]:02X}")
