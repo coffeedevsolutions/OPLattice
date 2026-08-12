@@ -1380,13 +1380,16 @@ function gameList() {
 function gameAttr(game, attr) {
   const key = attr.replace(/^#/, "").toLowerCase();
   switch (key) {
-    case "title": return game.title;
+    // No "Title" case on purpose. OPL never writes that key -- the display name
+    // is CONFIG_ITEM_NAME, "#Name" -- so a theme asking for Title must come back
+    // empty here too, or the previewer hides the bug instead of showing it.
     case "genre": return "Sample genre";
     case "release": return "20XX-XX-XX";
     case "developer": return "Sample developer";
     case "size": return game.size;              // real, from the dump manifest
     case "description": return GAME_DESC;
-    case "startup": case "name": return game.serial;
+    case "name": case "longname": return game.title;
+    case "startup": return game.serial;
     case "media": return "DVD";
     case "format": return "ISO";
     case "rating": return "4";
@@ -1608,7 +1611,11 @@ function drawPlasma(color) {
 const themeImage = name => name ? S.images.get(lower(name + ".png")) || null : null;
 
 function drawElement(el) {
-  const game = gameList()[S.gameIndex];
+  // Clamp: the list length changes with the device and sort mode, so a stale
+  // index from a longer list would otherwise crash every draw.
+  const _games = gameList();
+  if (_games.length) S.gameIndex = Math.min(Math.max(S.gameIndex, 0), _games.length - 1);
+  const game = _games[S.gameIndex];
   const ex = el.extended || {};
   let q = null;
   // GameCountText and ItemIcon/ItemCover are registered under another internal

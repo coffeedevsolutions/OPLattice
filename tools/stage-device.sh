@@ -57,6 +57,9 @@ for f in "$art"/*.png; do
             cp "$f" "$out/ART/${base%_COV.png}_COVHD.png"
             cov=$((cov + 1)) ;;
         *_LGO.png)
+            # Not copied as-is. tools/make-logos.py rewrites these onto one
+            # 200x120 canvas, because the sources run 49 to 440 tall and a fixed
+            # element size would squash them. Run it after this script.
             skipped=$((skipped + 1)) ;;
         *_BG.png)
             cp "$f" "$out/ART/$base"; bg=$((bg + 1)) ;;
