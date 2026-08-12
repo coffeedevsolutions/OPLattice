@@ -23,7 +23,7 @@ import sys
 import zlib
 
 CANVAS_W, CANVAS_H = 200, 120
-FADE_W, FADE_H = 160, 215
+FADE_W, FADE_H = 90, 215
 BG_RGB = (0x0A, 0x0C, 0x0F)
 
 
@@ -140,7 +140,10 @@ for _ in range(FADE_H):
     row = bytearray(FADE_W * 4)
     for x in range(FADE_W):
         t = x / (FADE_W - 1)
-        a = int(255 * (t * t * (3 - 2 * t)))       # smoothstep, no visible banding edge
+        # Ease-in, not smoothstep. Smoothstep is already half-opaque at the
+        # midpoint, which ate the right third of the art; this stays near
+        # transparent across most of the ramp and only closes up at the edge.
+        a = int(255 * (t ** 2.2))
         row[x * 4:x * 4 + 4] = bytes((*BG_RGB, a))
     fade.append(row)
 write_png("themes/thm_GridHard/fade.png", FADE_W, FADE_H, fade)
