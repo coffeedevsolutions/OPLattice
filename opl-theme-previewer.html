@@ -256,7 +256,7 @@ const TYPE_ATTRS = {
                    "prev_text","next_text","cap_left","cap_right",
                    "label_usb","label_ilink","label_mx4sio","label_bdm",
                    "label_eth","label_hdd","label_app"],
-  MenuIcon:[], MenuText:[], ItemText:[], HintText:[], InfoHintText:[], LoadingIcon:[], BdmIndex:[],
+  MenuIcon:[], MenuText:[], ItemText:[], HintText:[], InfoHintText:["show_run"], LoadingIcon:[], BdmIndex:[],
 };
 // Attributes added by patches/opl-tile-grid.patch. Stock OPL ignores them
 // silently, so the previewer names them rather than letting a theme look right
@@ -571,6 +571,8 @@ function initBasic(doc, name, typeName, def, theme, diags) {
   }
 
   el.xScaled = atoi(getStr(doc, name + "_x_scaled") || "0") !== 0;
+  // InfoHintText only, patch 06. Defaults on, so an unpatched theme is unchanged.
+  el.showRun = atoi(getStr(doc, name + "_show_run") ?? "1") !== 0;
 
   el.font = 0;
   const sf = getStr(doc, name + "_font");
@@ -1711,7 +1713,12 @@ function drawElement(el) {
       q = drawHints(el, hints);
       break;
     }
-    case "InfoHintText": q = drawHints(el, [["circle","Run"],["cross","Back"]]); break;
+    case "InfoHintText":
+      // show_run=0 needs patch 06. Back is never hidden -- it is the only way
+      // off the info screen, and the patch refuses to drop it either.
+      q = drawHints(el, el.showRun === false ? [["cross","Back"]]
+                                             : [["circle","Run"],["cross","Back"]]);
+      break;
     case "LoadingIcon": q = stubQuad(el, "busy", 32, 32); break;
     default: q = stubQuad(el, el.typeName);
   }
