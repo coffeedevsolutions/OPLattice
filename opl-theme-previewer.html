@@ -1436,7 +1436,13 @@ const glyphCache = new Map();
  * with a pasted cfg, honour the declared size so the layout stays useful.
  */
 function fontSpec(el) {
-  const slot = el ? el.font : 0;
+  // Accepts an element or a bare slot number. It used to take only an element,
+  // and a number fell through `el.font` as undefined to the default font --
+  // silently measuring 17px PoeVetica where the caller meant a 10px theme slot.
+  // Anything that reports the wrong font quietly is worse than one that throws,
+  // because measurements taken with it agree with each other and with nothing
+  // that is actually drawn.
+  const slot = typeof el === "number" ? el : (el ? el.font : 0);
   const fonts = (S.theme && S.theme.fonts) || {};
   const size = s => (fonts[s] && fonts[s].size) || FNT_DEFAULT_SIZE;
   const loaded = s => { const fam = S.themeFonts.get(s); return fam ? { size: size(s), family: fam } : null; };

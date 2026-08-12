@@ -13,6 +13,48 @@ export function specs(C, fixtures, t) {
   const { eq, ok, deepEq, throws } = t;
   const P = C.parseConfig, W = C.writeConfig;
 
+  /* ------------------------------------------------- 0. measurement contract */
+
+  t.group("fontSpec: a slot resolves the same either way");
+
+  // This exists because it silently did not. fontSpec read `el.font`, so a bare
+  // slot number became undefined and fell through to the default face -- it
+  // answered 17px PoeVetica where the caller meant a 10px theme slot. Every
+  // width measured through it came out ~1.6x too wide, and since the check used
+  // the same call, the numbers agreed with each other and with nothing that was
+  // actually drawn on the canvas. A wrong answer returned quietly is worse than
+  // a thrown one, so this pins both call forms to the same result.
+  const previewerSrc = fixtures["opl-theme-previewer.html"];
+
+  const loadFontSpec = () => {
+    const src = previewerSrc.match(/^function fontSpec\(el\) \{[\s\S]*?^\}/m);
+    if (!src) throw new Error("fontSpec not found in the previewer");
+    const S = {
+      theme: { fonts: { 0: { size: 17 }, 3: { size: 10, file: "NotoSans-Bold.ttf" } } },
+      themeFonts: new Map([[0, "ThemeFont0"], [3, "ThemeFont3"]]),
+      files: new Map([["notosans-bold.ttf", {}]]),
+    };
+    return new Function("S", "FNT_DEFAULT_SIZE", "FONT_FAMILY",
+      src[0] + "\nreturn fontSpec;")(S, 17, "OPLPoeVetica");
+  };
+
+  t.test("slot number and element agree", () => {
+    const fontSpec = loadFontSpec();
+    deepEq(fontSpec(3), fontSpec({ font: 3 }), "fontSpec(3) === fontSpec({font:3})");
+  });
+
+  t.test("a theme slot does not fall back to the default face", () => {
+    const fontSpec = loadFontSpec();
+    eq(fontSpec(3).size, 10, "slot 3 is the theme's 10px face");
+    eq(fontSpec(3).family, "ThemeFont3", "slot 3 uses the theme family");
+  });
+
+  t.test("slot 0 and no argument still give the default", () => {
+    const fontSpec = loadFontSpec();
+    eq(fontSpec(0).size, 17, "slot 0 size");
+    eq(fontSpec(undefined).size, 17, "undefined falls back to slot 0");
+  });
+
   /* ------------------------------------------------------------ 1. parsing */
 
   t.group("parse: flat and prefix forms");
@@ -650,3 +692,4 @@ export function specs(C, fixtures, t) {
        "no errors: " + th.diags.filter(x => x.severity === "error").map(x => x.code).join(","));
   });
 }
+

@@ -28,6 +28,7 @@ const FIXTURE_FILES = [
   "fixtures/midrange/conf_theme.cfg",
   "fixtures/broken/conf_theme.cfg",
   "docs/reference-conf_theme_OPL.cfg",
+  "opl-theme-previewer.html",
 ];
 const fixtures = Object.fromEntries(FIXTURE_FILES.map(f => [f, readFileSync(join(ROOT, f), "utf8")]));
 
