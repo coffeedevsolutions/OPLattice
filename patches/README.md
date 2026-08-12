@@ -310,3 +310,30 @@ nothing): expect `OPL-MMCE-beta-2`, ~165 `mmce` hits, and the theme keys
 `find modules -name '*.irx' -newer .git/HEAD | wc -l` equals the total — a failed
 run can leave an `.irx` from another toolchain behind and `make` will happily
 link it.
+
+## 06 — `show_run` on InfoHintText
+
+`drawInfoHintText` hardcoded `int infoHints[2] = {_STR_RUN, _STR_BACK}` and drew
+both, so a theme could position and colour the hint bar but not choose what it
+said. A theme that draws its own launch affordance ended up telling the user to
+press the same button twice, once in its own words and once in OPL's.
+
+| key | default | effect |
+|---|---|---|
+| `<n>_show_run` | `1` | `0` draws only the Back hint |
+
+Back is deliberately not hideable. It is the only way off the info screen, and a
+theme should not be able to strand someone there.
+
+## In-game screenshots
+
+This build compiles with `IGS=1`, which was already in the tree and switched off
+— `ee_core/src/igs_api.c`, GPL, from maximus32 and doctorxyz. It depends on GSM
+and IGR, both of which are present.
+
+Press **D-pad Up** in a game with GSM enabled for that title and it downloads the
+framebuffer to `mc1:/<GAMEID>_GS(nnn).bmp`.
+
+Nothing in OPL reads those back — they are BMPs, on the memory card, under a name
+the theme engine never looks for. `tools/import-igs.py` closes that gap, turning
+them into the `<SERIAL>_SCR.png` and `_SCR2.png` the info page expects.
