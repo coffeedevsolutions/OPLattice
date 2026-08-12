@@ -3,6 +3,8 @@
 
     tools/make-playbtn.py [art-dir]        # default _deploy/ART
 
+Icon and label sit left-aligned inside the capsule, clear of the cap curve.
+
 OPL cannot derive a colour at runtime -- element colours are static hex in the
 theme and nothing samples a texture. So a button that picks up each game's
 palette has to be per-game art, generated here and read through its own pattern:
@@ -121,7 +123,7 @@ def draw(path, fill):
                     cx = min(max(x, r_cap), W - r_cap)
                     if (x - cx) ** 2 + (y - H/2) ** 2 <= r_cap * r_cap:
                         inp += 1
-                    tx, th = 40.0, 11.0
+                    tx, th = 16.0, 11.0
                     if tx <= x <= tx + th * .9 and abs(y - H/2) <= (th/2) * (1 - (x - tx) / (th * .9)):
                         intri += 1
             n = SS * SS
