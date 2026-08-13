@@ -16,13 +16,14 @@ index ff7d8ec..46d9da7 100644
  // Network config keys
  #define CONFIG_NET_ETH_LINKM          "eth_linkmode"
 diff --git a/include/dialogs.h b/include/dialogs.h
-index 64c613b..66a805e 100644
+index 64c613b..a0699e9 100644
 --- a/include/dialogs.h
 +++ b/include/dialogs.h
-@@ -52,6 +52,7 @@ enum UI_ITEMS {
+@@ -52,6 +52,8 @@ enum UI_ITEMS {
      CFG_AUTOSTARTLAST,
      CFG_SELECTBUTTON,
      CFG_ENWRITEOP,
++    CFG_LBL_PLAYSTATS,
 +    CFG_PLAYSTATS,
      CFG_BDMPREFIX,
      CFG_ETHPREFIX,
@@ -55,7 +56,7 @@ index 770f0d8..f34ab4c 100644
      if (configGetStrCopy(configSet, CONFIG_ITEM_ALTSTARTUP, filename, sizeof(filename)) == 0)
          strcpy(filename, game->startup);
 diff --git a/src/dialogs.c b/src/dialogs.c
-index b9671e6..6cdaf29 100644
+index b9671e6..e7552f7 100644
 --- a/src/dialogs.c
 +++ b/src/dialogs.c
 @@ -197,6 +197,15 @@ struct UIItem diaConfig[] = {
@@ -66,7 +67,7 @@ index b9671e6..6cdaf29 100644
 +     * hidden rather than greyed when that is off -- dia has no disabled state.
 +     * Literal label: adding a localised string would mean regenerating every
 +     * language file for a feature that is still a minimal core. */
-+    {UI_LABEL, 0, 1, 1, -1, -40, 0, {.label = {"Play Stats", -1}}},
++    {UI_LABEL, CFG_LBL_PLAYSTATS, 1, 1, -1, -40, 0, {.label = {"Play Stats", -1}}},
 +    {UI_SPACER},
 +    {UI_BOOL, CFG_PLAYSTATS, 1, 1, -1, 0, 0, {.intvalue = {0, 0}}},
 +    {UI_BREAK},
@@ -87,19 +88,38 @@ index 4330f1e..88a442e 100644
      compatmask = sbPrepare(game, configSet, size_smb_cdvdman_irx, smb_cdvdman_irx, &i);
  
 diff --git a/src/gui.c b/src/gui.c
-index 5393a55..474a37a 100644
+index 5393a55..e82bd2c 100644
 --- a/src/gui.c
 +++ b/src/gui.c
-@@ -530,6 +530,8 @@ void guiShowConfig()
+@@ -459,6 +459,17 @@ static int guiUpdater(int modified)
+     int showAutoStartLast;
+ 
+     if (modified) {
++        int writeOps;
++
++        /* Play stats cannot function without write operations, and a toggle
++         * reading On while doing nothing is worse than one that is absent.
++         * Hidden rather than greyed because dia has no disabled state -- the
++         * same treatment AUTOSTARTLAST gets below. The stored value is left
++         * alone, so re-enabling write operations restores the preference. */
++        diaGetInt(diaConfig, CFG_ENWRITEOP, &writeOps);
++        diaSetVisible(diaConfig, CFG_LBL_PLAYSTATS, writeOps);
++        diaSetVisible(diaConfig, CFG_PLAYSTATS, writeOps);
++
+         diaGetInt(diaConfig, CFG_LASTPLAYED, &showAutoStartLast);
+         diaSetVisible(diaConfig, CFG_LBL_AUTOSTARTLAST, showAutoStartLast);
+         diaSetVisible(diaConfig, CFG_AUTOSTARTLAST, showAutoStartLast);
+@@ -530,6 +541,9 @@ void guiShowConfig()
      diaSetInt(diaConfig, CFG_HDDSPINDOWN, gHDDSpindown);
      diaSetString(diaConfig, CFG_BDMPREFIX, gBDMPrefix);
      diaSetString(diaConfig, CFG_ETHPREFIX, gETHPrefix);
 +    diaSetInt(diaConfig, CFG_PLAYSTATS, gEnablePlayStats);
++    diaSetVisible(diaConfig, CFG_LBL_PLAYSTATS, gEnableWrite);
 +    diaSetVisible(diaConfig, CFG_PLAYSTATS, gEnableWrite);
      diaSetInt(diaConfig, CFG_LASTPLAYED, gRememberLastPlayed);
      diaSetInt(diaConfig, CFG_AUTOSTARTLAST, gAutoStartLastPlayed);
      diaSetVisible(diaConfig, CFG_AUTOSTARTLAST, gRememberLastPlayed);
-@@ -551,6 +553,7 @@ void guiShowConfig()
+@@ -551,6 +565,7 @@ void guiShowConfig()
          diaGetInt(diaConfig, CFG_HDDGAMELISTCACHE, &gHDDGameListCache);
          diaGetString(diaConfig, CFG_EXITTO, gExitPath, sizeof(gExitPath));
          diaGetInt(diaConfig, CFG_ENWRITEOP, &gEnableWrite);

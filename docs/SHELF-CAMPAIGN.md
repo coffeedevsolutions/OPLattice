@@ -80,6 +80,17 @@ inherit the offset and can be a day out either side of midnight — a known limi
 of the minimal core, to be resolved by the full clock feature which will own the
 timezone properly.
 
+**Write Operations dependency.** The runtime was gated from the start — both
+`oplStatsOnLaunch` and `oplStatsOnReturn` check `gEnableWrite`, so stats have
+never been able to write with it off. The *interface* was only gated at
+dialog-open time, which left a real hole: turning write operations off inside a
+settings session left the Play Stats row visible and still reading On while
+doing nothing. `guiUpdater` now re-evaluates it on every change, hiding the row
+and its label the moment write operations goes off, matching how OPL already
+handles `LASTPLAYED -> AUTOSTARTLAST`. Hidden rather than greyed because `dia`
+has no disabled state. The stored value is preserved, so re-enabling write
+operations restores the preference.
+
 **Fold-in timing.** `oplStatsOnReturn` runs after `applyConfig`, because
 locating the game's CFG needs the device lists to exist. A game whose device is
 absent on return loses its minutes, logged — the honest outcome, since there is
