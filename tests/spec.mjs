@@ -577,7 +577,12 @@ export function specs(C, fixtures, t) {
                       { COV: { w:300, h:450 } });
     const grid = r.vram.rows.find(x => x.concurrent === 12);
     ok(grid, "the grid contributes one texture per tile");
-    eq(grid.bytes, 12 * 300 * 450 * 4);
+    // Block-aligned, not width x height x bytes. The GS allocates 256-byte
+    // blocks and gsKit rounds the block counts to a 4x8 alignment, so a
+    // 300x450 CT32 cover is 655,360 rather than the 540,000 the naive
+    // arithmetic gives -- and twelve of them 7,864,320 rather than 6,480,000.
+    eq(grid.bytes, 12 * C.gsTextureSize(300, 450, "CT32"));
+    eq(C.gsTextureSize(300, 450, "CT32"), 655360, "block alignment rounds up");
     eq(r.vram.level, "err", "12 covers at 300x450 cannot be resident at once");
   });
 

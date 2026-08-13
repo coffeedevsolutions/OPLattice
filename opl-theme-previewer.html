@@ -1058,6 +1058,40 @@ const VRAM_FOR_TEXTURES = VRAM_TOTAL - VRAM_FRAMEBUFFERS;   // ~1.66 MB
  * everything else binds one. Exceeding this does not fail cleanly — the texture
  * manager evicts and re-uploads every frame, which thrashes.
  */
+/**
+ * gsKit_texture_size (gsKit ee/gs/src/gsTexture.c), ported faithfully.
+ *
+ * The GS allocates in 256-byte blocks and gsKit rounds the block counts up to a
+ * 4x8 alignment, so a texture costs meaningfully more than width x height x
+ * bytes. A 640x448 T8 background is 327,680 rather than the 286,720 the naive
+ * arithmetic gives. Estimating from the naive figure understates every asset.
+ */
+function gsTextureSize(w, h, psm) {
+  let wb, hb;
+  switch (psm) {
+    case "CT32": case "CT24": wb = Math.ceil(w / 8);  hb = Math.ceil(h / 8);  break;
+    case "CT16": case "CT16S": wb = Math.ceil(w / 16); hb = Math.ceil(h / 8);  break;
+    case "T8":  wb = Math.ceil(w / 16); hb = Math.ceil(h / 16); break;
+    case "T4":  wb = Math.ceil(w / 32); hb = Math.ceil(h / 16); break;
+    default: throw new Error("gsTextureSize: unknown psm " + psm);
+  }
+  let wa, ha;
+  if (wb <= 2 && hb <= 1)      { wa = 1; ha = 1; }
+  else if (wb <= 2 && hb <= 2) { wa = 2; ha = 2; }
+  else if (wb <= 2 && hb <= 8) { wa = 2; ha = 8; }
+  else                         { wa = 4; ha = 8; }
+  wb = (-wa) & (wb + wa - 1);
+  hb = (-ha) & (hb + ha - 1);
+  return wb * hb * 256;
+}
+
+/** VRAM a texture occupies, palette included — gsKit allocates both as one block. */
+function textureVramCost(w, h, psm) {
+  const clut = (psm === "T8") ? gsTextureSize(16, 16, "CT32")
+             : (psm === "T4") ? gsTextureSize(8, 2, "CT32") : 0;
+  return gsTextureSize(w, h, psm) + clut;
+}
+
 function estimateVram(theme, assets) {
   // Per screen, not per theme: main and info are never drawn in the same frame,
   // so the peak is the worst single chain rather than their sum.
@@ -1081,9 +1115,12 @@ function estimateVram(theme, assets) {
 
       const measured = assets && assets.artSize && assets.artSize.get(pattern);
       const nat = measured || PATTERN_SIZE[pattern] || { w:256, h:256 };
-      const bytes = concurrent * nat.w * nat.h * 4;
+      // Indexed sources cost a quarter as much and carry a palette; the loader
+      // (textures.c:502) already handles them, so the estimate has to as well.
+      const psm = nat.psm || "CT32";
+      const bytes = concurrent * textureVramCost(nat.w, nat.h, psm);
       total += bytes;
-      rows.push({ el: el.name, pattern, concurrent, w:nat.w, h:nat.h, bytes,
+      rows.push({ el: el.name, pattern, concurrent, w:nat.w, h:nat.h, psm, bytes,
                   basis: measured ? "measured" : "assumed for this pattern — load your ART folder for a real figure" });
     }
 
@@ -1170,7 +1207,7 @@ const OPLCore = {
   INJECTED_BG, INJECTED_IL, THEME_DEFAULTS, COMMON_ATTRS, TYPE_ATTRS, REQUIRED_ATTR,
   atoi, parseColor, colorToHex, parseConfig, writeConfig, getStr, getInt, hasKey,
   setKey, deleteKey, reindex, splitKey, cloneDoc, buildTheme, validateTheme,
-  estimateMemory, estimateVram, VRAM_FOR_TEXTURES, fitString, textBaselineOffset, setupQuad, lineOf,
+  estimateMemory, estimateVram, VRAM_FOR_TEXTURES, gsTextureSize, textureVramCost, fitString, textBaselineOffset, setupQuad, lineOf,
 };
 // ===== OPL-CORE-END =====
 
@@ -1244,10 +1281,31 @@ function loadImage(name, file) {
     img.src = URL.createObjectURL(file);
   });
 }
+/** PNG colour type and bit depth, straight out of IHDR.
+ *
+ * An <img> cannot tell you whether its source was indexed, and that is exactly
+ * what decides the VRAM cost -- palette type 3 becomes T8 or T4 on the GS, a
+ * quarter the size plus a CLUT. Read the header rather than guess.
+ */
+async function pngPsm(file) {
+  try {
+    const head = new Uint8Array(await file.slice(0, 33).arrayBuffer());
+    if (head[0] !== 0x89 || head[1] !== 0x50) return "CT32";   // not a PNG
+    const depth = head[24], colorType = head[25];
+    if (colorType === 3) return depth === 4 ? "T4" : depth === 8 ? "T8" : "CT32";
+    if (colorType === 2) return "CT24";
+    return "CT32";
+  } catch { return "CT32"; }
+}
+
 function loadArt(name, file) {
   return new Promise(res => {
     const img = new Image();
-    img.onload = () => { S.art.set(lower(name.replace(/\.[^.]+$/, "")), img); res(); };
+    img.onload = async () => {
+      img._psm = await pngPsm(file);
+      S.art.set(lower(name.replace(/\.[^.]+$/, "")), img);
+      res();
+    };
     img.onerror = () => res();
     img.src = URL.createObjectURL(file);
   });
@@ -1263,7 +1321,7 @@ function assetIndex() {
     const pattern = key.split("_").pop().toUpperCase();
     const w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
     const prev = artSize.get(pattern);
-    if (!prev || w * h > prev.w * prev.h) artSize.set(pattern, { w, h });
+    if (!prev || w * h > prev.w * prev.h) artSize.set(pattern, { w, h, psm: img._psm || "CT32" });
   }
   return { names: new Set([...S.files.keys()].map(k => k.split("/").pop())), artSize };
 }
