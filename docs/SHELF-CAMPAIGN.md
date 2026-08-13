@@ -1,0 +1,49 @@
+# SHELF — campaign record
+
+Phase status and the decisions that changed the plan. Detail lives in the
+per-phase documents; this is the ledger.
+
+| phase | scope | status |
+|---|---|---|
+| 0 | Reconnaissance | **done** — [SHELF-PHASE0.md](SHELF-PHASE0.md) |
+| 0a | gsKit addendum | **done** — [SHELF-PHASE0-ADDENDUM.md](SHELF-PHASE0-ADDENDUM.md) |
+| 1 | Art dimensions, pipeline, safety fixes | **done** — [SHELF-PHASE1.md](SHELF-PHASE1.md) |
+| 2 | Play-stats data dependency | not started |
+| ~~3~~ | ~~Streaming texture manager~~ | **STRUCK** — see below |
+| 4 | Sidebar shell + page routing | not started |
+| 5 | Apps page | not started |
+| 6 | Library grid (absorbs Phase 3's remnants) | not started |
+| 7 | Home page | not started |
+| 8 | Region dual-launch | not started |
+
+Numbering is kept rather than compacted, so that references to "Phase 6" in the
+original campaign brief still mean the library grid.
+
+## Tombstone — Phase 3, streaming texture manager
+
+**Struck after the Phase 0 addendum.** The manager it proposed to build already
+exists in gsKit, and is better than the design it would have replaced.
+
+- Eviction is not LRU but a two-frame use-count predictor, which protects
+  textures whose bind count is still rising — the right instinct for a menu.
+- Texture and CLUT are allocated as one block, transferred together and evicted
+  together. The CLUT-pairing hazard the phase was designed around cannot occur.
+- The EE-RAM decoded-asset cache already exists as `texcache.c`.
+
+Building alongside it would have reimplemented a working allocator and fought it
+for the same VRAM.
+
+Four remnants, and where they went:
+
+| remnant | disposition |
+|---|---|
+| prefetch wrapper | Phase 6, where the grid consumes it |
+| debug-line accounting | Phase 6, OPL-side approximate counter. **Must be labelled approximate** — it counts binds and cannot observe gsKit's evictions. No gsKit patch. |
+| `maxSize` guard | **pulled forward into Phase 1**, shipped |
+| `themes.c:395` else branch | **Phase 1**, shipped |
+
+## Phase 1.5 — 16-bit framebuffer
+
+Parked indefinitely. Not to be implemented unless a later phase demonstrates
+texture-budget pressure. Recorded for completeness: it would halve framebuffer
+cost and raise the texture pool from 1,900,544 to 3,047,424.
