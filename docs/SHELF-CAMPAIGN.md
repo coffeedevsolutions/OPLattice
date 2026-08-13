@@ -8,7 +8,7 @@ per-phase documents; this is the ledger.
 | 0 | Reconnaissance | **done** — [SHELF-PHASE0.md](SHELF-PHASE0.md) |
 | 0a | gsKit addendum | **done** — [SHELF-PHASE0-ADDENDUM.md](SHELF-PHASE0-ADDENDUM.md) |
 | 1 | Art dimensions, pipeline, safety fixes | **done** — [SHELF-PHASE1.md](SHELF-PHASE1.md) |
-| 2 | Play-stats data dependency | not started |
+| 2 | Play-stats data dependency | **done** — minimal core, patch 08 |
 | ~~3~~ | ~~Streaming texture manager~~ | **STRUCK** — see below |
 | 4 | Sidebar shell + page routing | not started |
 | 5 | Apps page | not started |
@@ -47,3 +47,40 @@ Four remnants, and where they went:
 Parked indefinitely. Not to be implemented unless a later phase demonstrates
 texture-budget pressure. Recorded for completeness: it would halve framebuffer
 cost and raise the texture pool from 1,900,544 to 3,047,424.
+
+## Phase 2 — play-stats minimal core
+
+The sibling clock/play-stats prompt has not been run here, so this is the
+"implement minimal core" branch. Written to that prompt's conventions so a later
+full implementation supersedes it cleanly rather than colliding.
+
+| key | where | format |
+|---|---|---|
+| `LastPlayed` | game CFG | `DD-MM-YYYY` |
+| `PlayCount` | game CFG | integer, incremented at launch |
+| `Playtime` | game CFG | **raw integer minutes** |
+| `play_stats` | main config | toggle, default 0 |
+| `pending_startup`, `pending_stamp` | `CONFIG_LAST` | the in-flight session |
+
+Gated on `play_stats` **and** `gEnableWrite`; the row is hidden when write
+operations are off, since `dia` has no disabled state.
+
+**The power-off case.** A session ended with the power button leaves its record
+on disc, and the next cold boot would compute launch-to-now — including however
+long the console sat switched off. There is no way to tell that from a genuine
+marathon after the fact, so **sessions over 12 hours are discarded and logged**
+rather than recorded. A missing session is recoverable; a fabricated 40-hour one
+silently poisons a total nobody can audit. The record is cleared before the
+delta is judged, so an unresolvable one cannot be retried every boot.
+
+**Timezone.** `statsNowMinutes` reads the RTC raw, no conversion. It is only
+ever subtracted from another reading of the same clock, so a constant offset
+cancels, and JST has no daylight saving. `LastPlayed`'s *displayed* date does
+inherit the offset and can be a day out either side of midnight — a known limit
+of the minimal core, to be resolved by the full clock feature which will own the
+timezone properly.
+
+**Fold-in timing.** `oplStatsOnReturn` runs after `applyConfig`, because
+locating the game's CFG needs the device lists to exist. A game whose device is
+absent on return loses its minutes, logged — the honest outcome, since there is
+nowhere to write them.

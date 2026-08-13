@@ -1,0 +1,361 @@
+diff --git a/include/config.h b/include/config.h
+index ff7d8ec..46d9da7 100644
+--- a/include/config.h
++++ b/include/config.h
+@@ -119,6 +119,12 @@ enum CONFIG_INDEX {
+ #define CONFIG_OPL_DEFAULT_BGM_PATH     "default_bgm_path"
+ #define CONFIG_OPL_XSENSITIVITY         "x_sensitivity"
+ #define CONFIG_OPL_YSENSITIVITY         "y_sensitivity"
++#define CONFIG_OPL_PLAY_STATS           "play_stats"
++
++/* Pending-session record, in CONFIG_LAST beside last_played. RAM does not
++ * survive the game, so the launch stamp has to be on disc before we hand over. */
++#define CONFIG_LAST_PENDING_STARTUP     "pending_startup"
++#define CONFIG_LAST_PENDING_STAMP       "pending_stamp"
+ 
+ // Network config keys
+ #define CONFIG_NET_ETH_LINKM          "eth_linkmode"
+diff --git a/include/dialogs.h b/include/dialogs.h
+index 64c613b..66a805e 100644
+--- a/include/dialogs.h
++++ b/include/dialogs.h
+@@ -52,6 +52,7 @@ enum UI_ITEMS {
+     CFG_AUTOSTARTLAST,
+     CFG_SELECTBUTTON,
+     CFG_ENWRITEOP,
++    CFG_PLAYSTATS,
+     CFG_BDMPREFIX,
+     CFG_ETHPREFIX,
+     CFG_HDDSPINDOWN,
+diff --git a/include/opl.h b/include/opl.h
+index dccdc44..70d12dc 100644
+--- a/include/opl.h
++++ b/include/opl.h
+@@ -148,6 +148,10 @@ extern int gSortMode;
+ /// Most-recently-launched list, newest first. Persisted in conf_last.cfg.
+ #define OPL_RECENT_MAX 8
+ void oplRecentPush(const char *startup, const char *title);
++
++extern int gEnablePlayStats;
++void oplStatsOnLaunch(const char *startup, config_set_t *configSet);
++void oplStatsOnReturn(void);
+ void oplRecentLoad(void);
+ int oplRecentCount(void);
+ const char *oplRecentStartup(int index);
+diff --git a/src/bdmsupport.c b/src/bdmsupport.c
+index 770f0d8..f34ab4c 100644
+--- a/src/bdmsupport.c
++++ b/src/bdmsupport.c
+@@ -510,6 +510,7 @@ void bdmLaunchGame(item_list_t *itemList, int id, config_set_t *configSet)
+     }
+ 
+     oplRecentPush(game->startup, game->name);
++    oplStatsOnLaunch(game->startup, configSet);
+ 
+     if (configGetStrCopy(configSet, CONFIG_ITEM_ALTSTARTUP, filename, sizeof(filename)) == 0)
+         strcpy(filename, game->startup);
+diff --git a/src/dialogs.c b/src/dialogs.c
+index b9671e6..6cdaf29 100644
+--- a/src/dialogs.c
++++ b/src/dialogs.c
+@@ -197,6 +197,15 @@ struct UIItem diaConfig[] = {
+     {UI_BOOL, CFG_ENWRITEOP, 1, 1, -1, 0, 0, {.intvalue = {0, 0}}},
+     {UI_BREAK},
+ 
++    /* Sits under Write Operations because it cannot function without it, and is
++     * hidden rather than greyed when that is off -- dia has no disabled state.
++     * Literal label: adding a localised string would mean regenerating every
++     * language file for a feature that is still a minimal core. */
++    {UI_LABEL, 0, 1, 1, -1, -40, 0, {.label = {"Play Stats", -1}}},
++    {UI_SPACER},
++    {UI_BOOL, CFG_PLAYSTATS, 1, 1, -1, 0, 0, {.intvalue = {0, 0}}},
++    {UI_BREAK},
++
+     {UI_LABEL, 0, 1, 1, -1, -40, 0, {.label = {NULL, _STR_LASTPLAYED}}},
+     {UI_SPACER},
+     {UI_BOOL, CFG_LASTPLAYED, 1, 1, -1, 0, 0, {.intvalue = {0, 0}}},
+diff --git a/src/ethsupport.c b/src/ethsupport.c
+index 4330f1e..88a442e 100644
+--- a/src/ethsupport.c
++++ b/src/ethsupport.c
+@@ -636,6 +636,7 @@ static void ethLaunchGame(item_list_t *itemList, int id, config_set_t *configSet
+     }
+ 
+     oplRecentPush(game->startup, game->name);
++    oplStatsOnLaunch(game->startup, configSet);
+ 
+     compatmask = sbPrepare(game, configSet, size_smb_cdvdman_irx, smb_cdvdman_irx, &i);
+ 
+diff --git a/src/gui.c b/src/gui.c
+index 5393a55..474a37a 100644
+--- a/src/gui.c
++++ b/src/gui.c
+@@ -530,6 +530,8 @@ void guiShowConfig()
+     diaSetInt(diaConfig, CFG_HDDSPINDOWN, gHDDSpindown);
+     diaSetString(diaConfig, CFG_BDMPREFIX, gBDMPrefix);
+     diaSetString(diaConfig, CFG_ETHPREFIX, gETHPrefix);
++    diaSetInt(diaConfig, CFG_PLAYSTATS, gEnablePlayStats);
++    diaSetVisible(diaConfig, CFG_PLAYSTATS, gEnableWrite);
+     diaSetInt(diaConfig, CFG_LASTPLAYED, gRememberLastPlayed);
+     diaSetInt(diaConfig, CFG_AUTOSTARTLAST, gAutoStartLastPlayed);
+     diaSetVisible(diaConfig, CFG_AUTOSTARTLAST, gRememberLastPlayed);
+@@ -551,6 +553,7 @@ void guiShowConfig()
+         diaGetInt(diaConfig, CFG_HDDGAMELISTCACHE, &gHDDGameListCache);
+         diaGetString(diaConfig, CFG_EXITTO, gExitPath, sizeof(gExitPath));
+         diaGetInt(diaConfig, CFG_ENWRITEOP, &gEnableWrite);
++        diaGetInt(diaConfig, CFG_PLAYSTATS, &gEnablePlayStats);
+         diaGetInt(diaConfig, CFG_HDDSPINDOWN, &gHDDSpindown);
+         diaGetString(diaConfig, CFG_BDMPREFIX, gBDMPrefix, sizeof(gBDMPrefix));
+         diaGetString(diaConfig, CFG_ETHPREFIX, gETHPrefix, sizeof(gETHPrefix));
+diff --git a/src/hddsupport.c b/src/hddsupport.c
+index e7cd888..cc3c2d2 100644
+--- a/src/hddsupport.c
++++ b/src/hddsupport.c
+@@ -520,6 +520,7 @@ void hddLaunchGame(item_list_t *itemList, int id, config_set_t *configSet)
+     }
+ 
+     oplRecentPush(game->startup, game->name);
++    oplStatsOnLaunch(game->startup, configSet);
+ 
+     char gid[5];
+     configGetDiscIDBinary(configSet, gid);
+diff --git a/src/mmcesupport.c b/src/mmcesupport.c
+index b7308a1..5441392 100644
+--- a/src/mmcesupport.c
++++ b/src/mmcesupport.c
+@@ -304,6 +304,7 @@ void mmceLaunchGame(item_list_t *itemList, int id, config_set_t *configSet)
+     }
+ 
+     oplRecentPush(game->startup, game->name);
++    oplStatsOnLaunch(game->startup, configSet);
+ 
+     if (configGetStrCopy(configSet, CONFIG_ITEM_ALTSTARTUP, filename, sizeof(filename)) == 0)
+         strcpy(filename, game->startup);
+diff --git a/src/opl.c b/src/opl.c
+index 4389c39..4a037f6 100644
+--- a/src/opl.c
++++ b/src/opl.c
+@@ -187,6 +187,7 @@ char gBDMPrefix[32];
+ char gMMCEPrefix[32];
+ char gETHPrefix[32];
+ int gRememberLastPlayed;
++int gEnablePlayStats;
+ int KeyPressedOnce;
+ int gAutoStartLastPlayed;
+ int RemainSecs, DisableCron;
+@@ -948,6 +949,7 @@ static void _loadConfig()
+             configGetStrCopy(configOPL, CONFIG_OPL_BDM_PREFIX, gBDMPrefix, sizeof(gBDMPrefix));
+             configGetStrCopy(configOPL, CONFIG_OPL_ETH_PREFIX, gETHPrefix, sizeof(gETHPrefix));
+             configGetInt(configOPL, CONFIG_OPL_REMEMBER_LAST, &gRememberLastPlayed);
++            configGetInt(configOPL, CONFIG_OPL_PLAY_STATS, &gEnablePlayStats);
+             configGetInt(configOPL, CONFIG_OPL_AUTOSTART_LAST, &gAutoStartLastPlayed);
+             configGetInt(configOPL, CONFIG_OPL_BDM_MODE, &gBDMStartMode);
+             configGetInt(configOPL, CONFIG_OPL_HDD_MODE, &gHDDStartMode);
+@@ -1012,6 +1014,10 @@ static void _loadConfig()
+ 
+     applyConfig(themeID, langID, 0);
+ 
++    /* A pending session, if any, is resolved once the device lists exist --
++     * oplStatsFindSupport needs them to locate the game's CFG. */
++    oplStatsOnReturn();
++
+     lscret = result;
+     lscstatus = 0;
+     showCfgPopup = 1;
+@@ -1115,6 +1121,7 @@ static void _saveConfig()
+         configSetStr(configOPL, CONFIG_OPL_BDM_PREFIX, gBDMPrefix);
+         configSetStr(configOPL, CONFIG_OPL_ETH_PREFIX, gETHPrefix);
+         configSetInt(configOPL, CONFIG_OPL_REMEMBER_LAST, gRememberLastPlayed);
++        configSetInt(configOPL, CONFIG_OPL_PLAY_STATS, gEnablePlayStats);
+         configSetInt(configOPL, CONFIG_OPL_AUTOSTART_LAST, gAutoStartLastPlayed);
+         configSetInt(configOPL, CONFIG_OPL_BDM_MODE, gBDMStartMode);
+         configSetInt(configOPL, CONFIG_OPL_HDD_MODE, gHDDStartMode);
+@@ -1734,6 +1741,180 @@ void oplRecentLoad(void)
+     }
+ }
+ 
++/* ------------------------------------------------------------------ stats */
++
++/** The support driver whose list currently contains this startup id.
++ *
++ * The pending record survives on disc but the device does not: a game launched
++ * from MMCE and returned to with the card absent has nowhere to fold its
++ * minutes back into. Walking the live modules is the only honest way to find
++ * out, and finding nothing is a normal outcome rather than an error.
++ */
++static item_list_t *oplStatsFindSupport(const char *startup)
++{
++    int m, i;
++
++    for (m = 0; m < MODE_COUNT; m++) {
++        item_list_t *support = list_support[m].support;
++
++        if (!support || !support->enabled || !support->itemGetStartup)
++            continue;
++
++        for (i = support->itemGetCount(support) - 1; i >= 0; i--) {
++            char *s = support->itemGetStartup(support, i);
++            if (s && !strcmp(s, startup))
++                return support;
++        }
++    }
++
++    return NULL;
++}
++
++
++/** RTC as whole minutes, for subtraction only.
++ *
++ * The Mechacon clock is BCD (see OSDHistory.c, which does the same conversion)
++ * and reads JST on a Japanese console. No timezone conversion is applied here
++ * on purpose: this value is only ever subtracted from another reading of the
++ * same clock, and a constant offset cancels. JST has no daylight saving, so
++ * there is no discontinuity to trip over either.
++ *
++ * LastPlayed's displayed date does inherit that offset and can therefore be a
++ * day out either side of midnight. That is a known limitation of this minimal
++ * core, to be resolved by the full clock feature which will own the timezone.
++ */
++static int statsNowMinutes(void)
++{
++    sceCdCLOCK clock;
++    int y, m, d, era, yoe, doy, doe, days;
++
++    if (!sceCdReadClock(&clock))
++        return -1;
++
++    y = 2000 + btoi(clock.year);
++    m = btoi(clock.month & 0x7F);
++    d = btoi(clock.day);
++    if (m < 1 || m > 12 || d < 1 || d > 31)
++        return -1;
++
++    /* days_from_civil, Howard Hinnant's algorithm. */
++    y -= (m <= 2);
++    era = (y >= 0 ? y : y - 399) / 400;
++    yoe = y - era * 400;
++    doy = (153 * (m + (m > 2 ? -3 : 9)) + 2) / 5 + d - 1;
++    doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
++    days = era * 146097 + doe - 719468;
++
++    return days * 1440 + btoi(clock.hour) * 60 + btoi(clock.minute);
++}
++
++/** Longest session we are willing to believe, in minutes.
++ *
++ * A session ended with the power button leaves its pending record on disc, and
++ * the next cold boot computes launch-to-now -- which includes however long the
++ * console sat switched off. There is no way to tell that apart from a genuine
++ * marathon after the fact, so anything past this is discarded rather than
++ * recorded. A missing session is recoverable; a fabricated 40-hour one silently
++ * poisons a total nobody can audit.
++ */
++#define STATS_SESSION_CAP_MINUTES (12 * 60)
++
++void oplStatsOnLaunch(const char *startup, config_set_t *configSet)
++{
++    config_set_t *configLast;
++    char stamp[16];
++    int now, count = 0;
++
++    if (!gEnablePlayStats || !gEnableWrite || startup == NULL || startup[0] == '\0')
++        return;
++
++    now = statsNowMinutes();
++    if (now < 0) {
++        LOG("STATS: RTC unreadable, not recording a launch\n");
++        return;
++    }
++
++    /* Per-game keys. configWrite rewrites the whole in-memory list in order, so
++     * everything already in this file survives untouched. */
++    if (configSet) {
++        sceCdCLOCK clock;
++        char date[16];
++
++        if (sceCdReadClock(&clock)) {
++            snprintf(date, sizeof(date), "%02d-%02d-%04d",
++                     btoi(clock.day), btoi(clock.month & 0x7F), 2000 + btoi(clock.year));
++            configSetStr(configSet, "LastPlayed", date);
++        }
++        configGetInt(configSet, "PlayCount", &count);
++        configSetInt(configSet, "PlayCount", count + 1);
++        configWrite(configSet);
++    }
++
++    /* The pending record has to reach disc before the game takes the machine. */
++    configLast = configGetByType(CONFIG_LAST);
++    snprintf(stamp, sizeof(stamp), "%d", now);
++    configSetStr(configLast, CONFIG_LAST_PENDING_STARTUP, startup);
++    configSetStr(configLast, CONFIG_LAST_PENDING_STAMP, stamp);
++    saveConfig(CONFIG_LAST, 0);
++}
++
++void oplStatsOnReturn(void)
++{
++    config_set_t *configLast, *configSet;
++    const char *startup = NULL;
++    int stamp = 0, now, delta, total = 0;
++    item_list_t *support;
++    base_game_info_t game;
++
++    if (!gEnablePlayStats || !gEnableWrite)
++        return;
++
++    configLast = configGetByType(CONFIG_LAST);
++    if (!configGetStr(configLast, CONFIG_LAST_PENDING_STARTUP, &startup) || !startup || !startup[0])
++        return;
++    configGetInt(configLast, CONFIG_LAST_PENDING_STAMP, &stamp);
++
++    /* Clear it first, whatever happens next. A record that cannot be resolved
++     * must not be retried on every boot. */
++    configRemoveKey(configLast, CONFIG_LAST_PENDING_STARTUP);
++    configRemoveKey(configLast, CONFIG_LAST_PENDING_STAMP);
++    saveConfig(CONFIG_LAST, 0);
++
++    now = statsNowMinutes();
++    if (now < 0 || stamp <= 0)
++        return;
++
++    delta = now - stamp;
++    if (delta <= 0) {
++        LOG("STATS: non-positive session (%d min), discarded\n", delta);
++        return;
++    }
++    if (delta > STATS_SESSION_CAP_MINUTES) {
++        LOG("STATS: %d min exceeds the %d min cap -- probably a power-off, discarded\n",
++            delta, STATS_SESSION_CAP_MINUTES);
++        return;
++    }
++
++    memset(&game, 0, sizeof(game));
++    strncpy(game.startup, startup, GAME_STARTUP_MAX - 1);
++    support = oplStatsFindSupport(startup);
++    if (!support) {
++        LOG("STATS: no device holds %s, %d min lost\n", startup, delta);
++        return;
++    }
++
++    configSet = sbPopulateConfig(&game, support->itemGetPrefix(support), "/");
++    if (!configSet)
++        return;
++
++    configGetInt(configSet, "Playtime", &total);
++    configSetInt(configSet, "Playtime", total + delta);   /* raw minutes */
++    configWrite(configSet);
++    configFree(configSet);
++
++    LOG("STATS: %s +%d min, %d total\n", startup, delta, total + delta);
++}
++
+ void oplRecentPush(const char *startup, const char *title)
+ {
+     config_set_t *configLast = configGetByType(CONFIG_LAST);
+@@ -1847,6 +2028,7 @@ static void setDefaults(void)
+     gHDDGameListCache = 0;
+     gEnableWrite = 0;
+     gRememberLastPlayed = 0;
++    gEnablePlayStats = 0;
+     gAutoStartLastPlayed = 9;
+     gSelectButton = KEY_CIRCLE; // Default to Japan.
+     gMMCEPrefix[0] = '\0';
