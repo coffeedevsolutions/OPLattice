@@ -10,8 +10,8 @@ per-phase documents; this is the ledger.
 | 1 | Art dimensions, pipeline, safety fixes | **done** — [SHELF-PHASE1.md](SHELF-PHASE1.md) |
 | 2 | Play-stats data dependency | **done** — minimal core, patch 08 |
 | ~~3~~ | ~~Streaming texture manager~~ | **STRUCK** — see below |
-| 4 | Sidebar shell + page routing | **complete, awaiting hardware judgement** — [SHELF-PHASE4.md](SHELF-PHASE4.md) |
-| 5 | Apps page | not started |
+| 4 | Sidebar shell + page routing | **closed, verified on hardware at 480p** — [SHELF-PHASE4.md](SHELF-PHASE4.md) |
+| 5 | Apps page | **design at gate** — [SHELF-PHASE5.md](SHELF-PHASE5.md) |
 | 6 | Library grid (absorbs Phase 3's remnants) | not started |
 | 7 | Home page | not started |
 | 8 | **Game grouping** (was region dual-launch) | not started — scope changed, see below |
@@ -356,3 +356,43 @@ Better absent than fabricated.
 - That the trigger cannot fire during a list refresh or with a dialog open —
   still an argument from call sites rather than an observation.
 - `SHELF UI` off: stock behaviour, no panel reachable by either trigger.
+
+## Phase 4 — closed
+
+Verified on hardware at 480p: slide ease reads clean progressive, cancel
+mid-OPENING correct, 12-frame hold comfortable on the 8BitDo, rapid edge taps
+wrap and page identically to stock with no perceptible replay latency. Both
+negative tests pass — no trigger during a list refresh, none with a dialog open.
+All three stubs reachable and Circle-escapable. `SHELF UI` off confirmed stock
+by both triggers including the tap path.
+
+That closes the one thing Phase 4 could not argue from source: the withhold-and-
+replay path is now observed, not inferred from call sites.
+
+## Phase 5 — design at the gate
+
+Design in [SHELF-PHASE5.md](SHELF-PHASE5.md); layout is live in the previewer
+under the **SHELF Apps** tab.
+
+Subtitle source recommended: **`subtitle=` in the existing per-app `title.cfg`**,
+not a new central file. It is already parsed as a `config_set_t`, unknown keys
+already survive `configWrite` by construction, and it travels with the app
+folder. Legacy `conf_apps.cfg` entries get no subtitle line, because `Name=path`
+has no third field and inventing one would be filling a slot with non-information.
+
+Two items from the brief cannot be built as written, and are called out rather
+than quietly downgraded:
+
+- **Free space has no query for this device class.** Nothing in `bdmsupport.c`,
+  `mmcesupport.c` or `ethsupport.c` reports capacity; the only capacity call in
+  the tree is `HDIOC_TOTALSECTOR` for the internal HDD, which is total, not free.
+  The slot is reserved and drawn as `—`. Making it real needs a devctl on the
+  MMCE driver side — outside OPL, and deliberately not folded into Phase 5.
+- **The clock is genuinely available** via `sceCdReadClock`, already used at
+  `OSDHistory.c:122`. Two inherited caveats for Phase 8: the PS2 RTC runs on JST
+  and needs a −9h or configured offset, and its fields are BCD.
+
+One implementation finding: `FNT_DEFAULT` is a single size, so a subtitle needs
+a second slot. `fntLoadFile(NULL, 12)` gets one from the embedded font with no
+art and no file, and it survives theme switches because `fntRelease` is only
+ever called with a theme's own ids.
