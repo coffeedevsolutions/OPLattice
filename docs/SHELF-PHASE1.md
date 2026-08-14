@@ -88,6 +88,12 @@ Indexed PNG is what the loader wants: `PNG_COLOR_TYPE_PALETTE` at bit depth 8
 gives `GS_PSM_T8` with a 256-entry CLUT. Bit depth 4 gives T4 and 16 colours,
 which is not worth the quality cost for photographic art.
 
+> **Re-judge this on the target display.** Riemersma was chosen to avoid
+> banding, which is a CRT failure mode. The display is a 16:9 flat panel, where
+> the opposite risk applies — a sharp screen resolves dither noise as grain. See
+> the context correction in the campaign doc for the ordered-dither fallback and
+> the three-way comparison worth running.
+
 **Backgrounds — dithered.** Gradient-heavy source, and 256 colours across a
 full-screen image will band without it. Riemersma dithering handles gradients
 better than Floyd-Steinberg here and leaves less visible noise on flat areas:

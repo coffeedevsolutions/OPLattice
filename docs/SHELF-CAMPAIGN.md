@@ -152,3 +152,85 @@ the second case.
 
 Deferred as before: hiding non-primary entries from the classic list, and
 cross-device groups. Separate saves per member remain correct behaviour.
+
+## Context correction — the display is a 16:9 flat panel, not a CRT
+
+Recorded because two Phase 1 judgements were made against the wrong display, and
+one open question follows from it.
+
+**No VRAM or format conclusion changes.** Texture costs, block alignment, the
+`maxSize` clamp and the palettized-versus-32-bit arithmetic are all properties of
+the GS and are indifferent to what the cable ends at.
+
+### Dithering must be re-judged for the opposite failure
+
+Phase 1 chose Riemersma error diffusion for backgrounds to avoid banding, and
+banding is the *CRT* failure mode — a soft display hides dither noise and shows
+gradient steps. A sharp panel does the reverse: it resolves the dither pattern
+itself, and error-diffusion noise can read as grain or crawling speckle on flat
+areas, particularly after the TV's own scaler has had a go at it.
+
+So the acceptance test inverts. Judge the backgrounds for **visible noise**, not
+for banding, and specifically on large flat regions rather than on gradients.
+
+**Ordered-dither fallback**, if Riemersma reads as noisy:
+
+```bash
+magick "$src" \
+  -resize 640x448^ -gravity center -extent 640x448 \
+  -ordered-dither o8x8 -colors 256 \
+  -define png:color-type=3 -define png:bit-depth=8 \
+  "PNG8:$out"
+```
+
+Ordered dither trades irregular grain for a regular crosshatch. It is not
+strictly better — a repeating pattern can be more objectionable than noise on a
+sharp panel, and it survives upscaling more visibly. Worth comparing both against
+`+dither` (no dithering, accepting whatever banding 256 colours produces), since
+on a modern panel with a good scaler the undithered version is sometimes the
+cleanest of the three. Three variants of one background is a ten-minute test and
+settles it properly.
+
+### Interlace: avoid 1px horizontal detail
+
+NTSC (`rm_mode_table[2]`) and 1080i (`[11]`) are both `GS_INTERLACED`. On a CRT
+that means flicker on single-pixel horizontal lines; on a flat panel the TV
+deinterlaces instead, which trades flicker for combing or softness depending on
+its deinterlacer. Either way, **1px horizontal detail is the thing to avoid**.
+
+Current state is clean: every theme asset is a solid block with no internal
+rules — the 2px rule that used to sit on top of `infoband.png` was removed
+earlier, and `topbar`, `botbar` and the caps are single flat bands. The only
+line the sidebar draws is **vertical** (`rmDrawLine(x + SHELF_WIDTH, 0, …, 480)`),
+which interlacing does not touch.
+
+The constraint to carry forward: SHELF's pages should use blocks, spacing and
+colour changes for separation rather than hairlines. If a horizontal rule is
+genuinely wanted, 2px aligned to an even Y is the safe form.
+
+Progressive modes are available and would remove the question entirely —
+`DTV_480P` (`[3]`, 640×448 non-interlaced) and `DTV_720P` (`[10]`) are both in
+the table. 480p costs nothing and changes no maths, since it is the same
+640×448 buffer.
+
+### Open question: which video mode is actually running
+
+`conf_opl.cfg` on channel 1 reads `vmode=11`. `gVMode` indexes `rm_mode_table`
+directly (`renderman.c:174`), and index 11 is **`DTV_1080I` — 1920×1080, three
+passes, `GS_INTERLACED`, native 16:9**.
+
+If the MMCE build is running that rather than NTSC, then the framebuffer figures
+in Phase 0 and Phase 1 describe a mode you are not in, and the 1,900,544-byte
+texture pool is wrong. Three things are worth separating:
+
+- **The theme work is unaffected either way.** OPL keeps a 640×480 virtual
+  coordinate space and scales it (`X_SCALE`, `Y_SCALE`), so every layout number
+  in `thm_GridHard` means the same thing in any mode.
+- **The `maxSize` clamp is unaffected.** It computes the pool at runtime from
+  `gsGlobal->CurrentPointer`, so it adapts to whatever mode is live. That was
+  the right design by luck as much as judgement.
+- **The documented budget is mode-specific** and would need recomputing.
+
+That config was read from channel 1, which is an FMCB channel and may belong to
+a different OPL install than the one being developed against. Worth checking
+Settings → Video Mode on the running build before anything is recomputed.

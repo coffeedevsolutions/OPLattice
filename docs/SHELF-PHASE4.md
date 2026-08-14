@@ -154,7 +154,7 @@ Follows the same four-edit pattern as every other toggle: `dialogs.h` id,
 4. Status footer.
 
 Each step is independently visible, and step 2 is the one that could disappoint:
-if a 12-frame eased slide does not feel right on a CRT at 60 Hz, better to find
+if a 12-frame eased slide does not feel right at 60 Hz, better to find
 that before four items and a footer are riding on it.
 
 ## 9. Risks
