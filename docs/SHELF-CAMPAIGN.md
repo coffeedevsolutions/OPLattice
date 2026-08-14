@@ -234,3 +234,71 @@ texture pool is wrong. Three things are worth separating:
 That config was read from channel 1, which is an FMCB channel and may belong to
 a different OPL install than the one being developed against. Worth checking
 Settings → Video Mode on the running build before anything is recomputed.
+
+## Display chain — HDMI mod, 16:9 flat panel
+
+Recorded. Reference video mode **pending confirmation** (see below); the pool
+figure is computed for every candidate so that confirming the mode is a lookup
+rather than another round of arithmetic.
+
+### Texture pool by video mode
+
+Single-pass modes double-buffer. Multi-pass (hires) modes **force double
+buffering off** and split one front buffer across passes (`gsHires.c`), which is
+why they can end up with *more* texture room, not less.
+
+| idx | mode | psm | framebuffer | **texture pool** | interlaced |
+|---|---|---|---|---|---|
+| 2 | NTSC 640×448 | CT24 | 2,293,760 | **1,900,544** | yes |
+| 3 | DTV 480p 640×448 | CT24 | 2,293,760 | **1,900,544** | no |
+| 5 | VGA 640×480 | CT24 | 2,621,440 | **1,572,864** | no |
+| 7 | NTSC hires 704×480 | CT24 | 1,441,792 | **2,752,512** | yes |
+| 10 | DTV 720p 1280×720 | CT16S | 1,966,080 | **2,228,224** | no |
+| 11 | DTV 1080i 1920×1080 | CT16S | 4,423,680 | **−229,376** | — |
+
+**1080i does not fit.** Its front buffer alone exceeds the 4 MB of VRAM before a
+single texture is allocated. The mode is in `rm_mode_table` but cannot allocate,
+which means the `vmode=11` config cannot describe a working install — it is
+either an older config, or a setting that failed and fell back. That resolves
+the question by elimination rather than by testimony.
+
+### Does the mode change any Phase 1 dimension margin?
+
+**No — not materially, and not at all for the per-asset figures.**
+
+Phase 1's margins are measured against `maxSize` (1,474,560), a constant in
+`textures.c` that has nothing to do with the video mode. Every per-asset margin
+in the Phase 1 table is therefore identical in every mode.
+
+What the mode changes is **simultaneity headroom**, and only mildly:
+
+| | 14 grid covers @160×240 | 21 with prefetch |
+|---|---|---|
+| cost | 702,464 | 1,053,696 |
+| fits in smallest viable pool (VGA, 1,572,864) | yes, 870 KB spare | yes, 519 KB spare |
+
+The 160×240 recommendation holds in every mode that works, including the
+tightest. No Phase 1 number needs revising on account of the mode.
+
+### Hairline constraint
+
+Mode-dependent, so it follows the reference-mode decision:
+
+- **Interlaced (2, 7)** — constraint stands as recorded: no 1px horizontal
+  detail; 2px on an even Y if a rule is wanted.
+- **Progressive (3, 5, 10)** — relaxes to normal 1px freedom.
+
+Nothing currently drawn is affected either way: all theme assets are solid
+bands, and the sidebar's only line is vertical.
+
+### Outstanding
+
+Three details were left as unfilled brackets and are still needed before the
+ledger can be closed on this:
+
+1. **Reference video mode** — which the running build reports.
+2. Whether the `vmode=11` config belongs to this install (the arithmetic above
+   says it cannot be live, but the record should say which install it came from).
+3. The hairline verdict, which follows automatically from (1).
+
+Answering (1) settles (3) and selects a row from the table above.
