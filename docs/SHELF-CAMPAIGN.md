@@ -10,11 +10,11 @@ per-phase documents; this is the ledger.
 | 1 | Art dimensions, pipeline, safety fixes | **done** — [SHELF-PHASE1.md](SHELF-PHASE1.md) |
 | 2 | Play-stats data dependency | **done** — minimal core, patch 08 |
 | ~~3~~ | ~~Streaming texture manager~~ | **STRUCK** — see below |
-| 4 | Sidebar shell + page routing | **design done, awaiting trigger choice** — [SHELF-PHASE4.md](SHELF-PHASE4.md) |
+| 4 | Sidebar shell + page routing | **slide built, awaiting hardware judgement** — [SHELF-PHASE4.md](SHELF-PHASE4.md) |
 | 5 | Apps page | not started |
 | 6 | Library grid (absorbs Phase 3's remnants) | not started |
 | 7 | Home page | not started |
-| 8 | Region dual-launch | not started |
+| 8 | **Game grouping** (was region dual-launch) | not started — scope changed, see below |
 
 Numbering is kept rather than compacted, so that references to "Phase 6" in the
 original campaign brief still mean the library grid.
@@ -95,3 +95,60 @@ operations restores the preference.
 locating the game's CFG needs the device lists to exist. A game whose device is
 absent on return loses its minutes, logged — the honest outcome, since there is
 nowhere to write them.
+
+## Phase 4 — trigger, as built
+
+**C plus A, both bound.** L3 opens the panel anywhere. LEFT at the left edge
+opens it too, but only when **held for 12 frames**.
+
+The hold is not optional, and the verification asked for is the reason. LEFT is
+**not inert at the left edge in either layout**:
+
+| layout | LEFT at the leftmost item | source |
+|---|---|---|
+| grid | wraps to the last page | `menuPrevItem` → `menuLastPage` |
+| list | steps to the previous device | `menuPrevH` |
+
+So a bare LEFT press at the edge would have hijacked live navigation under both
+GridHard and Ominence-Extended. The panel therefore **withholds** the press
+while the hold is in question, and `menusys` replays the suppressed navigation
+if the hold is released early — a tap still wraps or pages exactly as before.
+
+12 frames rather than the 2 first sketched: 2 frames is 33 ms and would have
+fired on nearly every deliberate tap. 12 is 200 ms, clearly past a tap and short
+enough not to feel like waiting. The only cost is up to 200 ms of latency on the
+wrap gesture specifically, which nothing else depends on.
+
+Still to confirm on hardware: that the gesture cannot fire during a list refresh
+or with a dialog open. `shelfTrigger` is only reachable from
+`menuHandleInputMain`, so neither path should reach it, but that is an argument
+from call sites rather than an observation.
+
+## Phase 8 — scope change: grouping, not region pairs
+
+**Was:** `AltStartup=<GAME_ID>` pairing two rips of one game, with Run offering
+"Play US / Play JP".
+
+**Now:** a general grouping mechanism.
+
+| key | in | meaning |
+|---|---|---|
+| `Group=` | game CFG | group identity; members share a value |
+| `Label=` | game CFG | how this member is named in the picker |
+
+Membership is declared per-CFG and assembled at index-scan time — the same scan
+Phase 7 already builds for Home, so grouping costs no additional pass. The
+details page grows a version picker over the group's members; the SHELF grid
+shows **one tile per group**, while the classic list keeps showing every entry.
+
+**Rationale for the change.** Region pairs and franchise runs are the same
+problem wearing different clothes: several discs that are one thing on a shelf.
+`AltStartup` encodes a pair and a direction, which does not extend to three
+members or to sets with no "primary". `Group`/`Label` says only what is true —
+these belong together, and here is what to call each — and lets the UI decide
+presentation. Region dual-launch becomes a two-member group with region labels;
+a sports franchise is the same mechanism with year labels. No new machinery for
+the second case.
+
+Deferred as before: hiding non-primary entries from the classic list, and
+cross-device groups. Separate saves per member remain correct behaviour.
