@@ -10,7 +10,7 @@ per-phase documents; this is the ledger.
 | 1 | Art dimensions, pipeline, safety fixes | **done** — [SHELF-PHASE1.md](SHELF-PHASE1.md) |
 | 2 | Play-stats data dependency | **done** — minimal core, patch 08 |
 | ~~3~~ | ~~Streaming texture manager~~ | **STRUCK** — see below |
-| 4 | Sidebar shell + page routing | not started |
+| 4 | Sidebar shell + page routing | **design done, awaiting trigger choice** — [SHELF-PHASE4.md](SHELF-PHASE4.md) |
 | 5 | Apps page | not started |
 | 6 | Library grid (absorbs Phase 3's remnants) | not started |
 | 7 | Home page | not started |
