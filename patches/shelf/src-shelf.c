@@ -19,6 +19,8 @@
 #include "include/pad.h"
 #include "include/shelf.h"
 #include "include/ioman.h"
+#include "include/gui.h"
+#include "include/system.h"
 
 int gEnableShelfUI;
 
@@ -141,7 +143,15 @@ void shelfHandleInput(void)
         selected++;
     else if (getKeyOn(KEY_L3) || getKeyOn(gSelectButton == KEY_CIRCLE ? KEY_CROSS : KEY_CIRCLE))
         state = SHELF_CLOSING;      /* cancel */
-    /* Item activation lands in the next phase, with the page stubs. */
+    else if (getKeyOn(gSelectButton)) {
+        static const int route[] = {GUI_SCREEN_SHELF_HOME, GUI_SCREEN_SHELF_LIBRARY,
+                                    GUI_SCREEN_SHELF_APPS, GUI_SCREEN_MENU};
+
+        /* Close first: guiSwitchScreen runs its own crossfade, and leaving the
+         * panel open across it would composite over the transition. */
+        state = SHELF_CLOSING;
+        guiSwitchScreen(route[selected]);
+    }
 }
 
 void shelfDraw(void)
@@ -165,6 +175,16 @@ void shelfDraw(void)
     fntRenderString(FNT_DEFAULT, x + 24, 28, ALIGN_NONE, 0, 0, "SHELF",
                     GS_SETREG_RGBAQ(0xF2, 0xF5, 0xF8, 0x80, 0x00));
 
+    /* Read at draw time, but both are values OPL already holds -- no queries. */
+    {
+        const char *net = (gNetworkStartup == 0) ? "Online" : "Offline";
+
+        rmDrawLine(x + 16, 438, x + SHELF_WIDTH - 16, 438,
+                   GS_SETREG_RGBAQ(0x2A, 0x30, 0x38, 0x80, 0x00));
+        fntRenderString(FNT_DEFAULT, x + 24, 450, ALIGN_NONE, 0, 0, net,
+                        GS_SETREG_RGBAQ(0x5C, 0x66, 0x74, 0x80, 0x00));
+    }
+
     for (i = 0; i < (int)SHELF_ITEMS; i++) {
         int iy = 84 + i * 34;
 
@@ -176,4 +196,46 @@ void shelfDraw(void)
                         i == selected ? GS_SETREG_RGBAQ(0xFF, 0xFF, 0xFF, 0x80, 0x00)
                                       : GS_SETREG_RGBAQ(0x88, 0x94, 0xA2, 0x80, 0x00));
     }
+}
+
+/* ------------------------------------------------------------ page stubs */
+
+/* Placeholders so routing can be exercised before any page exists. Phases 5-7
+ * replace these bodies; the ids and the handler table entries stay. */
+
+static void shelfRenderStub(const char *title, const char *note)
+{
+    rmDrawRect(0, 0, 640, 480, GS_SETREG_RGBAQ(0x0A, 0x0C, 0x0F, 0x80, 0x00));
+    fntRenderString(FNT_DEFAULT, 48, 60, ALIGN_NONE, 0, 0, title,
+                    GS_SETREG_RGBAQ(0xF2, 0xF5, 0xF8, 0x80, 0x00));
+    fntRenderString(FNT_DEFAULT, 48, 104, ALIGN_NONE, 0, 0, note,
+                    GS_SETREG_RGBAQ(0x88, 0x94, 0xA2, 0x80, 0x00));
+    fntRenderString(FNT_DEFAULT, 48, 430, ALIGN_NONE, 0, 0,
+                    "L3 or hold LEFT for the sidebar",
+                    GS_SETREG_RGBAQ(0x5C, 0x66, 0x74, 0x80, 0x00));
+}
+
+void shelfRenderHome(void)    { shelfRenderStub("Home",    "Phase 7 fills this in."); }
+void shelfRenderLibrary(void) { shelfRenderStub("Library", "Phase 6 fills this in."); }
+void shelfRenderApps(void)    { shelfRenderStub("Apps",    "Phase 5 fills this in."); }
+
+/** Input for any SHELF page while the sidebar is closed.
+ *
+ * The pages have no content yet, so the only things to honour are the sidebar
+ * trigger and a way back. Circle returns to the classic list, so a stub can
+ * never be a dead end -- that matters more than it sounds, because these are
+ * reachable on hardware before they do anything.
+ */
+void shelfHandleInputPage(void)
+{
+    if (shelfHasInput()) {
+        shelfHandleInput();
+        return;
+    }
+    /* No left edge on a page that has no cursor: L3 only. */
+    if (shelfTrigger(0))
+        return;
+
+    if (getKeyOn(gSelectButton == KEY_CIRCLE ? KEY_CROSS : KEY_CIRCLE))
+        guiSwitchScreen(GUI_SCREEN_MAIN);
 }

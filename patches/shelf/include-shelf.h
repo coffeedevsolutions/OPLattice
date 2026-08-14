@@ -45,4 +45,9 @@ int shelfTrigger(int atLeftEdge);
  *  the panel opening. */
 int shelfWasWithheld(void);
 
+void shelfRenderHome(void);
+void shelfRenderLibrary(void);
+void shelfRenderApps(void);
+void shelfHandleInputPage(void);
+
 #endif

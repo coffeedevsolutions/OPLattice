@@ -10,7 +10,7 @@ per-phase documents; this is the ledger.
 | 1 | Art dimensions, pipeline, safety fixes | **done** — [SHELF-PHASE1.md](SHELF-PHASE1.md) |
 | 2 | Play-stats data dependency | **done** — minimal core, patch 08 |
 | ~~3~~ | ~~Streaming texture manager~~ | **STRUCK** — see below |
-| 4 | Sidebar shell + page routing | **slide built, awaiting hardware judgement** — [SHELF-PHASE4.md](SHELF-PHASE4.md) |
+| 4 | Sidebar shell + page routing | **complete, awaiting hardware judgement** — [SHELF-PHASE4.md](SHELF-PHASE4.md) |
 | 5 | Apps page | not started |
 | 6 | Library grid (absorbs Phase 3's remnants) | not started |
 | 7 | Home page | not started |
@@ -155,6 +155,11 @@ cross-device groups. Separate saves per member remain correct behaviour.
 
 ## Context correction — the display is a 16:9 flat panel, not a CRT
 
+> **Superseded in part.** The reference mode is now settled as DTV 480p —
+> see *Display chain and reference mode* below. In particular the hairline
+> constraint recorded here has since **relaxed**, because 480p is
+> progressive. The dithering discussion below still stands.
+
 Recorded because two Phase 1 judgements were made against the wrong display, and
 one open question follows from it.
 
@@ -235,11 +240,21 @@ That config was read from channel 1, which is an FMCB channel and may belong to
 a different OPL install than the one being developed against. Worth checking
 Settings → Video Mode on the running build before anything is recomputed.
 
-## Display chain — HDMI mod, 16:9 flat panel
+## Display chain and reference mode — SETTLED
 
-Recorded. Reference video mode **pending confirmation** (see below); the pool
-figure is computed for every candidate so that confirming the mode is a lookup
-rather than another round of arithmetic.
+**HDMI mod → 1080p flat panel. Console reference mode: DTV 480p (idx 3).**
+
+The mod's 1080p is scaler output only; the console renders 480p and the mod
+scales. Confirmed locking on the panel. **Not a CRT** — every earlier note
+assuming one is superseded by this section.
+
+**Texture pool: 1,900,544** — identical to the documented NTSC figure, because
+480p is the same 640×448 CT24 double-buffered arrangement, differing only in
+being progressive. **No corrections are needed to the Phase 0 or Phase 1
+documents.**
+
+`vmode=11` is a fossil, most likely an attempt at 1080i that the arithmetic
+below shows could never have rendered. Disregarded.
 
 ### Texture pool by video mode
 
@@ -284,21 +299,60 @@ tightest. No Phase 1 number needs revising on account of the mode.
 
 Mode-dependent, so it follows the reference-mode decision:
 
-- **Interlaced (2, 7)** — constraint stands as recorded: no 1px horizontal
-  detail; 2px on an even Y if a rule is wanted.
-- **Progressive (3, 5, 10)** — relaxes to normal 1px freedom.
+**RELAXED.** The reference mode is progressive, so **1px horizontal detail is
+fine** and SHELF's pages have normal freedom with hairlines. The interlace
+constraint recorded earlier applies only to modes 2 and 7, which are not in use.
 
-Nothing currently drawn is affected either way: all theme assets are solid
-bands, and the sidebar's only line is vertical.
+(Nothing currently drawn depended on it either way: all theme assets are solid
+bands and the sidebar's only line is vertical.)
 
-### Outstanding
+### 720p — evaluated, not adopted
 
-Three details were left as unfilled brackets and are still needed before the
-ledger can be closed on this:
+It leaves 2,228,224 for textures against 480p's 1,900,544, and is natively 16:9.
+Declined anyway: the pool gain does not justify inheriting a **CT16S
+framebuffer**, which drags the parked Phase 1.5 banding question back in as a
+mode side effect rather than as a decision. Nothing in the mockups needs native
+16:9 — the theme's virtual space is 640×480 regardless.
 
-1. **Reference video mode** — which the running build reports.
-2. Whether the `vmode=11` config belongs to this install (the arithmetic above
-   says it cannot be live, but the record should say which install it came from).
-3. The hairline verdict, which follows automatically from (1).
+Revisit only if a later phase actually wants the extra pool, and treat the
+three-variant gradient test as the entry fee for accepting a 16-bit framebuffer.
 
-Answering (1) settles (3) and selects a row from the table above.
+### Dithering — still open
+
+Riemersma / `o8x8` / undithered, judged on this panel at couch distance with the
+next art batch. Doubles as the 480p sanity check.
+
+## Phase 4 — complete
+
+All four steps of the build order. Panel, items, routing, footer.
+
+| item | routes to |
+|---|---|
+| Home | `GUI_SCREEN_SHELF_HOME` (5) — stub |
+| Library | `GUI_SCREEN_SHELF_LIBRARY` (6) — stub |
+| Apps | `GUI_SCREEN_SHELF_APPS` (7) — stub |
+| Settings | `GUI_SCREEN_MENU` — existing screen, untouched |
+
+The three stubs share one input handler and one renderer body. **Circle returns
+to the classic list from any of them**, which matters more than it sounds: these
+are reachable on hardware before they do anything, and a stub that cannot be
+left is a hang from the user's chair.
+
+Activation closes the panel *before* calling `guiSwitchScreen`, because that runs
+its own 26-frame crossfade and a panel left open would composite over the
+transition rather than under it.
+
+Footer shows online state from `gNetworkStartup`, a value OPL already holds.
+Free space is not shown yet — it is per-device and the panel is not device-bound,
+so the honest version of that line needs the page context Phase 5 introduces.
+Better absent than fabricated.
+
+### What to judge on hardware
+
+- The 12-frame ease at 60 Hz, progressive.
+- Cancel mid-slide (allowed during OPENING deliberately).
+- Whether the 12-frame LEFT hold is comfortable, and that a tap still wraps or
+  pages exactly as before.
+- That the trigger cannot fire during a list refresh or with a dialog open —
+  still an argument from call sites rather than an observation.
+- `SHELF UI` off: stock behaviour, no panel reachable by either trigger.
