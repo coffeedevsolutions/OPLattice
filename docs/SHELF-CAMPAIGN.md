@@ -396,3 +396,37 @@ One implementation finding: `FNT_DEFAULT` is a single size, so a subtitle needs
 a second slot. `fntLoadFile(NULL, 12)` gets one from the embedded font with no
 art and no file, and it survives theme switches because `fntRelease` is only
 ever called with a theme's own ids.
+
+## Dithering verdict — settled: none
+
+Three-way comparison run on `SLPS_255.89_BG`, the worst quantisation error in
+the batch. Images: [full frame](dither-compare-full.png),
+[4x detail on a flat region](dither-compare-detail.png).
+
+| mode | RMSE vs original | at 4x on flat colour |
+|---|---|---|
+| **none** | **0.0236** | indistinguishable from the original |
+| Riemersma | 0.0249 | faint grain in flat red areas |
+| o8x8 (16 levels) | 0.0334 | visible regular dot texture in pale areas |
+
+**Undithered wins on both measures at once** — lowest error *and* least visible
+artefact — which is unusual enough to be worth stating plainly, because it means
+there is no tradeoff being made here.
+
+The reason is the content, not the panel. Phase 1 reasoned that a full-screen
+image at 256 colours would band, and hedged with Riemersma. This library's
+backgrounds are cel-shaded key art: large flat regions, hard ink lines, few long
+smooth gradients. That is the case where 256 colours is simply enough, and
+dithering spends error diffusion on an image that had no banding to fix. The
+sharp progressive panel then resolves that spent noise as grain.
+
+o8x8 was first tested with a bare `-ordered-dither o8x8`, which defaults to very
+few levels and produced a halftone so heavy it would have been unfair to judge
+on. Re-run with an explicit 16 levels it is still last, so the conclusion holds
+on the fair test rather than the broken one.
+
+`tools/palettize-art.py` defaults to `none` and takes `--dither` to re-run.
+**Dithering does not change VRAM cost** — all three modes emit the same T8
+texture and the same CLUT — so this can be revisited at any time for free, and a
+future art batch with real gradient sources should be re-judged rather than
+inheriting this.

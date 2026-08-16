@@ -88,15 +88,16 @@ Indexed PNG is what the loader wants: `PNG_COLOR_TYPE_PALETTE` at bit depth 8
 gives `GS_PSM_T8` with a 256-entry CLUT. Bit depth 4 gives T4 and 16 colours,
 which is not worth the quality cost for photographic art.
 
-> **Re-judge this on the target display.** Riemersma was chosen to avoid
-> banding, which is a CRT failure mode. The display is a 16:9 flat panel, where
-> the opposite risk applies — a sharp screen resolves dither noise as grain. See
-> the context correction in the campaign doc for the ordered-dither fallback and
-> the three-way comparison worth running.
+> **Settled: no dithering.** The three-way comparison was run and Riemersma
+> lost. See the campaign ledger's dithering verdict. The `-dither Riemersma`
+> invocation below is kept for the record; `tools/palettize-art.py` implements
+> the decision and takes `--dither` to re-run any of the three.
 
-**Backgrounds — dithered.** Gradient-heavy source, and 256 colours across a
-full-screen image will band without it. Riemersma dithering handles gradients
-better than Floyd-Steinberg here and leaves less visible noise on flat areas:
+**Backgrounds — undithered, per the verdict.** The premise below turned out to
+be false for this library: the art is cel-shaded key art with large flat regions
+and few long gradients, so 256 colours does not band and dithering only adds
+grain. The original reasoning, kept because it was sound and simply did not
+match the content:
 
 ```bash
 magick "$src" \
