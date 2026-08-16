@@ -100,8 +100,28 @@ and a way to indicate origin. Neither is a detail to settle mid-implementation.
 
 ---
 
-## Recommendation
+## Both decisions taken, on instruction to keep going
 
-Take the grid as a separate step with those two answers settled first. What is
-here now — the wrapper and the counter — is what the grid will consume, and both
-are testable on hardware today.
+**Cache lifecycle — self-healing, no hook.** Rather than invalidating from
+`menuReinitMainMenu`, `libSync()` keys on the support-object pointer and the item
+count and reallocates when either changes. A hook is something somebody has to
+remember to call from every path that rebuilds the list; this cannot be
+forgotten, and it covers device switching for free because the pointer changes.
+The arrays are allocated on first use, so with `SHELF UI` off nothing is built.
+
+**Which list — the one the main screen is on.** `menuGetActiveList()` returns the
+support object the classic screen selected, so Library mirrors it and the two can
+never disagree about what is installed. Switching device on the main list
+switches this page.
+
+That makes "Library" mean "this device", which is the lie by omission flagged
+above. It is the honest version of the cheap option: the page says which device
+it is showing by mirroring, and the title count is real rather than merged. A
+genuinely merged library needs a duplicate rule and an origin badge per tile, and
+that is worth doing deliberately rather than as a side effect of this phase.
+**Recorded as revisitable.**
+
+Prefetch is one row, per the addendum's caveat — `bind` raises the use count and
+gsKit scores by binds per frame, so a prefetched-and-undrawn texture looks as
+wanted as a drawn one. A row is noise; a page would start costing residency for
+what is actually on screen.

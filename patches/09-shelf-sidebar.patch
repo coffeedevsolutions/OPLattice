@@ -127,6 +127,19 @@ index ddbd949..1bbe60c 100644
  item_list_t *hddGetObject(int initOnly);
  void hddLoadModules(void);
  void hddLoadSupportModules(void);
+diff --git a/include/menusys.h b/include/menusys.h
+index e2ef117..a50df35 100644
+--- a/include/menusys.h
++++ b/include/menusys.h
+@@ -81,6 +81,8 @@ typedef struct menu_list
+     struct menu_list *prev, *next;
+ } menu_list_t;
+ 
++item_list_t *menuGetActiveList(void);
++
+ void menuInit();
+ void menuEnd();
+ void menuReinitMainMenu(void);
 diff --git a/include/mmcesupport.h b/include/mmcesupport.h
 index a121689..e699d2f 100644
 --- a/include/mmcesupport.h
@@ -156,7 +169,7 @@ index dccdc44..70d12dc 100644
  int oplRecentCount(void);
  const char *oplRecentStartup(int index);
 diff --git a/include/renderman.h b/include/renderman.h
-index 6b1f380..836d683 100644
+index 6b1f380..1572e39 100644
 --- a/include/renderman.h
 +++ b/include/renderman.h
 @@ -102,6 +102,15 @@ void rmDrawRect(int x, int y, int w, int h, u64 color);
@@ -174,6 +187,16 @@ index 6b1f380..836d683 100644
 +
  /** Starts the frame - first to call every frame */
  void rmStartFrame(void);
+ 
+@@ -118,6 +127,9 @@ void rmSetOverscan(int overscan);
+  * When set, it will treat all pixmap widths/heights (not positions) as scaled with the ratios provided */
+ void rmSetAspectRatio(enum rm_aratio dar);
+ 
++/** Drawn width of a SCALING_RATIO element declared `w` wide. */
++int rmWidthScaled(int w);
++
+ /** Widescreen scaling */
+ int rmWideScale(int x);
  
 diff --git a/include/textures.h b/include/textures.h
 index 9407f43..22cf7db 100644
@@ -290,7 +313,7 @@ index 4330f1e..88a442e 100644
      compatmask = sbPrepare(game, configSet, size_smb_cdvdman_irx, smb_cdvdman_irx, &i);
  
 diff --git a/src/gui.c b/src/gui.c
-index 5393a55..8e5ecd4 100644
+index 5393a55..63dd678 100644
 --- a/src/gui.c
 +++ b/src/gui.c
 @@ -16,6 +16,7 @@
@@ -308,7 +331,7 @@ index 5393a55..8e5ecd4 100644
 -                                                {&menuHandleInputAppMenu, &menuRenderAppMenu, 1}};
 +                                                {&menuHandleInputAppMenu, &menuRenderAppMenu, 1},
 +                                                {&shelfHandleInputPage, &shelfRenderHome, 1},
-+                                                {&shelfHandleInputPage, &shelfRenderLibrary, 1},
++                                                {&shelfHandleInputLibrary, &shelfRenderLibrary, 1},
 +                                                {&shelfHandleInputApps, &shelfRenderApps, 1}};
  
  // default screen handler (menu screen)
@@ -393,7 +416,7 @@ index e7cd888..cc3c2d2 100644
      char gid[5];
      configGetDiscIDBinary(configSet, gid);
 diff --git a/src/menusys.c b/src/menusys.c
-index 9cc2a8a..e9a5f81 100644
+index 9cc2a8a..58ca367 100644
 --- a/src/menusys.c
 +++ b/src/menusys.c
 @@ -6,6 +6,7 @@
@@ -404,7 +427,25 @@ index 9cc2a8a..e9a5f81 100644
  #include "include/iosupport.h"
  #include "include/renderman.h"
  #include "include/fntsys.h"
-@@ -683,6 +684,18 @@ static void menuNextH()
+@@ -57,6 +58,17 @@ enum GAME_MENU_IDs {
+ static menu_list_t *menu;
+ static menu_list_t *selected_item;
+ 
++/* The support object behind whatever the main screen is currently showing.
++   The SHELF Library page renders the same list rather than enumerating its own,
++   so the two can never disagree about what is installed. NULL before the first
++   device has been selected. */
++item_list_t *menuGetActiveList(void)
++{
++    if (selected_item && selected_item->item)
++        return (item_list_t *)selected_item->item->userdata;
++    return NULL;
++}
++
+ static int actionStatus;
+ static int itemConfigId;
+ static config_set_t *itemConfig;
+@@ -683,6 +695,18 @@ static void menuNextH()
      }
  }
  
@@ -423,7 +464,7 @@ index 9cc2a8a..e9a5f81 100644
  static void menuPrevH()
  {
      struct menu_list *prev = selected_item->prev;
-@@ -1133,6 +1146,31 @@ void menuHandleInputMain()
+@@ -1133,6 +1157,31 @@ void menuHandleInputMain()
       */
      int grid = menuRowStep() > 1;
  
@@ -707,7 +748,7 @@ index 4389c39..1e857f5 100644
      gSelectButton = KEY_CIRCLE; // Default to Japan.
      gMMCEPrefix[0] = '\0';
 diff --git a/src/renderman.c b/src/renderman.c
-index 4d90251..f5f3f09 100644
+index 4d90251..dded4c3 100644
 --- a/src/renderman.c
 +++ b/src/renderman.c
 @@ -10,6 +10,7 @@
@@ -814,6 +855,21 @@ index 4d90251..f5f3f09 100644
      gsKit_prim_quad_texture(gsGlobal, inlay,
                              quad.ul.x + ulx + fRenderXOff, quad.ul.y + uly + fRenderYOff,
                              0.0f, 0.0f,
+@@ -380,6 +435,14 @@ void rmDrawOverlayPixmap(GSTEXTURE *overlay, int x, int y, short aligned, int w,
+     rmDrawQuad(&quad);
+ }
+ 
++/* The width a SCALING_RATIO element of declared width `w` will actually be
++   drawn at. Layout code that lays out columns has to agree with rmSetupQuad or
++   the pitch drifts from the art -- three quarters in 16:9, unchanged in 4:3. */
++int rmWidthScaled(int w)
++{
++    return X_SCALE(w * iAspectWidth) >> 2;
++}
++
+ void rmDrawRect(int x, int y, int w, int h, u64 color)
+ {
+     float fx = X_SCALE(x) + fRenderXOff;
 diff --git a/src/textures.c b/src/textures.c
 index b2539dd..787e273 100644
 --- a/src/textures.c

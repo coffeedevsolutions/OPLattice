@@ -50,5 +50,6 @@ void shelfRenderLibrary(void);
 void shelfRenderApps(void);
 void shelfHandleInputPage(void);
 void shelfHandleInputApps(void);
+void shelfHandleInputLibrary(void);
 
 #endif

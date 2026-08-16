@@ -12,6 +12,7 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 
 #include "include/opl.h"
 #include "include/renderman.h"
@@ -19,6 +20,8 @@
 #include "include/pad.h"
 #include "include/shelf.h"
 #include "include/appsupport.h"
+#include "include/menusys.h"
+#include "include/texcache.h"
 #include "include/ioman.h"
 #include "include/gui.h"
 #include "include/system.h"
@@ -233,7 +236,6 @@ static void shelfRenderStub(const char *title, const char *note)
 }
 
 void shelfRenderHome(void)    { shelfRenderStub("Home",    "Phase 7 fills this in."); }
-void shelfRenderLibrary(void) { shelfRenderStub("Library", "Phase 6 fills this in."); }
 
 /** Input for any SHELF page while the sidebar is closed.
  *
@@ -491,3 +493,200 @@ void shelfHandleInputApps(void)
     }
 }
 
+
+/* --------------------------------------------------------------- Library page
+
+   The same list the main screen is showing, as a cover grid. It does not
+   enumerate anything itself -- menuGetActiveList() hands back the support object
+   the classic screen selected -- so the two can never disagree about what is
+   installed, and switching device on the main screen switches this page too.
+
+   Geometry follows the rule the art correction established: a GameImage is
+   drawn at three quarters of its declared width in 16:9, and for a 2:3 cover to
+   *display* as 2:3 the drawn texels must be 1:2. Declaring 96x144 gives 72x144
+   drawn in 16:9 and 96x144 in 4:3, and both display 2:3. Column pitch is
+   computed with rmWidthScaled so the layout agrees with what rmSetupQuad will
+   actually do rather than with the number written here.
+*/
+
+#define LIB_COLS    6
+#define LIB_ROWS    2
+#define LIB_PER     (LIB_COLS * LIB_ROWS)
+#define LIB_DECL_W  96                 /* declared; 72 drawn in 16:9 */
+#define LIB_COV_H   144
+#define LIB_Y0      70
+#define LIB_ROW_H   (LIB_COV_H + 34)
+
+static image_cache_t *libCache;
+static int *libCacheId, *libCacheUid;
+static item_list_t *libList;          /* what the arrays were sized against */
+static int libCount, libSel;
+
+/* Reallocate and reset when the list changes identity or length.
+ *
+ * The game list is rebuilt on device refresh, and a cache id left pointing into
+ * a rebuilt list is how art gets drawn against the wrong game. Keying on the
+ * support pointer and the count means this heals itself rather than depending on
+ * an invalidation hook somebody has to remember to call. */
+static int libSync(void)
+{
+    item_list_t *list = menuGetActiveList();
+    int count = (list && list->itemGetCount) ? list->itemGetCount(list) : 0;
+
+    if (list != libList || count != libCount) {
+        free(libCacheId);
+        free(libCacheUid);
+        libCacheId = libCacheUid = NULL;
+        if (count > 0) {
+            libCacheId = malloc(count * sizeof(int));
+            libCacheUid = malloc(count * sizeof(int));
+            if (libCacheId && libCacheUid) {
+                memset(libCacheId, -1, count * sizeof(int));
+                memset(libCacheUid, -1, count * sizeof(int));
+            } else {
+                free(libCacheId); free(libCacheUid);
+                libCacheId = libCacheUid = NULL;
+                count = 0;
+            }
+        }
+        libList = list;
+        libCount = count;
+        if (libSel >= count)
+            libSel = count > 0 ? count - 1 : 0;
+    }
+
+    /* Allocated on first use, so with SHELF UI off nothing is ever built. */
+    if (!libCache && count > 0)
+        libCache = cacheInitCache(0, "ART", 1, "_COV", LIB_PER + LIB_COLS);
+
+    return count;
+}
+
+static GSTEXTURE *libCover(int idx)
+{
+    char *startup;
+    if (!libCache || !libCacheId || !libList || !libList->itemGetStartup)
+        return NULL;
+    startup = libList->itemGetStartup(libList, idx);
+    if (!startup)
+        return NULL;
+    return cacheGetTexture(libCache, libList, &libCacheId[idx], &libCacheUid[idx], startup);
+}
+
+void shelfRenderLibrary(void)
+{
+    int total = libSync();
+    int drawnW = rmWidthScaled(LIB_DECL_W);
+    int pitch, x0, page, first, i;
+    char buf[64];
+
+    appsInitFont();
+
+    pitch = drawnW + 16;
+    x0 = (640 - (LIB_COLS * pitch - 16)) / 2;
+    page = (total > 0) ? libSel / LIB_PER : 0;
+    first = page * LIB_PER;
+
+    rmDrawRect(0, 0, 640, 480, GS_SETREG_RGBA(0x0F, 0x12, 0x16, 0x80));
+    rmDrawRect(0, 0, 640, 40, GS_SETREG_RGBA(0x18, 0x1C, 0x22, 0x80));
+    rmDrawRect(0, 40, 640, 1, GS_SETREG_RGBA(0x2A, 0x30, 0x38, 0x80));
+    fntRenderString(FNT_DEFAULT, 32, 27, ALIGN_NONE, 0, 0, "Library",
+                    GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80));
+    if (total > 0) {
+        int w;
+        snprintf(buf, sizeof(buf), "%d titles", total);
+        w = fntCalcDimensions(FNT_DEFAULT, buf);
+        fntRenderString(FNT_DEFAULT, 608 - w, 26, ALIGN_NONE, 0, 0, buf,
+                        GS_SETREG_RGBA(0x5C, 0x66, 0x74, 0x80));
+    }
+
+    if (total <= 0) {
+        fntRenderString(FNT_DEFAULT, 32, 120, ALIGN_NONE, 0, 0,
+                        "Nothing to show yet.",
+                        GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80));
+        fntRenderString(appsFontSmall, 32, 148, ALIGN_NONE, 0, 0,
+                        "This page mirrors the device the main list is on. Pick one there first.",
+                        GS_SETREG_RGBA(0x5C, 0x66, 0x74, 0x80));
+    }
+
+    /* One row of lookahead, no more. bind raises the use count, and gsKit's
+       predictor scores by binds per frame, so a prefetched-and-undrawn texture
+       looks as wanted as one that was drawn. A row is noise; a page would start
+       costing residency for what is actually on screen. */
+    for (i = LIB_PER; i < LIB_PER + LIB_COLS && first + i < total; i++)
+        rmPrefetchTexture(libCover(first + i));
+
+    for (i = 0; i < LIB_PER && first + i < total; i++) {
+        int idx = first + i;
+        int cx = x0 + (i % LIB_COLS) * pitch;
+        int cy = LIB_Y0 + (i / LIB_COLS) * LIB_ROW_H;
+        int on = (idx == libSel);
+        GSTEXTURE *cov = libCover(idx);
+
+        if (on) {
+            u64 e = GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80);
+            rmDrawRect(cx - 3, cy - 3, drawnW + 6, 3, e);
+            rmDrawRect(cx - 3, cy + LIB_COV_H, drawnW + 6, 3, e);
+            rmDrawRect(cx - 3, cy - 3, 3, LIB_COV_H + 6, e);
+            rmDrawRect(cx + drawnW, cy - 3, 3, LIB_COV_H + 6, e);
+        }
+
+        if (cov)
+            rmDrawPixmap(cov, cx, cy, ALIGN_NONE, LIB_DECL_W, LIB_COV_H,
+                         SCALING_RATIO, gDefaultCol);
+        else
+            /* Still loading, or no art. The classic grid shows nothing here
+               either; a flat tile at least keeps the layout readable. */
+            rmDrawRect(cx, cy, drawnW, LIB_COV_H,
+                       GS_SETREG_RGBA(0x1C, 0x20, 0x27, 0x80));
+
+        if (on && libList && libList->itemGetName) {
+            char *name = libList->itemGetName(libList, idx);
+            if (name)
+                appsCentred(appsFontSmall, 320, LIB_Y0 + 2 * LIB_ROW_H + 12,
+                            name, 560, GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80));
+        }
+    }
+
+    rmDrawRect(32, 438, 576, 1, GS_SETREG_RGBA(0x2A, 0x30, 0x38, 0x80));
+    fntRenderString(FNT_DEFAULT, 32, 458, ALIGN_NONE, 0, 0,
+                    "Circle  Back", GS_SETREG_RGBA(0x5C, 0x66, 0x74, 0x80));
+    {
+        int w;
+        snprintf(buf, sizeof(buf), "~%u KB / %d binds", rmVramBoundBytes() >> 10,
+                 rmVramBoundCount());
+        w = fntCalcDimensions(appsFontSmall, buf);
+        fntRenderString(appsFontSmall, 320 - w / 2, 458, ALIGN_NONE, 0, 0, buf,
+                        GS_SETREG_RGBA(0x3C, 0x44, 0x4E, 0x80));
+    }
+    if (total > LIB_PER) {
+        int pages = (total + LIB_PER - 1) / LIB_PER, w;
+        snprintf(buf, sizeof(buf), "%d / %d", page + 1, pages);
+        w = fntCalcDimensions(FNT_DEFAULT, buf);
+        fntRenderString(FNT_DEFAULT, 608 - w, 458, ALIGN_NONE, 0, 0, buf,
+                        GS_SETREG_RGBA(0x5C, 0x66, 0x74, 0x80));
+    }
+}
+
+void shelfHandleInputLibrary(void)
+{
+    int total = libSync();
+
+    if (getKeyOn(KEY_CIRCLE)) {
+        guiSwitchScreen(GUI_SCREEN_MAIN);
+        return;
+    }
+    if (total <= 0)
+        return;
+
+    if (getKeyOn(KEY_LEFT) && libSel > 0)
+        libSel--;
+    else if (getKeyOn(KEY_RIGHT) && libSel < total - 1)
+        libSel++;
+    else if (getKeyOn(KEY_UP) && libSel >= LIB_COLS)
+        libSel -= LIB_COLS;
+    else if (getKeyOn(KEY_DOWN) && libSel + LIB_COLS < total)
+        libSel += LIB_COLS;
+    else if (getKeyOn(KEY_CROSS) && libList && libList->itemLaunch && libList->itemGetConfig)
+        libList->itemLaunch(libList, libSel, libList->itemGetConfig(libList, libSel));
+}
