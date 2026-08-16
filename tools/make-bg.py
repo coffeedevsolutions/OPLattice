@@ -12,8 +12,26 @@ from the originals at the source aspect so nothing is thrown away.
 Mapping comes from ~/Documents/PS2/artmap.txt (`key:SERIAL` per line); the file
 in Downloads is `<key>-gameArt-BG.<ext>`.
 
-Target is 557x180. On a 16:9 screen the theme's 418x180 rect displays as
-557x180, so the art is carried 1:1 -- 401 KB of VRAM.
+Target is 418x180, anamorphic -- and the reasoning that produced the old 557
+deserves recording, because it was wrong in an instructive way.
+
+The theme rect is 418x180 *virtual*. On a 16:9 screen it displays at 3.09:1, so
+the earlier target of 557x180 was chosen to make the texture itself 3.09:1 "so
+the art is carried 1:1". But the 16:9 stretch is applied to the whole
+framebuffer at scanout -- it does not give a rect more texels to sample. A 418
+wide rect samples 418 texels no matter how wide it looks. Carrying 557 meant the
+GS threw a quarter of them away with a bilinear downscale, after sips had already
+resampled 1920 down to 557. Two resamples, the second of them poor, and 33 KB of
+VRAM spent to make the result softer.
+
+Now: one Lanczos pass straight from the 1920x620 original to 418x180, squeezed
+horizontally exactly as 16:9 DVD content is. The screen stretch undoes the
+squeeze at scanout, so the picture looks identical in shape and is sharper,
+because nothing resamples it twice.
+
+Vertical still runs 180 -> 168 in hardware (Y_SCALE is iDisplayHeight/480). That
+one is left alone deliberately: 168 is a property of the current video mode, and
+baking it in would silently break the art on any other.
 
 A few originals are not 3.097:1. Those are fitted inside the frame and padded
 with the theme background rather than cropped, so the composition survives even
@@ -23,7 +41,9 @@ import os
 import subprocess
 import sys
 
-TARGET_W, TARGET_H = 557, 180
+TARGET_W, TARGET_H = 418, 180        # texels
+DISPLAY_W = 557                      # what those texels look like at 16:9
+SQUEEZE = TARGET_W / DISPLAY_W       # 0.75, the anamorphic factor
 BG_HEX = "0A0C0F"
 TOLERANCE = 0.03          # within 3% of the frame aspect, just resize
 
@@ -50,7 +70,9 @@ for line in open(amap):
         k, s = line.split(":", 1)
         pairs.append((k.strip(), s.strip()))
 
-target_aspect = TARGET_W / TARGET_H
+# Aspect decisions are made in display space, because that is the shape the
+# viewer actually sees; the squeeze is applied once at the end.
+target_aspect = DISPLAY_W / TARGET_H
 resized, padded, missing = [], [], []
 
 for key, serial in sorted(pairs, key=lambda p: p[1]):
@@ -69,19 +91,23 @@ for key, serial in sorted(pairs, key=lambda p: p[1]):
     a = sw / sh
 
     if abs(a - target_aspect) / target_aspect <= TOLERANCE:
-        subprocess.run(["sips", "-s", "format", "png", "-z", str(TARGET_H), str(TARGET_W),
-                        src, "--out", dst], capture_output=True)
+        # Straight to texel space in one pass. "!" because the squeeze is
+        # deliberate -- preserving aspect here would undo it.
+        subprocess.run(["magick", src, "-filter", "Lanczos",
+                        "-resize", f"{TARGET_W}x{TARGET_H}!", "-strip", dst], check=True)
         resized.append((serial, f"{sw}x{sh}"))
     else:
         # Fit inside the frame, then pad. Never crop -- that is the bug this
-        # script exists to undo.
-        scale = min(TARGET_W / sw, TARGET_H / sh)
-        fw, fh = max(1, round(sw * scale)), max(1, round(sh * scale))
-        subprocess.run(["sips", "-s", "format", "png", "-z", str(fh), str(fw),
-                        src, "--out", dst], capture_output=True)
-        subprocess.run(["sips", "--padToHeightWidth", str(TARGET_H), str(TARGET_W),
-                        "--padColor", BG_HEX, dst], capture_output=True)
-        padded.append((serial, f"{sw}x{sh}", f"{a:.2f}:1", f"{fw}x{fh}"))
+        # script exists to undo. Fitting is computed against the *display*
+        # frame, then squeezed, so a padded image keeps its proportions.
+        scale = min(DISPLAY_W / sw, TARGET_H / sh)
+        fw_disp, fh = max(1, round(sw * scale)), max(1, round(sh * scale))
+        fw = max(1, round(fw_disp * SQUEEZE))
+        subprocess.run(["magick", src, "-filter", "Lanczos",
+                        "-resize", f"{fw}x{fh}!",
+                        "-background", f"#{BG_HEX}", "-gravity", "center",
+                        "-extent", f"{TARGET_W}x{TARGET_H}", "-strip", dst], check=True)
+        padded.append((serial, f"{sw}x{sh}", f"{a:.2f}:1", f"{fw_disp}x{fh} displayed"))
 
 print(f"{len(resized)} resized to {TARGET_W}x{TARGET_H}")
 if padded:

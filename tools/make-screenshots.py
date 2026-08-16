@@ -20,8 +20,17 @@ the description above, and how a busy image reads at 135x101 on a sharp panel.
 It does not tell you anything about real screenshot content, because it is not
 one. Swap in IGS captures when there are any and nothing about the layout moves.
 
-Output is 250x188 -- the same target import-igs.py uses, comfortably above the
-135x101 draw size so the downscale happens on the GS rather than being baked in.
+Output is 135x101 texels -- exactly the rect the theme draws into.
+
+The earlier 250x188 followed the same mistaken reasoning the backgrounds did:
+oversize the texture "so the downscale happens on the GS". The GS downscale is a
+bilinear one, and it is worse than a Lanczos pass here, so oversizing bought a
+softer picture and more VRAM at once. The rect samples 135 texels; give it 135.
+
+Both the source and the output are anamorphic, so the crop is computed in
+display space -- a 4:3 region of a 3.09:1 background -- and only then expressed
+in texels. Height stays at the virtual 101 rather than the 94 the current video
+mode actually scans, for the same reason the backgrounds keep 180.
 
 Written as indexed PNG8, per SHELF-PHASE1.md's screenshot recipe: quantise with
 +dither, because dithering buys little on an image this small and costs visible
@@ -35,14 +44,14 @@ import os
 import subprocess
 import sys
 
-SRC_W, SRC_H = 557, 180          # the BG art this library ships
-OUT_W, OUT_H = 250, 188          # matches tools/import-igs.py
+SRC_W, SRC_H = 418, 180          # the BG art this library ships, in texels
+OUT_W, OUT_H = 135, 101          # the theme rect, in texels
 
-# A 4:3 window is taller than the 557x180 source allows, so the crop is width-
-# limited: take a full-height slice and let the resize letterbox nothing away.
-# 180 * 4/3 = 240 wide.
-CROP_W, CROP_H = 240, 180
-OFFSETS = {"SCR": 60, "SCR2": SRC_W - CROP_W - 60}   # left-of-centre, right-of-centre
+# The crop is a 4:3 region *as displayed*. The background displays 557 wide, so
+# a full-height 4:3 window is 240 display px -- which is 180 texels once the
+# 0.75 squeeze is applied. Two of those fit inside 418 with room to separate them.
+CROP_W, CROP_H = 180, 180
+OFFSETS = {"SCR": 40, "SCR2": SRC_W - CROP_W - 40}   # left-of-centre, right-of-centre
 
 art = sys.argv[1] if len(sys.argv) > 1 else "_deploy/ART"
 out = sys.argv[2] if len(sys.argv) > 2 else "_deploy/ART"
@@ -60,7 +69,7 @@ for bg in bgs:
         subprocess.run([
             "magick", os.path.join(art, bg),
             "-crop", f"{CROP_W}x{CROP_H}+{x}+0", "+repage",
-            "-resize", f"{OUT_W}x{OUT_H}!",
+            "-filter", "Lanczos", "-resize", f"{OUT_W}x{OUT_H}!",
             # Slot 2 gets a slight tonal shift so the two are distinguishable at
             # a glance even on a game whose art is uniform across its width.
             *(["-modulate", "104,112,100"] if slot == "SCR2" else []),

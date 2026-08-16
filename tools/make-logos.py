@@ -9,9 +9,16 @@ wide one -- OPL always fills the rect and never preserves aspect. Rescaling each
 one to fit a common canvas and padding the rest with transparency makes a single
 fixed element size correct for every game.
 
-Canvas is 200x120. The info page draws it into a 150x120 rect, which on a 16:9
-screen displays as 200x120 -- so the art is carried at 1:1 with no upscaling,
-for 96 KB of VRAM.
+Canvas is 150x120 texels, anamorphic. The info page draws it into a 150x120
+rect, which displays as 200x120 on a 16:9 screen -- but the stretch happens to
+the whole framebuffer at scanout and does not give the rect more texels. It
+samples 150 regardless. The previous 200-wide canvas therefore had a quarter of
+its width discarded by a hardware bilinear downscale, on top of the box average
+that produced it: two resamples where one would do.
+
+Now a single average straight from the 400-wide source to 150x120, squeezed
+horizontally the way 16:9 content is. Scanout undoes the squeeze, so the shape
+on screen is unchanged and the result is sharper. 74 KB of VRAM rather than 96.
 
 Also writes fade.png, a horizontal transparent-to-background ramp that covers
 the right edge of the BG so it dissolves into the page instead of ending on a
@@ -31,7 +38,9 @@ import struct
 import sys
 import zlib
 
-CANVAS_W, CANVAS_H = 200, 120
+CANVAS_W, CANVAS_H = 150, 120     # texels
+DISPLAY_W = 200                   # what those texels look like at 16:9
+SQUEEZE = CANVAS_W / DISPLAY_W    # 0.75, the anamorphic factor
 PLATE_LUMA = 128      # below mid-grey, the logo needs a light plate to read on
 FADE_W, FADE_H = 45, 180
 BG_RGB = (0x0A, 0x0C, 0x0F)
@@ -171,9 +180,11 @@ for fn in sorted(os.listdir(art)):
     if not fn.endswith("_LGO.png"):
         continue
     sw, sh, rows = read_png(os.path.join(art, fn))
-    # Fit inside the canvas, preserving aspect.
-    scale = min(CANVAS_W / sw, CANVAS_H / sh)
-    tw, th = max(1, int(sw * scale)), max(1, int(sh * scale))
+    # Fit inside the canvas, preserving aspect *as displayed*, then squeeze.
+    # Fitting in texel space instead would leave every logo looking narrow.
+    scale = min(DISPLAY_W / sw, CANVAS_H / sh)
+    tw_disp, th = max(1, int(sw * scale)), max(1, int(sh * scale))
+    tw = max(1, round(tw_disp * SQUEEZE))
     small = box_scale(sw, sh, rows, tw, th)
     canvas = [bytearray(CANVAS_W * 4) for _ in range(CANVAS_H)]
     ox, oy = (CANVAS_W - tw) // 2, (CANVAS_H - th) // 2
