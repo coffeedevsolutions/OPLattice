@@ -1,0 +1,500 @@
+<title>GridHard QA Pass</title>
+<style>
+  /* Palette is shelf.c's own -- the panel colours in this build -- plus the
+     DualShock face-button hues, used as functional markers rather than decor:
+     you scan the checklist for a button, so the button is coloured like itself. */
+  :root {
+    --ground:  #F6F7F9;
+    --surface: #FFFFFF;
+    --sunk:    #EEF1F4;
+    --rule:    #DCE1E7;
+    --ink:     #171B21;
+    --muted:   #5F6975;
+    --faint:   #8B95A1;
+    --accent:  #2C7F92;
+    --fail:    #C42A7B;
+    --pass:    #2F8A52;
+    --tri:     #2E8F68;
+    --cir:     #C93E52;
+    --cro:     #3E6FC9;
+    --squ:     #A8459B;
+    --shadow:  0 1px 2px rgba(20,25,32,.06), 0 4px 16px rgba(20,25,32,.05);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground:  #0F1216;
+      --surface: #181C22;
+      --sunk:    #13171C;
+      --rule:    #2A3038;
+      --ink:     #F2F5F8;
+      --muted:   #98A3B0;
+      --faint:   #6B7683;
+      --accent:  #6FB3C4;
+      --fail:    #E8459B;
+      --pass:    #64C878;
+      --tri:     #4FBE8F;
+      --cir:     #E8556B;
+      --cro:     #6B99E8;
+      --squ:     #D96FBF;
+      --shadow:  0 1px 2px rgba(0,0,0,.4), 0 4px 16px rgba(0,0,0,.3);
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground:  #0F1216;
+    --surface: #181C22;
+    --sunk:    #13171C;
+    --rule:    #2A3038;
+    --ink:     #F2F5F8;
+    --muted:   #98A3B0;
+    --faint:   #6B7683;
+    --accent:  #6FB3C4;
+    --fail:    #E8459B;
+    --pass:    #64C878;
+    --tri:     #4FBE8F;
+    --cir:     #E8556B;
+    --cro:     #6B99E8;
+    --squ:     #D96FBF;
+    --shadow:  0 1px 2px rgba(0,0,0,.4), 0 4px 16px rgba(0,0,0,.3);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--ground);
+    color: var(--ink);
+    font: 400 16px/1.6 ui-sans-serif, -apple-system, "Segoe UI", Roboto, system-ui, sans-serif;
+    margin: 0;
+    padding: 0 20px 96px;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 780px; margin: 0 auto; }
+
+  code, .mono, .tok {
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    font-size: .88em;
+  }
+  .tok {
+    background: var(--sunk);
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    padding: .08em .38em;
+    white-space: nowrap;
+  }
+
+  /* ---------- masthead ---------- */
+  header { padding: 56px 0 28px; border-bottom: 1px solid var(--rule); }
+  .eyebrow {
+    font-size: 11px; font-weight: 650; letter-spacing: .14em;
+    text-transform: uppercase; color: var(--accent); margin: 0 0 14px;
+  }
+  h1 {
+    font-size: clamp(30px, 5.5vw, 42px); line-height: 1.08; font-weight: 680;
+    letter-spacing: -.022em; margin: 0 0 14px; text-wrap: balance;
+  }
+  .standfirst { font-size: 17px; color: var(--muted); margin: 0; max-width: 62ch; }
+
+  .meta {
+    display: flex; flex-wrap: wrap; gap: 8px 22px;
+    margin-top: 24px; font-size: 13px; color: var(--faint);
+  }
+  .meta b { color: var(--muted); font-weight: 600; }
+
+  /* ---------- progress ---------- */
+  .progress {
+    position: sticky; top: 0; z-index: 5;
+    display: flex; align-items: center; gap: 14px;
+    background: var(--ground);
+    border-bottom: 1px solid var(--rule);
+    padding: 12px 0; margin-bottom: 8px;
+  }
+  .bar { flex: 1; height: 5px; background: var(--sunk); border-radius: 3px; overflow: hidden; border: 1px solid var(--rule); }
+  .bar i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .25s ease; }
+  .count { font-variant-numeric: tabular-nums; font-size: 13px; color: var(--muted); font-weight: 600; white-space: nowrap; }
+  .reset {
+    font: inherit; font-size: 12px; font-weight: 600;
+    background: none; border: 1px solid var(--rule); color: var(--muted);
+    border-radius: 6px; padding: 4px 11px; cursor: pointer;
+  }
+  .reset:hover { color: var(--ink); border-color: var(--faint); }
+  .reset:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* ---------- sections ---------- */
+  section { margin-top: 44px; }
+  .shead { display: flex; align-items: baseline; gap: 12px; margin-bottom: 6px; }
+  .snum {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 13px; font-weight: 600; color: var(--accent);
+  }
+  h2 { font-size: 21px; font-weight: 660; letter-spacing: -.012em; margin: 0; }
+  .sintro { color: var(--muted); font-size: 15px; margin: 0 0 18px 30px; max-width: 62ch; }
+
+  /* ---------- checks ---------- */
+  ol.checks { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+  li.check {
+    display: grid; grid-template-columns: 26px 1fr; gap: 0 12px;
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--rule);
+    border-radius: 8px; padding: 13px 15px;
+    box-shadow: var(--shadow);
+  }
+  li.check.blocker { border-left-color: var(--fail); }
+  li.check.done { opacity: .5; }
+  li.check.done .do { text-decoration: line-through; text-decoration-thickness: 1px; }
+
+  .box {
+    grid-row: 1 / span 3;
+    width: 20px; height: 20px; margin-top: 2px;
+    border: 1.5px solid var(--faint); border-radius: 5px;
+    background: var(--sunk); cursor: pointer; padding: 0;
+    display: grid; place-items: center;
+  }
+  .box:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .box svg { width: 12px; height: 12px; opacity: 0; transform: scale(.6); transition: opacity .12s, transform .12s; }
+  li.check.done .box { background: var(--pass); border-color: var(--pass); }
+  li.check.done .box svg { opacity: 1; transform: scale(1); }
+
+  .n {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 11px; font-weight: 600; color: var(--faint);
+    letter-spacing: .04em; margin-bottom: 2px;
+  }
+  .do { font-weight: 550; }
+  .expect {
+    margin-top: 7px; padding-top: 7px;
+    border-top: 1px dashed var(--rule);
+    font-size: 14.5px; color: var(--muted);
+  }
+  .expect b { color: var(--ink); font-weight: 620; }
+  .expect::before {
+    content: "Good looks like"; display: block;
+    font-size: 10px; font-weight: 650; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--faint); margin-bottom: 3px;
+  }
+
+  /* ---------- controller buttons ---------- */
+  .btn {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 12px; font-weight: 650; letter-spacing: .03em;
+    border: 1px solid currentColor; border-radius: 5px;
+    padding: .05em .42em; white-space: nowrap;
+  }
+  .btn.sq { color: var(--squ); }
+  .btn.ci { color: var(--cir); }
+  .btn.cr { color: var(--cro); }
+  .btn.tr { color: var(--tri); }
+  .btn.sh { color: var(--muted); }
+
+  /* ---------- callout ---------- */
+  .callout {
+    border: 1px solid var(--fail);
+    border-radius: 8px; padding: 15px 17px;
+    background: color-mix(in srgb, var(--fail) 7%, var(--surface));
+  }
+  .callout h3 {
+    margin: 0 0 7px; font-size: 15px; font-weight: 660; color: var(--fail);
+    display: flex; align-items: center; gap: 9px;
+  }
+  .swatch {
+    width: 30px; height: 16px; border-radius: 3px; flex: none;
+    border: 1px solid var(--rule);
+    background-image:
+      linear-gradient(45deg, #FF00FF 25%, transparent 25%, transparent 75%, #FF00FF 75%),
+      linear-gradient(45deg, #FF00FF 25%, #400040 25%, #400040 75%, #FF00FF 75%);
+    background-size: 8px 8px; background-position: 0 0, 4px 4px;
+  }
+  .callout p { margin: 0; font-size: 14.5px; color: var(--muted); }
+
+  /* ---------- report ---------- */
+  .report { margin-top: 44px; border-top: 1px solid var(--rule); padding-top: 26px; }
+  .report ul { margin: 12px 0 0; padding-left: 20px; color: var(--muted); font-size: 15px; }
+  .report li { margin-bottom: 7px; }
+  .report li b { color: var(--ink); font-weight: 620; }
+
+  .fallback {
+    margin-top: 26px; padding: 15px 17px;
+    border: 1px solid var(--rule); border-radius: 8px; background: var(--sunk);
+    font-size: 14.5px; color: var(--muted);
+  }
+  .fallback b { color: var(--ink); font-weight: 620; }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { transition: none !important; animation: none !important; }
+  }
+  @media (max-width: 560px) {
+    .sintro { margin-left: 0; }
+    li.check { grid-template-columns: 22px 1fr; }
+  }
+</style>
+
+<div class="wrap">
+
+<header>
+  <p class="eyebrow">Hardware pass &middot; DTV 480p</p>
+  <h1>GridHard QA Pass</h1>
+  <p class="standfirst">
+    Twenty-two checks over one console session. Four art patterns reach hardware
+    for the first time, every background and cover is newly 256-colour, and the
+    SHELF panel is in a build you have to boot deliberately.
+  </p>
+  <div class="meta">
+    <span><b>Channel</b> 5</span>
+    <span><b>Boot</b> hold <span class="btn sh">L1</span></span>
+    <span><b>Build</b> <code>1,375,012 bytes</code></span>
+    <span><b>Details page</b> <code>647 KB / 1.86 MB</code></span>
+  </div>
+</header>
+
+<div class="progress">
+  <span class="count"><span id="done">0</span> / 22</span>
+  <span class="bar"><i id="fill"></i></span>
+  <button class="reset" id="reset" type="button">Reset</button>
+</div>
+
+<section>
+  <div class="shead"><span class="snum">00</span><h2>Boot</h2></div>
+  <p class="sintro">
+    This must come first, because the wrong ELF looks almost identical and every
+    check below would be measuring the old build.
+  </p>
+  <ol class="checks">
+    <li class="check blocker">
+      <button class="box" type="button" aria-label="Mark complete"><svg viewBox="0 0 12 12" fill="none"><path d="M2 6.2 4.7 9 10 3.2" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      <div class="n">01 &middot; blocker</div>
+      <div class="do">Set the card to <b>channel 5</b> before inserting it.</div>
+      <div class="expect"><span class="tok">BootCard.ini</span> calls channel 5 <b>FMCB 1.953</b>. It is the only channel whose config references <span class="tok">mmce?:</span> paths, which is how it reaches the SD card at all.</div>
+    </li>
+    <li class="check blocker">
+      <button class="box" type="button" aria-label="Mark complete"><svg viewBox="0 0 12 12" fill="none"><path d="M2 6.2 4.7 9 10 3.2" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      <div class="n">02 &middot; blocker</div>
+      <div class="do">Power on and <b>hold <span class="btn sh">L1</span></b> until OPL appears.</div>
+      <div class="expect">L1 is FMCB's <span class="tok">LK_L1_E1</span>, bound to <span class="tok">mmce0:/APPS/OPNPS2LD.ELF</span> &mdash; the file just deployed. <b>Without L1</b> the auto chain runs instead and loads the older OPL baked inside the card image.</div>
+    </li>
+    <li class="check blocker">
+      <button class="box" type="button" aria-label="Mark complete"><svg viewBox="0 0 12 12" fill="none"><path d="M2 6.2 4.7 9 10 3.2" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      <div class="n">03 &middot; blocker</div>
+      <div class="do">Open Settings and confirm a <b>SHELF UI</b> row exists.</div>
+      <div class="expect">This is the only way to tell the builds apart &mdash; both report the same version string, because they are the same upstream commit. <b>No SHELF UI row means stop</b> and re-boot holding L1.</div>
+    </li>
+  </ol>
+</section>
+
+<section>
+  <div class="shead"><span class="snum">01</span><h2>Four patterns that have never rendered on a TV</h2></div>
+  <p class="sintro">
+    The card previously held only BG, COV, COVHD and LGO. PANEL, BTN, SCR and
+    SCR2 have existed solely in the previewer until now. Press
+    <span class="btn sq">&#9633; SQUARE</span> on a title to reach the details page.
+  </p>
+  <ol class="checks">
+    <li class="check">
+      <button class="box" type="button" aria-label="Mark complete"><svg viewBox="0 0 12 12" fill="none"><path d="M2 6.2 4.7 9 10 3.2" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      <div class="n">04 &middot; PANEL</div>
+      <div class="do">Check the field behind the logo <b>flips polarity per game</b>.</div>
+      <div class="expect">A pale logo should sit on a dark field and a dark logo on a pale one. <b>Metal Gear Solid 3</b> is the title that forced this feature &mdash; check it specifically.</div>
+    </li>
+    <li class="check">
+      <button class="box" type="button" aria-label="Mark complete"><svg viewBox="0 0 12 12" fill="none"><path d="M2 6.2 4.7 9 10 3.2" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      <div class="n">05 &middot; PANEL</div>
+      <div class="do">Check the fade ramp at the background's right edge.</div>
+      <div class="expect">The background should dissolve into the panel without a visible seam or step. The ramp is a 96&times;4 source stretched to 267&times;180, so any banding shows here first.</div>
+    </li>
+    <li class="check">
+      <button class="box" type="button" aria-label="Mark complete"><svg viewBox="0 0 12 12" fill="none"><path d="M2 6.2 4.7 9 10 3.2" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      <div class="n">06 &middot; BTN</div>
+      <div class="do">Find the play button between the description and the screenshots.</div>
+      <div class="expect">Icon and label both <b>left-aligned inside the button</b>, not centred. It is decorative &mdash; it does not respond to input.</div>
+    </li>
+    <li class="check">
+      <button class="box" type="button" aria-label="Mark complete"><svg viewBox="0 0 12 12" fill="none"><path d="M2 6.2 4.7 9 10 3.2" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      <div class="n">07 &middot; SCR / SCR2</div>
+      <div class="do">Confirm <b>two</b> screenshots appear below the button.</div>
+      <div class="expect">Two visibly different frames, not the same image twice. They are placeholders cut from each game's own key art &mdash; judge the geometry, not the content.</div>
+    </li>
+    <li class="check">
+      <button class="box" type="button" aria-label="Mark complete"><svg viewBox="0 0 12 12" fill="none"><path d="M2 6.2 4.7 9 10 3.2" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      <div class="n">08 &middot; spacing</div>
+      <div class="do">Measure the gap <b>above</b> and <b>below</b> the play button by eye.</div>
+      <div class="expect">Even. This is the spacing that regressed four times and was only ever judged against empty screenshot boxes &mdash; this is its first honest test.</div>
+    </li>
+    <li class="check">
+      <button class="box" type="button" aria-label="Mark complete"><svg viewBox="0 0 12 12" fill="none"><path d="M2 6.2 4.7 9 10 3.2" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      <div class="n">09 &middot; LGO</div>
+      <div class="do">Look closely at the <b>logo's edges</b>.</div>
+      <div class="expect">Smooth. Logos were deliberately left truecolour because palettising them destroyed the antialiased ring. <b>Stair-stepped edges mean that decision was wrong</b> and the logos need re-deriving.</div>
+    </li>
+  </ol>
+</section>
+
+<section>
+  <div class="shead"><span class="snum">02</span><h2>256-colour art</h2></div>
+  <p class="sintro">
+    Backgrounds, covers and large covers are newly quantised. Measured error was
+    low and no banding was visible on a monitor &mdash; the TV is the real test.
+    Undithered won the comparison, so any banding you find is the case that
+    reopens it.
+  </p>
+  <ol class="checks">
+    <li class="check">
+      <button class="box" type="button" aria-label="Mark complete"><svg viewBox="0 0 12 12" fill="none"><path d="M2 6.2 4.7 9 10 3.2" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      <div class="n">10 &middot; backgrounds</div>
+      <div class="do">Look for banding in <b>smooth dark areas</b> &mdash; smoke, sky, glow.</div>
+      <div class="expect">Continuous tone. Banding appears as concentric steps in a gradient. Flat cel-shaded regions are safe; the risk is anywhere the art blends.</div>
+    </li>
+    <li class="check">
+      <button class="box" type="button" aria-label="Mark complete"><svg viewBox="0 0 12 12" fill="none"><path d="M2 6.2 4.7 9 10 3.2" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      <div class="n">11 &middot; worst case</div>
+      <div class="do">Check <b>Naruto</b> (<span class="tok">SLPS_255.89</span>) specifically.</div>
+      <div class="expect">It had the highest quantisation error in the batch. If anything bands, it bands here first.</div>
+    </li>
+    <li class="check">
+      <button class="box" type="button" aria-label="Mark complete"><svg viewBox="0 0 12 12" fill="none"><path d="M2 6.2 4.7 9 10 3.2" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      <div class="n">12 &middot; grid covers</div>
+      <div class="do">Scan the whole list for <b>colour shifts</b> in the cover tiles.</div>
+      <div class="expect">Covers look as they did before. Twelve are resident at once, so this is also the densest palette load in the build.</div>
+    </li>
+    <li class="check">
+      <button class="box" type="button" aria-label="Mark complete"><svg viewBox="0 0 12 12" fill="none"><path d="M2 6.2 4.7 9 10 3.2" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      <div class="n">13 &middot; COVHD</div>
+      <div class="do">Compare the large cover on the details page against its grid tile.</div>
+      <div class="expect">The large one is where quantisation shows most &mdash; 300&times;450 against 100&times;150. Gradients on box art are the thing to watch.</div>
+    </li>
+  </ol>
+</section>
+
+<section>
+  <div class="shead"><span class="snum">03</span><h2>The failure signal</h2></div>
+  <p class="sintro">
+    New in this build: a texture that fails to load no longer fails silently.
+  </p>
+  <div class="callout">
+    <h3><span class="swatch"></span> Magenta checkerboard means a texture failed</h3>
+    <p>
+      If any art slot shows a magenta-and-purple checker instead of an image,
+      that asset was rejected or missing. Before this build the slot simply drew
+      nothing, which was indistinguishable from art that had never been made.
+      <b>Note the game and which slot</b> &mdash; that pair identifies the file exactly.
+    </p>
+  </div>
+  <ol class="checks" style="margin-top:14px">
+    <li class="check blocker">
+      <button class="box" type="button" aria-label="Mark complete"><svg viewBox="0 0 12 12" fill="none"><path d="M2 6.2 4.7 9 10 3.2" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      <div class="n">14 &middot; blocker</div>
+      <div class="do">Page through <b>every</b> title watching for magenta.</div>
+      <div class="expect">None. All 224 art files were verified as the right format before deploying, so a checker here means something the checks could not see.</div>
+    </li>
+  </ol>
+</section>
+
+<section>
+  <div class="shead"><span class="snum">04</span><h2>SHELF panel</h2></div>
+  <p class="sintro">
+    Off by default, so nothing below happens until you turn it on. The pages it
+    routes to are deliberately empty &mdash; what is under test is the panel, the
+    routing, and whether you can always get back out.
+  </p>
+  <ol class="checks">
+    <li class="check">
+      <button class="box" type="button" aria-label="Mark complete"><svg viewBox="0 0 12 12" fill="none"><path d="M2 6.2 4.7 9 10 3.2" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      <div class="n">15 &middot; toggle</div>
+      <div class="do">Settings &rarr; set <b>SHELF UI</b> to On.</div>
+      <div class="expect">It was Off when you arrived. That default is deliberate and is the campaign's revert path.</div>
+    </li>
+    <li class="check">
+      <button class="box" type="button" aria-label="Mark complete"><svg viewBox="0 0 12 12" fill="none"><path d="M2 6.2 4.7 9 10 3.2" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      <div class="n">16 &middot; trigger</div>
+      <div class="do">At the list's <b>left edge</b>, hold <b>LEFT</b>. Then try <span class="btn sh">L3</span>.</div>
+      <div class="expect">Both open the panel. A <em>tap</em> of LEFT at the edge must still wrap or page exactly as it always has.</div>
+    </li>
+    <li class="check">
+      <button class="box" type="button" aria-label="Mark complete"><svg viewBox="0 0 12 12" fill="none"><path d="M2 6.2 4.7 9 10 3.2" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      <div class="n">17 &middot; animation</div>
+      <div class="do">Watch the slide, then <b>cancel it mid-open</b>.</div>
+      <div class="expect">Smooth over roughly a fifth of a second, and cancellable before it finishes &mdash; that was allowed on purpose.</div>
+    </li>
+    <li class="check">
+      <button class="box" type="button" aria-label="Mark complete"><svg viewBox="0 0 12 12" fill="none"><path d="M2 6.2 4.7 9 10 3.2" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      <div class="n">18 &middot; routing</div>
+      <div class="do">Enter <b>Home</b>, <b>Library</b> and <b>Apps</b>, leaving each with <span class="btn ci">&#9675; CIRCLE</span>.</div>
+      <div class="expect">Each shows a "fills this in" placeholder and each lets you back out. <b>A stub you cannot leave is a hang</b> from where you are sitting.</div>
+    </li>
+    <li class="check">
+      <button class="box" type="button" aria-label="Mark complete"><svg viewBox="0 0 12 12" fill="none"><path d="M2 6.2 4.7 9 10 3.2" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      <div class="n">19 &middot; routing</div>
+      <div class="do">Select <b>Settings</b> from the panel.</div>
+      <div class="expect">The ordinary settings screen, unmodified. The panel should close <em>before</em> the screen transition rather than sitting on top of it.</div>
+    </li>
+    <li class="check">
+      <button class="box" type="button" aria-label="Mark complete"><svg viewBox="0 0 12 12" fill="none"><path d="M2 6.2 4.7 9 10 3.2" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      <div class="n">20 &middot; footer</div>
+      <div class="do">Read the panel's bottom line.</div>
+      <div class="expect">Online or Offline, matching reality. Free space is <b>deliberately absent</b> &mdash; no query exists for this device class, and a made-up number would be worse than none.</div>
+    </li>
+    <li class="check">
+      <button class="box" type="button" aria-label="Mark complete"><svg viewBox="0 0 12 12" fill="none"><path d="M2 6.2 4.7 9 10 3.2" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      <div class="n">21 &middot; revert</div>
+      <div class="do">Set <b>SHELF UI</b> back to Off and retry both triggers.</div>
+      <div class="expect">Completely inert &mdash; no panel, no flicker, stock behaviour. This is the property the whole campaign rests on.</div>
+    </li>
+  </ol>
+</section>
+
+<section>
+  <div class="shead"><span class="snum">05</span><h2>Stress</h2></div>
+  <p class="sintro">
+    The details page now costs about a third of the texture pool where it used to
+    cost three quarters. This is where that should show.
+  </p>
+  <ol class="checks">
+    <li class="check">
+      <button class="box" type="button" aria-label="Mark complete"><svg viewBox="0 0 12 12" fill="none"><path d="M2 6.2 4.7 9 10 3.2" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      <div class="n">22 &middot; churn</div>
+      <div class="do">Scroll the list hard, then bounce list &rarr; details &rarr; back ten times on different games.</div>
+      <div class="expect">No hang, no flicker, no art arriving late or drawing over the wrong game. Eviction churn was the cost of the old truecolour batch &mdash; it should be noticeably calmer.</div>
+    </li>
+  </ol>
+</section>
+
+<div class="report">
+  <h2 style="font-size:19px">What to send back</h2>
+  <ul>
+    <li><b>The check number</b> &mdash; 01 to 22.</li>
+    <li><b>Game and slot</b> for anything visual: "MGS3, the panel behind the logo".</li>
+    <li><b>A photo</b> for banding or edge quality. Descriptions of banding are unreliable; photographs are not.</li>
+    <li><b>Anything magenta</b>, immediately &mdash; that is a file problem, not a layout one.</li>
+  </ul>
+  <div class="fallback">
+    <b>If a build misbehaves:</b> power-cycle without holding L1. The auto chain
+    loads the older OPL from inside the card image, which is untouched by any of
+    this work. Nothing you can do from the checklist above can take that away.
+  </div>
+</div>
+
+</div>
+
+<script>
+  const checks = [...document.querySelectorAll("li.check")];
+  const doneEl = document.getElementById("done");
+  const fill   = document.getElementById("fill");
+
+  function sync() {
+    const n = checks.filter(c => c.classList.contains("done")).length;
+    doneEl.textContent = n;
+    fill.style.width = (n / checks.length * 100) + "%";
+  }
+  checks.forEach(c => {
+    const box = c.querySelector(".box");
+    const toggle = () => {
+      const on = c.classList.toggle("done");
+      box.setAttribute("aria-label", on ? "Mark incomplete" : "Mark complete");
+      sync();
+    };
+    box.addEventListener("click", toggle);
+  });
+  document.getElementById("reset").addEventListener("click", () => {
+    checks.forEach(c => c.classList.remove("done"));
+    sync();
+  });
+  sync();
+</script>
