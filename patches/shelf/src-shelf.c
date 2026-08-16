@@ -536,6 +536,16 @@ void shelfHandleInputApps(void)
     int total = appsCount();
 
     shelfHoldCron();
+    /* Reachable from the pages it routes to, or the only way back into the
+       panel is out to the main list and in again. atLeftEdge is 0: these pages
+       have no meaningful left edge, so L3 is the trigger. */
+    if (shelfHasInput()) {
+        shelfHandleInput();
+        return;
+    }
+    if (shelfTrigger(0))
+        return;
+
 
     if (getKeyOn(KEY_CIRCLE)) {
         guiSwitchScreen(GUI_SCREEN_MAIN);
@@ -585,12 +595,14 @@ void shelfHandleInputApps(void)
 #define LIB_COV_H   144
 #define LIB_MARGIN  32
 #define LIB_HERO_H  200
+#define LIB_FTR_Y   446   /* one bar, half the old footer region */
 #define LIB_Y0      224
 #define LIB_ROW_H   (LIB_COV_H + 32)
 
 static image_cache_t *libCache;
 static image_cache_t *libHeroCache;
 static int *libHeroId, *libHeroUid;
+static int libHeroLast = -1;
 static int *libCacheId, *libCacheUid;
 static item_list_t *libList;          /* what the arrays were sized against */
 
@@ -711,6 +723,13 @@ static GSTEXTURE *libHero(int idx)
     char *startup;
     if (!libHeroCache || !libHeroId || !libList || !libList->itemGetStartup)
         return NULL;
+    /* -2 is cacheGetTexture's "no such art, never ask again". Right for a cover;
+       wrong for the hero, which is one request against a dozen covers and so the
+       most likely to lose a race with a busy device -- and one lost race would
+       blank the banner for the session. Retry when the selection returns. */
+    if (libHeroId[idx] == -2 && idx != libHeroLast)
+        libHeroId[idx] = -1;
+    libHeroLast = idx;
     startup = libList->itemGetStartup(libList, idx);
     if (!startup)
         return NULL;
@@ -749,25 +768,25 @@ void shelfRenderLibrary(void)
     first = page * LIB_PER;
 
     rmDrawRect(0, 0, 640, 480, GS_SETREG_RGBA(0x0F, 0x12, 0x16, 0x80));
-    rmDrawRect(0, 0, 640, 40, GS_SETREG_RGBA(0x18, 0x1C, 0x22, 0x80));
-    rmDrawRect(0, 40, 640, 1, GS_SETREG_RGBA(0x2A, 0x30, 0x38, 0x80));
-    fntRenderString(FNT_DEFAULT, 32, HDR_TEXT_Y, ALIGN_NONE, 0, 0, "Library",
-                    GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80));
-    /* Name the device, because this page shows one and saying so is the
-       difference between a scoped view and a lie by omission. */
-    if (libList && libList->itemGetPrefix) {
-        char *pfx = libList->itemGetPrefix(libList);
-        if (pfx)
-            fntRenderString(appsFontSmall, 32 + fntCalcDimensions(FNT_DEFAULT, "Library") + 12,
-                            HDR_TEXT_Y + 5, ALIGN_NONE, 0, 0, pfx,
-                            GS_SETREG_RGBA(0x5C, 0x66, 0x74, 0x80));
-    }
+
+    /* Hero band. No header bar above it: a title strip over a banner is two
+       headers, and everything it carried fits in the footer. */
     if (total > 0) {
-        int w;
-        snprintf(buf, sizeof(buf), "%d titles", total);
-        w = fntCalcDimensions(FNT_DEFAULT, buf);
-        fntRenderString(FNT_DEFAULT, 608 - w, HDR_TEXT_Y, ALIGN_NONE, 0, 0, buf,
-                        GS_SETREG_RGBA(0x5C, 0x66, 0x74, 0x80));
+        GSTEXTURE *hero = libHero(libSel);
+        int i;
+
+        if (hero)
+            rmDrawPixmap(hero, 0, 0, ALIGN_NONE, 640, LIB_HERO_H, SCALING_NONE,
+                         gDefaultCol);
+        else
+            rmDrawRect(0, 0, 640, LIB_HERO_H, GS_SETREG_RGBA(0x14, 0x17, 0x1C, 0x80));
+
+        /* Graded wash over the lower part so the title has something to sit on
+           without flattening the whole image. */
+        for (i = 0; i < 10; i++)
+            rmDrawRect(0, LIB_HERO_H - 90 + i * 9, 640, 9,
+                       GS_SETREG_RGBA(0x0A, 0x0C, 0x0F, 6 + i * 8));
+        rmDrawRect(0, LIB_HERO_H, 640, 2, GS_SETREG_RGBA(0x2A, 0x30, 0x38, 0x80));
     }
 
     /* The highlighted title, on the hero it belongs to. */
@@ -790,6 +809,11 @@ void shelfRenderLibrary(void)
                         "This page mirrors the device the main list is on. Pick one there first.",
                         GS_SETREG_RGBA(0x5C, 0x66, 0x74, 0x80));
     }
+
+    /* Hero first: it is one request against a dozen, and asking last put it
+       behind a queue the covers had just filled. */
+    if (total > 0)
+        rmPrefetchTexture(libHero(libSel));
 
     /* One row of lookahead, no more. bind raises the use count, and gsKit's
        predictor scores by binds per frame, so a prefetched-and-undrawn texture
@@ -837,23 +861,29 @@ void shelfRenderLibrary(void)
         }
     }
 
-    rmDrawRect(32, 438, 576, 1, GS_SETREG_RGBA(0x2A, 0x30, 0x38, 0x80));
+    /* One bar, about half the old footer, carrying what the header used to:
+       page name, the device being shown, and the title count. */
+    rmDrawRect(0, LIB_FTR_Y, 640, 480 - LIB_FTR_Y, GS_SETREG_RGBA(0x18, 0x1C, 0x22, 0x80));
+    rmDrawRect(0, LIB_FTR_Y, 640, 1, GS_SETREG_RGBA(0x2A, 0x30, 0x38, 0x80));
     {
         int hx = 32, w, rx = 608;
-        hx += shelfHint(hx, FTR_TEXT_Y, 0, "Play");
-        shelfHint(hx, FTR_TEXT_Y, 1, "Back");
-        if (total > LIB_PER) {
-            int pages = (total + LIB_PER - 1) / LIB_PER;
-            snprintf(buf, sizeof(buf), "%d / %d", page + 1, pages);
-            w = fntCalcDimensions(FNT_DEFAULT, buf);
-            fntRenderString(FNT_DEFAULT, rx - w, FTR_TEXT_Y, ALIGN_NONE, 0, 0, buf,
-                            GS_SETREG_RGBA(0x5C, 0x66, 0x74, 0x80));
+        hx += shelfHint(hx, LIB_FTR_Y + 8, 0, "Play");
+        shelfHint(hx, LIB_FTR_Y + 8, 1, "Back");
+
+        if (total > 0) {
+            char *pfx = (libList && libList->itemGetPrefix)
+                            ? libList->itemGetPrefix(libList) : NULL;
+            if (total > LIB_PER)
+                snprintf(buf, sizeof(buf), "Library   %s   %d titles   %d/%d",
+                         pfx ? pfx : "", total,
+                         page + 1, (total + LIB_PER - 1) / LIB_PER);
+            else
+                snprintf(buf, sizeof(buf), "Library   %s   %d titles",
+                         pfx ? pfx : "", total);
+            w = fntCalcDimensions(appsFontSmall, buf);
+            fntRenderString(appsFontSmall, rx - w, LIB_FTR_Y + 12, ALIGN_NONE, 0, 0,
+                            buf, GS_SETREG_RGBA(0x78, 0x83, 0x8F, 0x80));
         }
-        snprintf(buf, sizeof(buf), "~%u KB / %d binds", rmVramBoundBytes() >> 10,
-                 rmVramBoundCount());
-        w = fntCalcDimensions(appsFontSmall, buf);
-        fntRenderString(appsFontSmall, rx - w, 424, ALIGN_NONE, 0, 0, buf,
-                        GS_SETREG_RGBA(0x3C, 0x44, 0x4E, 0x80));
     }
 }
 
@@ -862,6 +892,16 @@ void shelfHandleInputLibrary(void)
     int total = libSync();
 
     shelfHoldCron();
+    /* Reachable from the pages it routes to, or the only way back into the
+       panel is out to the main list and in again. atLeftEdge is 0: these pages
+       have no meaningful left edge, so L3 is the trigger. */
+    if (shelfHasInput()) {
+        shelfHandleInput();
+        return;
+    }
+    if (shelfTrigger(0))
+        return;
+
 
     if (getKeyOn(KEY_CIRCLE)) {
         guiSwitchScreen(GUI_SCREEN_MAIN);
