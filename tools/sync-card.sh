@@ -70,11 +70,14 @@ for f in "themes/$THEME"/*; do
 done
 cmp -s patches/build/OPNPS2LD-MMCE.ELF "$V/APPS/OPNPS2LD.ELF" || { echo "  ELF differs"; fail=1; }
 
-n_junk=$(find "$V" -name '._*' 2>/dev/null | wc -l | tr -d ' ')
+# `find` exits nonzero when it cannot descend into the card's protected
+# directories, and `set -o pipefail` turns that into a fatal error even though
+# the count is perfectly good. Guard it rather than lose the whole verify pass.
+n_junk=$( { find "$V" -name '._*' 2>/dev/null || true; } | wc -l | tr -d ' ')
 [ "$n_junk" = 0 ] || { echo "  $n_junk resource-fork files left"; fail=1; }
 
-src_elems=$(grep -c '^info[0-9]*:' "themes/$THEME/conf_theme.cfg")
-card_elems=$(grep -c '^info[0-9]*:' "$V/THM/$THEME/conf_theme.cfg")
+src_elems=$(grep -c '^info[0-9]*:' "themes/$THEME/conf_theme.cfg" || true)
+card_elems=$(grep -c '^info[0-9]*:' "$V/THM/$THEME/conf_theme.cfg" || true)
 [ "$src_elems" = "$card_elems" ] || { echo "  info chain: source $src_elems, card $card_elems"; fail=1; }
 
 echo
