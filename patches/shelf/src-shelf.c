@@ -25,6 +25,7 @@
 int gEnableShelfUI;
 
 #define SHELF_WIDTH   218
+#define SHELF_PEEK      5   /* sliver left visible when closed */
 #define SHELF_FRAMES   12
 
 /* How long LEFT must be held at the edge before the panel opens.
@@ -159,30 +160,45 @@ void shelfDraw(void)
     float t;
     int x, i;
 
-    if (state == SHELF_CLOSED)
+    /* Closed still draws: a sliver at the edge is the only thing telling anyone
+     * the panel exists. It also keeps the panel's right edge on screen at all
+     * times, so no primitive is ever issued wholly at negative x. */
+    if (state == SHELF_CLOSED) {
+        if (!guiOnMainScreen())
+            return;
+        rmDrawRect(0, 0, SHELF_PEEK, 480, GS_SETREG_RGBA(0x14, 0x17, 0x1C, 0x70));
+        rmDrawRect(SHELF_PEEK, 0, 1, 480, GS_SETREG_RGBA(0x3C, 0x44, 0x4E, 0x60));
+        /* A short grabber at the vertical centre, where the eye goes looking. */
+        rmDrawRect(0, 216, SHELF_PEEK + 2, 48, GS_SETREG_RGBA(0x5C, 0x66, 0x74, 0x70));
         return;
+    }
 
     t = shelfEase((float)frame / (float)SHELF_FRAMES);
-    x = (int)(-SHELF_WIDTH + t * SHELF_WIDTH);
+    x = (int)(-(SHELF_WIDTH - SHELF_PEEK) + t * (SHELF_WIDTH - SHELF_PEEK));
 
     /* Dim what is behind, in step with the slide. */
-    rmDrawRect(0, 0, 640, 480, GS_SETREG_RGBAQ(0x00, 0x00, 0x00, (int)(t * 0x50), 0x00));
+    rmDrawRect(0, 0, 640, 480, GS_SETREG_RGBA(0x00, 0x00, 0x00, (int)(t * 0x50)));
 
-    rmDrawRect(x, 0, SHELF_WIDTH, 480, GS_SETREG_RGBAQ(0x14, 0x17, 0x1C, 0x80, 0x00));
-    rmDrawLine(x + SHELF_WIDTH, 0, x + SHELF_WIDTH, 480,
-               GS_SETREG_RGBAQ(0x3C, 0x44, 0x4E, 0x80, 0x00));
+    rmDrawRect(x, 0, SHELF_WIDTH, 480, GS_SETREG_RGBA(0x14, 0x17, 0x1C, 0x80));
+    /* A 1px sprite, not a line. rmDrawLine is the only LINE primitive the panel
+     * would issue, and shelf.c had the only *vertical* one in the whole tree --
+     * everything else in OPL draws horizontal rules. Since the white flash
+     * appears exactly when the panel opens, the untrodden primitive is the first
+     * thing to remove; a 1px sprite is visually identical and is the same
+     * primitive as everything else here. */
+    rmDrawRect(x + SHELF_WIDTH, 0, 1, 480, GS_SETREG_RGBA(0x3C, 0x44, 0x4E, 0x80));
 
     fntRenderString(FNT_DEFAULT, x + 24, 28, ALIGN_NONE, 0, 0, "SHELF",
-                    GS_SETREG_RGBAQ(0xF2, 0xF5, 0xF8, 0x80, 0x00));
+                    GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80));
 
     /* Read at draw time, but both are values OPL already holds -- no queries. */
     {
         const char *net = (gNetworkStartup == 0) ? "Online" : "Offline";
 
-        rmDrawLine(x + 16, 438, x + SHELF_WIDTH - 16, 438,
-                   GS_SETREG_RGBAQ(0x2A, 0x30, 0x38, 0x80, 0x00));
+        rmDrawRect(x + 16, 438, SHELF_WIDTH - 32, 1,
+                   GS_SETREG_RGBA(0x2A, 0x30, 0x38, 0x80));
         fntRenderString(FNT_DEFAULT, x + 24, 450, ALIGN_NONE, 0, 0, net,
-                        GS_SETREG_RGBAQ(0x5C, 0x66, 0x74, 0x80, 0x00));
+                        GS_SETREG_RGBA(0x5C, 0x66, 0x74, 0x80));
     }
 
     for (i = 0; i < (int)SHELF_ITEMS; i++) {
@@ -190,11 +206,11 @@ void shelfDraw(void)
 
         if (i == selected)
             rmDrawRect(x, iy - 8, SHELF_WIDTH, 30,
-                       GS_SETREG_RGBAQ(0x22, 0x27, 0x2F, 0x80, 0x00));
+                       GS_SETREG_RGBA(0x22, 0x27, 0x2F, 0x80));
 
         fntRenderString(FNT_DEFAULT, x + 34, iy, ALIGN_NONE, 0, 0, items[i],
-                        i == selected ? GS_SETREG_RGBAQ(0xFF, 0xFF, 0xFF, 0x80, 0x00)
-                                      : GS_SETREG_RGBAQ(0x88, 0x94, 0xA2, 0x80, 0x00));
+                        i == selected ? GS_SETREG_RGBA(0xFF, 0xFF, 0xFF, 0x80)
+                                      : GS_SETREG_RGBA(0x88, 0x94, 0xA2, 0x80));
     }
 }
 
@@ -205,14 +221,14 @@ void shelfDraw(void)
 
 static void shelfRenderStub(const char *title, const char *note)
 {
-    rmDrawRect(0, 0, 640, 480, GS_SETREG_RGBAQ(0x0A, 0x0C, 0x0F, 0x80, 0x00));
+    rmDrawRect(0, 0, 640, 480, GS_SETREG_RGBA(0x0A, 0x0C, 0x0F, 0x80));
     fntRenderString(FNT_DEFAULT, 48, 60, ALIGN_NONE, 0, 0, title,
-                    GS_SETREG_RGBAQ(0xF2, 0xF5, 0xF8, 0x80, 0x00));
+                    GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80));
     fntRenderString(FNT_DEFAULT, 48, 104, ALIGN_NONE, 0, 0, note,
-                    GS_SETREG_RGBAQ(0x88, 0x94, 0xA2, 0x80, 0x00));
+                    GS_SETREG_RGBA(0x88, 0x94, 0xA2, 0x80));
     fntRenderString(FNT_DEFAULT, 48, 430, ALIGN_NONE, 0, 0,
                     "L3 or hold LEFT for the sidebar",
-                    GS_SETREG_RGBAQ(0x5C, 0x66, 0x74, 0x80, 0x00));
+                    GS_SETREG_RGBA(0x5C, 0x66, 0x74, 0x80));
 }
 
 void shelfRenderHome(void)    { shelfRenderStub("Home",    "Phase 7 fills this in."); }

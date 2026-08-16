@@ -194,7 +194,8 @@ const TINT = { r: 0x80, g: 0x80, b: 0x80 };     // gDefaultCol — neutral multi
 // elementsType[] in declaration order (themes.c:62). Case-sensitive.
 const ELEMENT_TYPES = ["AttributeText","StaticText","AttributeImage","GameImage","StaticImage",
   "Background","MenuIcon","MenuText","ItemsList","ItemIcon","ItemCover","ItemText","HintText",
-  "InfoHintText","LoadingIcon","BdmIndex","GameCountText","RecentImage","RecentText","MenuTabs"];
+  "InfoHintText","LoadingIcon","BdmIndex","GameCountText","RecentImage","RecentText","MenuTabs",
+  "AttributeList"];
 
 // Per-type defaults, transcribed from addGUIElem (themes.c:1023-1083) — see §7.
 // `color:'text'` = theme textColor, `color:'tint'` = gDefaultCol.
@@ -202,6 +203,7 @@ const D = (x,y,aligned,width,height,scaled,color,internal,extra) =>
   ({x,y,aligned,width,height,scaled,color,internal,...(extra||{})});
 const ELEMENT_DEFAULTS = {
   AttributeText:  D(0,0,ALIGN_CENTER,DIM_UNDEF,DIM_UNDEF,SCALING_RATIO,"text","AttributeText"),
+  AttributeList:  D(0,0,ALIGN_NONE,DIM_UNDEF,DIM_UNDEF,SCALING_RATIO,"text","AttributeList"),
   StaticText:     D(0,0,ALIGN_CENTER,DIM_UNDEF,DIM_UNDEF,SCALING_RATIO,"text","StaticText"),
   GameCountText:  D(0,0,ALIGN_CENTER,DIM_UNDEF,DIM_UNDEF,SCALING_RATIO,"text","StaticText"),
   AttributeImage: D(0,0,ALIGN_CENTER,DIM_UNDEF,DIM_UNDEF,SCALING_RATIO,"tint","AttributeImage",{count:1}),
@@ -241,6 +243,7 @@ const OVERLAY_ATTRS = ["overlay","overlay_ulx","overlay_uly","overlay_urx","over
                        "overlay_llx","overlay_lly","overlay_lrx","overlay_lry"];
 const TYPE_ATTRS = {
   AttributeText:  ["attribute","title","display","wrap"],
+  AttributeList:  ["attributes","separator","gap"],
   StaticText:     ["value","title","display","wrap"],
   GameCountText:  ["title","display","wrap","prefix","suffix"],
   AttributeImage: ["attribute","default",...OVERLAY_ATTRS],
@@ -271,6 +274,7 @@ const PATCHED_TYPES = new Set(["RecentImage","RecentText","MenuTabs"]);
 
 const REQUIRED_ATTR = {   // missing ⇒ element is built but never draws
   StaticText:"value", AttributeText:"attribute", AttributeImage:"attribute",
+  AttributeList:"attributes",
   GameImage:"pattern", StaticImage:"default",
 };
 
@@ -617,6 +621,16 @@ function initText(doc, name, el, kind, diags) {
       if (alias === null) alias = t.value[0] === "#" ? t.value.slice(1) : t.value;
       t.alias = alias + (t.sizingMode === SIZING_WRAP ? ":\n" : ": ");
     }
+  } else if (kind === "AttributeList") {
+    // Split on commas, trimming leading spaces, exactly as initAttributeList does.
+    const raw = getStr(doc, name + "_attributes");
+    if (raw === null) { el.drawable = false; el.missing = "attributes"; }
+    else {
+      t.keys = raw.split(",").map(k => k.replace(/^ +/, "")).filter(Boolean).slice(0, 8);
+      t.separator = getStr(doc, name + "_separator") ?? "\u00b7";
+      const g = getStr(doc, name + "_gap");
+      t.gap = g === null ? 6 : Math.max(0, atoi(g));
+    }
   } else if (kind === "GameCountText") {
     t.alias = "";
     t.countPrefix = getStr(doc, name + "_prefix");
@@ -756,6 +770,7 @@ function addGUIElem(doc, name, theme, chain, diags) {
   const el = initBasic(doc, name, typeName, def, theme, diags);
 
   switch (typeName) {
+    case "AttributeList":
     case "StaticText": case "AttributeText": case "GameCountText":
       initText(doc, name, el, typeName, diags); break;
     case "StaticImage": case "AttributeImage": case "GameImage":
@@ -1764,6 +1779,7 @@ function drawElement(el) {
       break;
     }
     case "AttributeText": q = drawAttributeText(el, game); break;
+    case "AttributeList": q = drawAttributeList(el, game); break;
     case "MenuText":   q = drawMenuText(el); break;
     case "MenuIcon":   q = stubQuad(el, "MenuIcon", 32, 32); break;
     case "BdmIndex":   q = stubQuad(el, "USB 1", 64, 8); break;
@@ -1824,6 +1840,39 @@ function drawSingleText(el, str) {
     str = fitString(s => textWidth(s, fontSpec(el)), String(str), box.w);
   renderString(el, el.posX, el.posY, el.aligned, box.w, box.h, str, el.color);
   return textRect(el, String(str), box);
+}
+
+/** Inline strip of several attributes, separated, skipping absent ones.
+ *  Mirrors drawAttributeList in themes.c: the pen advances by each measured
+ *  value, so gaps are constant instead of depending on how long a value is.
+ *  A missing value takes its separator with it -- no dangling bullet. */
+function drawAttributeList(el, game) {
+  const ex = el.extended || {};
+  const keys = ex.keys || [];
+  const sep = ex.separator ?? "·";
+  const gap = ex.gap ?? 6;
+  const spec = fontSpec(el);
+  const limit = el.width > 0 ? el.posX + el.width : SCREEN_W;
+  let pen = el.posX, drawn = 0;
+  for (const k of keys) {
+    let v = gameAttr(game, k);
+    if (v === null || v === undefined || v === "") continue;
+    // #Size carries no unit in the config; AttributeText appends it at draw
+    // time and this must match, or the previewer disagrees with the console.
+    if (/^#?size$/i.test(k)) v = `${v} MiB`;
+    if (drawn) {
+      const sw = textWidth(sep, spec);
+      if (pen + gap + sw + gap > limit) break;
+      renderString(el, pen + gap, el.posY, ALIGN_NONE, 0, 0, sep, el.color);
+      pen += gap + sw + gap;
+    }
+    const w = textWidth(String(v), spec);
+    if (pen + w > limit) break;
+    renderString(el, pen, el.posY, ALIGN_NONE, 0, 0, String(v), el.color);
+    pen += w;
+    drawn++;
+  }
+  return { x: el.posX, y: el.posY, w: pen - el.posX, h: spec.size };
 }
 
 function drawAttributeText(el, game) {

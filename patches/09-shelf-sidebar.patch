@@ -70,10 +70,10 @@ index 64c613b..bb9e7ae 100644
      CFG_ETHPREFIX,
      CFG_HDDSPINDOWN,
 diff --git a/include/gui.h b/include/gui.h
-index 79f256f..670f7a4 100644
+index 79f256f..153ee12 100644
 --- a/include/gui.h
 +++ b/include/gui.h
-@@ -59,6 +59,12 @@ extern int guiFrameId;
+@@ -59,7 +59,14 @@ extern int guiFrameId;
  #define GUI_SCREEN_GAME_MENU 3
  #define GUI_SCREEN_APP_MENU  4
  
@@ -84,8 +84,10 @@ index 79f256f..670f7a4 100644
 +#define GUI_SCREEN_SHELF_APPS    7
 +
  void guiSwitchScreen(int target);
++int guiOnMainScreen(void);
  
  void guiReloadScreenExtents();
+ 
 diff --git a/include/hddsupport.h b/include/hddsupport.h
 index ddbd949..1bbe60c 100644
 --- a/include/hddsupport.h
@@ -203,7 +205,7 @@ index 4330f1e..88a442e 100644
      compatmask = sbPrepare(game, configSet, size_smb_cdvdman_irx, smb_cdvdman_irx, &i);
  
 diff --git a/src/gui.c b/src/gui.c
-index 5393a55..50b1360 100644
+index 5393a55..122a146 100644
 --- a/src/gui.c
 +++ b/src/gui.c
 @@ -16,6 +16,7 @@
@@ -214,7 +216,7 @@ index 5393a55..50b1360 100644
  #include "include/ethsupport.h"
  #include "include/compatupd.h"
  #include "include/pggsm.h"
-@@ -87,7 +88,10 @@ static gui_screen_handler_t screenHandlers[] = {{&menuHandleInputMain, &menuRend
+@@ -87,13 +88,24 @@ static gui_screen_handler_t screenHandlers[] = {{&menuHandleInputMain, &menuRend
                                                  {&menuHandleInputMenu, &menuRenderMenu, 1},
                                                  {&menuHandleInputInfo, &menuRenderInfo, 1},
                                                  {&menuHandleInputGameMenu, &menuRenderGameMenu, 1},
@@ -226,7 +228,21 @@ index 5393a55..50b1360 100644
  
  // default screen handler (menu screen)
  static gui_screen_handler_t *screenHandler = &screenHandlers[GUI_SCREEN_MENU];
-@@ -459,6 +463,17 @@ static int guiUpdater(int modified)
+ 
+ // screen transition handling
+ static gui_screen_handler_t *screenHandlerTarget = NULL;
++
++/* The shelf's edge affordance must only appear where its gesture works, and
++   shelfTrigger is wired to the main list alone (menusys.c). Advertising it on
++   the settings screen would promise something that does nothing there. */
++int guiOnMainScreen(void)
++{
++    return screenHandler == &screenHandlers[GUI_SCREEN_MAIN];
++}
+ static int transIndex;
+ 
+ // Helper perlin noise data
+@@ -459,6 +471,17 @@ static int guiUpdater(int modified)
      int showAutoStartLast;
  
      if (modified) {
@@ -244,7 +260,7 @@ index 5393a55..50b1360 100644
          diaGetInt(diaConfig, CFG_LASTPLAYED, &showAutoStartLast);
          diaSetVisible(diaConfig, CFG_LBL_AUTOSTARTLAST, showAutoStartLast);
          diaSetVisible(diaConfig, CFG_AUTOSTARTLAST, showAutoStartLast);
-@@ -530,6 +545,10 @@ void guiShowConfig()
+@@ -530,6 +553,10 @@ void guiShowConfig()
      diaSetInt(diaConfig, CFG_HDDSPINDOWN, gHDDSpindown);
      diaSetString(diaConfig, CFG_BDMPREFIX, gBDMPrefix);
      diaSetString(diaConfig, CFG_ETHPREFIX, gETHPrefix);
@@ -255,7 +271,7 @@ index 5393a55..50b1360 100644
      diaSetInt(diaConfig, CFG_LASTPLAYED, gRememberLastPlayed);
      diaSetInt(diaConfig, CFG_AUTOSTARTLAST, gAutoStartLastPlayed);
      diaSetVisible(diaConfig, CFG_AUTOSTARTLAST, gRememberLastPlayed);
-@@ -551,6 +570,8 @@ void guiShowConfig()
+@@ -551,6 +578,8 @@ void guiShowConfig()
          diaGetInt(diaConfig, CFG_HDDGAMELISTCACHE, &gHDDGameListCache);
          diaGetString(diaConfig, CFG_EXITTO, gExitPath, sizeof(gExitPath));
          diaGetInt(diaConfig, CFG_ENWRITEOP, &gEnableWrite);
@@ -264,7 +280,7 @@ index 5393a55..50b1360 100644
          diaGetInt(diaConfig, CFG_HDDSPINDOWN, &gHDDSpindown);
          diaGetString(diaConfig, CFG_BDMPREFIX, gBDMPrefix, sizeof(gBDMPrefix));
          diaGetString(diaConfig, CFG_ETHPREFIX, gETHPrefix, sizeof(gETHPrefix));
-@@ -1566,6 +1587,14 @@ static void guiShow()
+@@ -1566,6 +1595,14 @@ static void guiShow()
      } else
          // render with the set screen handler
          screenHandler->renderScreen();
@@ -719,10 +735,186 @@ index b2539dd..787e273 100644
  {
      if (width > 1024 || height > 1024)
 diff --git a/src/themes.c b/src/themes.c
-index fe90cb6..7aaaf52 100644
+index fe90cb6..a958952 100644
 --- a/src/themes.c
 +++ b/src/themes.c
-@@ -392,13 +392,20 @@ static image_texture_t *initImageTexture(const char *themePath, config_set_t *th
+@@ -51,6 +51,7 @@ enum ELEM_ATTRIBUTE_TYPE {
+     ELEM_TYPE_RECENT_IMAGE,
+     ELEM_TYPE_RECENT_TEXT,
+     ELEM_TYPE_MENU_TABS,
++    ELEM_TYPE_ATTRIBUTE_LIST,
+     ELEM_TYPE_COUNT
+ };
+ 
+@@ -58,6 +59,10 @@ enum ELEM_ATTRIBUTE_TYPE {
+ #define DISPLAY_DEFINED 1
+ #define DISPLAY_NEVER   2
+ 
++/* Fields one AttributeList may carry. Eight is well past the four the
++   details page needs and keeps the key array a fixed, tiny allocation. */
++#define THM_LIST_MAX 8
++
+ #define SIZING_NONE -1
+ #define SIZING_CLIP 0
+ #define SIZING_WRAP 1
+@@ -82,7 +87,8 @@ static const char *elementsType[ELEM_TYPE_COUNT] = {
+     "GameCountText",
+     "RecentImage",
+     "RecentText",
+-    "MenuTabs"};
++    "MenuTabs",
++    "AttributeList"};
+ 
+ static char *themeStrDup(config_set_t *themeConfig, const char *name, const char *suffix);
+ 
+@@ -314,6 +320,146 @@ static void drawAttributeText(struct menu_list *menu, struct submenu_list *item,
+     }
+ }
+ 
++// AttributeList ////////////////////////////////////////////////////////////////////////////////////////////////////////////
++
++/* One element that lays several attributes out inline, with a separator between
++   the ones that have a value.
++
++   AttributeText positions absolutely, so a strip built from several of them has
++   fixed field positions and fixed separator positions, and the gaps therefore
++   depend on how long each value happens to be: "Action Adventure" butts against
++   its separator while "RPG" leaves a hole. There is no arrangement of the theme
++   file that fixes that -- OPL has no inline flow, and `aligned` is a bitmask
++   offering left and centre only, with no right-align to hang a field on.
++
++   So the pen has to move, which means measuring, which means C. Each value is
++   measured with fntCalcDimensions and the pen advances by its width plus the
++   gap. Absent values are skipped entirely along with their separator, so a game
++   with no Rating does not leave a dangling bullet or a double gap.
++
++   Clipping is honoured: if the strip would overrun the element's width, drawing
++   stops at the last field that fits rather than running off the panel. */
++
++typedef struct
++{
++    char *attributes;   //!< the raw "A,B,C" list, owned; split in place at init
++    const char *keys[THM_LIST_MAX];
++    int count;
++    char *separator;    //!< drawn between adjacent present values
++    int gap;            //!< space either side of the separator
++} attribute_list_t;
++
++static void endAttributeList(theme_element_t *elem)
++{
++    attribute_list_t *al = (attribute_list_t *)elem->extended;
++    if (al) {
++        if (al->attributes)
++            free(al->attributes);
++        if (al->separator)
++            free(al->separator);
++        free(al);
++        elem->extended = NULL;
++    }
++}
++
++static void drawAttributeList(struct menu_list *menu, struct submenu_list *item, config_set_t *config, struct theme_element *elem)
++{
++    attribute_list_t *al = (attribute_list_t *)elem->extended;
++    int i, pen, drawn = 0;
++    int limit = elem->width > 0 ? elem->posX + elem->width : 640;
++
++    if (!config || !al)
++        return;
++
++    pen = elem->posX;
++    for (i = 0; i < al->count; i++) {
++        const char *value = NULL;
++        char buf[64];
++        int w;
++
++        if (!configGetStr(config, al->keys[i], &value) || !value || !*value)
++            continue;                       /* absent: no field, no separator */
++
++        /* #Size is stored as a bare number and AttributeText appends the unit
++           when it draws. Anything reading the same key has to do the same, or
++           the size silently becomes a meaningless integer. */
++        if (!strcmp(al->keys[i], CONFIG_ITEM_SIZE)) {
++            snprintf(buf, sizeof(buf), "%s MiB", value);
++            value = buf;
++        }
++
++        if (drawn) {
++            int sw = fntCalcDimensions(elem->font, al->separator);
++            if (pen + al->gap + sw + al->gap > limit)
++                break;
++            fntRenderString(elem->font, pen + al->gap, elem->posY, ALIGN_NONE, 0, 0,
++                            al->separator, elem->color);
++            pen += al->gap + sw + al->gap;
++        }
++
++        w = fntCalcDimensions(elem->font, value);
++        if (pen + w > limit)
++            break;                          /* clip rather than overrun */
++        fntRenderString(elem->font, pen, elem->posY, ALIGN_NONE, 0, 0, value, elem->color);
++        pen += w;
++        drawn++;
++    }
++}
++
++static void initAttributeList(const char *themePath, config_set_t *themeConfig, theme_t *theme, theme_element_t *elem, const char *name)
++{
++    char elemProp[64];
++    const char *attributes = NULL, *separator = NULL;
++    attribute_list_t *al;
++    char *p;
++
++    snprintf(elemProp, sizeof(elemProp), "%s_attributes", name);
++    configGetStr(themeConfig, elemProp, &attributes);
++    if (!attributes) {
++        LOG("THEMES AttributeList %s: NO attributes, elem disabled !!\n", name);
++        return;
++    }
++
++    al = (attribute_list_t *)calloc(1, sizeof(attribute_list_t));
++    if (!al)
++        return;
++
++    al->attributes = strdup(attributes);
++    if (!al->attributes) {
++        free(al);
++        return;
++    }
++
++    /* Split on commas in place. Leading spaces are trimmed so "A, B" works. */
++    p = al->attributes;
++    while (*p && al->count < THM_LIST_MAX) {
++        while (*p == ' ')
++            p++;
++        if (!*p)
++            break;
++        al->keys[al->count++] = p;
++        while (*p && *p != ',')
++            p++;
++        if (*p)
++            *p++ = '\0';
++    }
++
++    snprintf(elemProp, sizeof(elemProp), "%s_separator", name);
++    configGetStr(themeConfig, elemProp, &separator);
++    al->separator = strdup(separator ? separator : "\xc2\xb7");   /* U+00B7 */
++
++    al->gap = 6;
++    snprintf(elemProp, sizeof(elemProp), "%s_gap", name);
++    configGetInt(themeConfig, elemProp, &al->gap);
++    if (al->gap < 0)
++        al->gap = 0;
++
++    elem->extended = al;
++    elem->endElem = &endAttributeList;
++    elem->drawElem = &drawAttributeList;
++    LOG("THEMES AttributeList %s: %d attributes, gap %d\n", name, al->count, al->gap);
++}
++
+ static void initAttributeText(const char *themePath, config_set_t *themeConfig, theme_t *theme, theme_element_t *elem, const char *name)
+ {
+     const char *attribute;
+@@ -392,13 +538,20 @@ static image_texture_t *initImageTexture(const char *themePath, config_set_t *th
      if (themePath) {
          char path[256];
          snprintf(path, sizeof(path), "%s%s", themePath, imgName);
@@ -747,7 +939,7 @@ index fe90cb6..7aaaf52 100644
          result = 1;
      }
  
-@@ -1471,6 +1478,20 @@ static void drawInfoHintText(struct menu_list *menu, struct submenu_list *item,
+@@ -1471,6 +1624,20 @@ static void drawInfoHintText(struct menu_list *menu, struct submenu_list *item,
      int infoIcons[2] = {CIRCLE_ICON, CROSS_ICON};
      int x = elem->posX;
  
@@ -768,7 +960,19 @@ index fe90cb6..7aaaf52 100644
      if (elem->aligned)
          x = guiAlignSubMenuHints(2, infoHints, infoIcons, elem->font, elem->width, 1);
  
-@@ -1610,6 +1631,10 @@ static int addGUIElem(const char *themePath, config_set_t *themeConfig, theme_t
+@@ -1557,7 +1724,10 @@ static int addGUIElem(const char *themePath, config_set_t *themeConfig, theme_t
+         snprintf(elemProp, sizeof(elemProp), "%s_type", name);
+         configGetStr(themeConfig, elemProp, &type);
+         if (type) {
+-            if (!strcmp(elementsType[ELEM_TYPE_ATTRIBUTE_TEXT], type)) {
++            if (!strcmp(elementsType[ELEM_TYPE_ATTRIBUTE_LIST], type)) {
++                elem = initBasic(themePath, themeConfig, theme, name, ELEM_TYPE_ATTRIBUTE_LIST, 0, 0, ALIGN_NONE, DIM_UNDEF, DIM_UNDEF, SCALING_RATIO, theme->textColor, theme->fonts[0]);
++                initAttributeList(themePath, themeConfig, theme, elem, name);
++            } else if (!strcmp(elementsType[ELEM_TYPE_ATTRIBUTE_TEXT], type)) {
+                 elem = initBasic(themePath, themeConfig, theme, name, ELEM_TYPE_ATTRIBUTE_TEXT, 0, 0, ALIGN_CENTER, DIM_UNDEF, DIM_UNDEF, SCALING_RATIO, theme->textColor, theme->fonts[0]);
+                 initAttributeText(themePath, themeConfig, theme, elem, name);
+             } else if (!strcmp(elementsType[ELEM_TYPE_STATIC_TEXT], type)) {
+@@ -1610,6 +1780,10 @@ static int addGUIElem(const char *themePath, config_set_t *themeConfig, theme_t
                  elem->drawElem = &drawHintText;
              } else if (!strcmp(elementsType[ELEM_TYPE_INFO_HINT_TEXT], type)) {
                  elem = initBasic(themePath, themeConfig, theme, name, ELEM_TYPE_INFO_HINT_TEXT, 16, -HINT_HEIGHT, ALIGN_NONE, 12, 20, SCALING_RATIO, theme->textColor, theme->fonts[0]);
