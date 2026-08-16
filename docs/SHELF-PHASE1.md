@@ -135,11 +135,20 @@ which ImageMagick allocates itself; asking for 256 with an alpha channel can
 push the result to RGBA and silently defeat the whole exercise.
 
 **Verify the output is actually indexed** — this is the check worth putting in
-`ps2art.sh`, because an RGBA fallback is invisible until VRAM runs out:
+`ps2art.sh`, because an RGBA fallback is invisible until VRAM runs out.
+
+> **Correction.** The `%[channels]` check below does not work. ImageMagick 7
+> reports `srgb` for a genuine palette PNG, so this recipe fails a file that is
+> in fact correct. Read the IHDR instead — colour type 3 is what libpng reports
+> and what `textures.c:502` branches on. Nothing else is authoritative:
+>
+> ```bash
+> python3 -c "import sys,struct;d=open(sys.argv[1],'rb').read(26);print('PALETTE' if d[25]==3 else f'NOT indexed (colour type {d[25]})')" "$out"
+> ```
 
 ```bash
 magick identify -format '%f %[channels] %[bit-depth] %k\n' "$out"
-# want: <name> palette 8 <=256   — "srgba" or "srgb" means it fell back
+# unreliable -- see the correction above
 ```
 
 **On the PS2 alpha convention:** 0x80 is fully opaque, not 0xFF. The loader
