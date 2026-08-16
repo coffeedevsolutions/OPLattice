@@ -589,6 +589,8 @@ void shelfHandleInputApps(void)
 #define LIB_ROW_H   (LIB_COV_H + 32)
 
 static image_cache_t *libCache;
+static image_cache_t *libHeroCache;
+static int *libHeroId, *libHeroUid;
 static int *libCacheId, *libCacheUid;
 static item_list_t *libList;          /* what the arrays were sized against */
 
@@ -652,16 +654,23 @@ static int libSync(void)
     if (list != libList || count != libCount) {
         free(libCacheId);
         free(libCacheUid);
-        libCacheId = libCacheUid = NULL;
+        free(libHeroId);
+        free(libHeroUid);
+        libCacheId = libCacheUid = libHeroId = libHeroUid = NULL;
         if (count > 0) {
             libCacheId = malloc(count * sizeof(int));
             libCacheUid = malloc(count * sizeof(int));
-            if (libCacheId && libCacheUid) {
+            libHeroId = malloc(count * sizeof(int));
+            libHeroUid = malloc(count * sizeof(int));
+            if (libCacheId && libCacheUid && libHeroId && libHeroUid) {
                 memset(libCacheId, -1, count * sizeof(int));
                 memset(libCacheUid, -1, count * sizeof(int));
+                memset(libHeroId, -1, count * sizeof(int));
+                memset(libHeroUid, -1, count * sizeof(int));
             } else {
                 free(libCacheId); free(libCacheUid);
-                libCacheId = libCacheUid = NULL;
+                free(libHeroId); free(libHeroUid);
+                libCacheId = libCacheUid = libHeroId = libHeroUid = NULL;
                 count = 0;
             }
         }
@@ -672,6 +681,11 @@ static int libSync(void)
             libSel = count > 0 ? count - 1 : 0;
     }
 
+    /* One hero at a time, so a cache of two: the selected game's, and room for
+       the one being moved to before the old one is dropped. */
+    if (!libHeroCache && count > 0)
+        libHeroCache = cacheInitCache(1, "ART", 1, "BG", 2);
+
     /* Allocated on first use, so with SHELF UI off nothing is ever built. */
     if (!libCache && count > 0)
         /* Suffix, not filename fragment: mmceGetImage builds "%s%s/%s_%s" and
@@ -680,6 +694,27 @@ static int libSync(void)
         libCache = cacheInitCache(0, "ART", 1, "COV", LIB_PER + LIB_COLS);
 
     return count;
+}
+
+/* The selected game's key art, full screen and heavily scrimmed.
+ *
+ * The BG art is 418x180 and displays 3.09:1; the screen is 16:9. Fitting it
+ * honestly would need a 276-tall band, which is 57% of the page and leaves no
+ * room for a grid. Stretching it instead is the right trade *because* of the
+ * scrim: at roughly a quarter brightness behind a dark wash the aspect error
+ * reads as atmosphere rather than distortion, which is what this image is for
+ * here. It is not being presented as the artwork -- the details page does that,
+ * at native size.
+ */
+static GSTEXTURE *libHero(int idx)
+{
+    char *startup;
+    if (!libHeroCache || !libHeroId || !libList || !libList->itemGetStartup)
+        return NULL;
+    startup = libList->itemGetStartup(libList, idx);
+    if (!startup)
+        return NULL;
+    return cacheGetTexture(libHeroCache, libList, &libHeroId[idx], &libHeroUid[idx], startup);
 }
 
 static GSTEXTURE *libCover(int idx)
@@ -794,6 +829,7 @@ void shelfRenderLibrary(void)
     if (total > 0 && libList && libList->itemGetName) {
         char *name = libList->itemGetName(libList, libSel);
         libReadMeta(libSel);
+        rmDrawRect(0, 390, 640, 90, GS_SETREG_RGBA(0x0A, 0x0C, 0x0F, 0x66));
         rmDrawRect(32, 396, 576, 1, GS_SETREG_RGBA(0x2A, 0x30, 0x38, 0x80));
         if (name)
             appsCentred(FNT_DEFAULT, 320, 404, name, 576,
