@@ -509,7 +509,7 @@ index b7308a1..5441392 100644
      if (configGetStrCopy(configSet, CONFIG_ITEM_ALTSTARTUP, filename, sizeof(filename)) == 0)
          strcpy(filename, game->startup);
 diff --git a/src/opl.c b/src/opl.c
-index 4389c39..1e857f5 100644
+index 4389c39..65c029d 100644
 --- a/src/opl.c
 +++ b/src/opl.c
 @@ -20,6 +20,7 @@
@@ -747,8 +747,16 @@ index 4389c39..1e857f5 100644
      gAutoStartLastPlayed = 9;
      gSelectButton = KEY_CIRCLE; // Default to Japan.
      gMMCEPrefix[0] = '\0';
+@@ -1909,6 +2095,7 @@ static void init(void)
+     configInit(NULL);
+ 
+     rmInit();
++    shelfInitFonts();   /* font slot only; nothing else shelf-related starts here */
+     lngInit();
+     thmInit();
+     guiInit();
 diff --git a/src/renderman.c b/src/renderman.c
-index 4d90251..dded4c3 100644
+index 4d90251..ca8cea3 100644
 --- a/src/renderman.c
 +++ b/src/renderman.c
 @@ -10,6 +10,7 @@
@@ -855,16 +863,21 @@ index 4d90251..dded4c3 100644
      gsKit_prim_quad_texture(gsGlobal, inlay,
                              quad.ul.x + ulx + fRenderXOff, quad.ul.y + uly + fRenderYOff,
                              0.0f, 0.0f,
-@@ -380,6 +435,14 @@ void rmDrawOverlayPixmap(GSTEXTURE *overlay, int x, int y, short aligned, int w,
+@@ -380,6 +435,19 @@ void rmDrawOverlayPixmap(GSTEXTURE *overlay, int x, int y, short aligned, int w,
      rmDrawQuad(&quad);
  }
  
-+/* The width a SCALING_RATIO element of declared width `w` will actually be
-+   drawn at. Layout code that lays out columns has to agree with rmSetupQuad or
-+   the pitch drifts from the art -- three quarters in 16:9, unchanged in 4:3. */
++/* The width, *in virtual units*, that a SCALING_RATIO element declared `w` wide
++   will occupy: three quarters in 16:9, unchanged in 4:3.
++
++   Virtual, deliberately. Every position handed to rmDrawRect or rmDrawPixmap is
++   virtual and gets X_SCALE applied inside them, so a layout built from an
++   already-X_SCALE'd width mixes the two spaces and drifts by the overscan
++   inset -- iDisplayWidth is the display width *minus* 2 * iDisplayXOff, not 640,
++   so X_SCALE is not the identity it looks like. */
 +int rmWidthScaled(int w)
 +{
-+    return X_SCALE(w * iAspectWidth) >> 2;
++    return (w * iAspectWidth) >> 2;
 +}
 +
  void rmDrawRect(int x, int y, int w, int h, u64 color)

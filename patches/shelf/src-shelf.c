@@ -271,6 +271,13 @@ void shelfHandleInputPage(void)
    where the card widths were checked against real glyph advances.
 */
 
+/* fntRenderString's y is the TOP of the glyph box, not the baseline
+   (textBaselineOffset adds size-2 for ALIGN_NONE). A 17px string in a 40px bar
+   therefore starts at (40-17)/2, not at 27 -- which hung it 4px below the bar. */
+#define HDR_H       40
+#define HDR_TEXT_Y  ((HDR_H - 17) / 2)
+#define FTR_TEXT_Y  452
+
 #define APPS_COLS   3
 #define APPS_PER    (APPS_COLS * 2)
 #define APPS_MARGIN 32
@@ -278,6 +285,39 @@ void shelfHandleInputPage(void)
 #define APPS_CW     ((640 - 2 * APPS_MARGIN - (APPS_COLS - 1) * APPS_GAP) / APPS_COLS)
 #define APPS_CH     170
 #define APPS_Y0     64
+
+/* The PS2 face buttons, drawn. The theme has cross.png and circle.png but the
+   SHELF pages are hardcoded and load no art, and spelling them out ("Cross
+   Launch") reads as a debug string rather than a control hint. Two primitives
+   each, in the buttons' own colours. Returns the width consumed so the caller
+   can lay a row out without measuring twice. */
+static int shelfHint(int x, int y, int kind, const char *label)
+{
+    int cy = y + 8, w;
+    u64 col = (kind == 0) ? GS_SETREG_RGBA(0x6B, 0x99, 0xE8, 0x80)   /* cross  */
+                          : GS_SETREG_RGBA(0xE8, 0x55, 0x6B, 0x80);  /* circle */
+    if (kind == 0) {
+        /* Two bars crossed. Cheaper and crisper at this size than a glyph. */
+        int i;
+        for (i = 0; i < 11; i++) {
+            rmDrawRect(x + i, cy - 5 + i, 2, 2, col);
+            rmDrawRect(x + 10 - i, cy - 5 + i, 2, 2, col);
+        }
+    } else {
+        int i;
+        for (i = 0; i < 12; i++) {
+            int t = (i < 3 || i > 8) ? 3 : 2;
+            rmDrawRect(x + (i < 3 ? 3 : (i > 8 ? 3 : 0)), cy - 6 + i, t, 2, col);
+            rmDrawRect(x + 11 - (i < 3 ? 3 : (i > 8 ? 3 : 0)) - t, cy - 6 + i, t, 2, col);
+        }
+        rmDrawRect(x + 3, cy - 6, 6, 2, col);
+        rmDrawRect(x + 3, cy + 4, 6, 2, col);
+    }
+    fntRenderString(FNT_DEFAULT, x + 18, y, ALIGN_NONE, 0, 0, label,
+                    GS_SETREG_RGBA(0x5C, 0x66, 0x74, 0x80));
+    w = 18 + fntCalcDimensions(FNT_DEFAULT, label);
+    return w + 22;
+}
 
 static int appsSel;
 static int appsFontSmall;
@@ -287,12 +327,15 @@ static int appsFontSmall;
    (fntsys.c:249), so this costs no file and no art, and it survives theme
    switches because fntRelease is only ever called with a theme's own ids
    (themes.c:1724). */
-static void appsInitFont(void)
+/* Called once from opl.c after fntInit, never from a render path.
+   fntLoadFile builds a FreeType face and takes the font semaphore; doing that
+   from inside a frame is both a long stall and a lock the renderer may already
+   hold. It also retried every frame whenever it failed, because FNT_DEFAULT is
+   0 and the guard was `<= 0`. */
+void shelfInitFonts(void)
 {
-    if (appsFontSmall <= 0) {
-        int id = fntLoadFile(NULL, 12);
-        appsFontSmall = (id == FNT_ERROR) ? FNT_DEFAULT : id;
-    }
+    int id = fntLoadFile(NULL, 12);
+    appsFontSmall = (id == FNT_ERROR) ? FNT_DEFAULT : id;
 }
 
 static int appsCount(void)
@@ -329,14 +372,14 @@ static void appsStatusBar(void)
 
     rmDrawRect(0, 0, 640, 40, GS_SETREG_RGBA(0x18, 0x1C, 0x22, 0x80));
     rmDrawRect(0, 40, 640, 1, GS_SETREG_RGBA(0x2A, 0x30, 0x38, 0x80));
-    fntRenderString(FNT_DEFAULT, 32, 27, ALIGN_NONE, 0, 0, "Apps",
+    fntRenderString(FNT_DEFAULT, 32, HDR_TEXT_Y, ALIGN_NONE, 0, 0, "Apps",
                     GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80));
 
     /* Placeholder until Phase 8 binds it. sceCdReadClock is available and
        already used at OSDHistory.c:122, but its fields are BCD and its RTC runs
        on JST, so an honest clock needs an offset this phase cannot configure. */
     w = fntCalcDimensions(FNT_DEFAULT, "--:--");
-    fntRenderString(FNT_DEFAULT, rx - w, 26, ALIGN_NONE, 0, 0, "--:--",
+    fntRenderString(FNT_DEFAULT, rx - w, HDR_TEXT_Y, ALIGN_NONE, 0, 0, "--:--",
                     GS_SETREG_RGBA(0x5C, 0x66, 0x74, 0x80));
     rx -= w + 22;
 
@@ -345,7 +388,7 @@ static void appsStatusBar(void)
        tree is HDIOC_TOTALSECTOR for the internal HDD, which is total and not
        free. The slot is real, the value is not, and inventing one is worse. */
     w = fntCalcDimensions(FNT_DEFAULT, "\xe2\x80\x94 free");
-    fntRenderString(FNT_DEFAULT, rx - w, 26, ALIGN_NONE, 0, 0, "\xe2\x80\x94 free",
+    fntRenderString(FNT_DEFAULT, rx - w, HDR_TEXT_Y, ALIGN_NONE, 0, 0, "\xe2\x80\x94 free",
                     GS_SETREG_RGBA(0x5C, 0x66, 0x74, 0x80));
     rx -= w + 22;
 
@@ -354,7 +397,7 @@ static void appsStatusBar(void)
         u64 col = (gNetworkStartup == 0) ? GS_SETREG_RGBA(0x64, 0xC8, 0x78, 0x80)
                                          : GS_SETREG_RGBA(0x6E, 0x76, 0x81, 0x80);
         w = fntCalcDimensions(FNT_DEFAULT, net);
-        fntRenderString(FNT_DEFAULT, rx - w, 26, ALIGN_NONE, 0, 0, net, col);
+        fntRenderString(FNT_DEFAULT, rx - w, HDR_TEXT_Y, ALIGN_NONE, 0, 0, net, col);
         rmDrawRect(rx - w - 14, 17, 8, 8, col);
     }
 }
@@ -365,7 +408,6 @@ void shelfRenderApps(void)
     int total = appsCount();
     int page, first, i;
 
-    appsInitFont();
     if (appsSel >= total)
         appsSel = total - 1;
     if (appsSel < 0)
@@ -435,31 +477,33 @@ void shelfRenderApps(void)
 
     rmDrawRect(APPS_MARGIN, 438, 640 - 2 * APPS_MARGIN, 1,
                GS_SETREG_RGBA(0x2A, 0x30, 0x38, 0x80));
-    fntRenderString(FNT_DEFAULT, APPS_MARGIN, 458, ALIGN_NONE, 0, 0,
-                    "Cross  Launch     Circle  Back",
-                    GS_SETREG_RGBA(0x5C, 0x66, 0x74, 0x80));
+    {
+        int hx = APPS_MARGIN;
+        hx += shelfHint(hx, FTR_TEXT_Y, 0, "Launch");
+        shelfHint(hx, FTR_TEXT_Y, 1, "Back");
+    }
     /* The acceptance test made visible. Deliberately labelled with a tilde:
        this counts what was asked for this frame and cannot see gsKit's
        evictions, because its block list is file-scope in gsTexManager.c and
        reachable only through an internal symbol. Useful for "is this page
        anywhere near the pool", useless for "how full is VRAM". */
+    /* Right-aligned and stacked above the hints rather than centred: centring it
+       put it straight through the control row. */
     {
         char v[48];
-        int w;
+        int w, rx = 640 - APPS_MARGIN;
+        if (total > APPS_PER) {
+            int pages = (total + APPS_PER - 1) / APPS_PER;
+            snprintf(v, sizeof(v), "%d / %d", page + 1, pages);
+            w = fntCalcDimensions(FNT_DEFAULT, v);
+            fntRenderString(FNT_DEFAULT, rx - w, FTR_TEXT_Y, ALIGN_NONE, 0, 0, v,
+                            GS_SETREG_RGBA(0x5C, 0x66, 0x74, 0x80));
+        }
         snprintf(v, sizeof(v), "~%u KB / %d binds", rmVramBoundBytes() >> 10,
                  rmVramBoundCount());
         w = fntCalcDimensions(appsFontSmall, v);
-        fntRenderString(appsFontSmall, 320 - w / 2, 458, ALIGN_NONE, 0, 0, v,
+        fntRenderString(appsFontSmall, rx - w, 424, ALIGN_NONE, 0, 0, v,
                         GS_SETREG_RGBA(0x3C, 0x44, 0x4E, 0x80));
-    }
-
-    if (total > APPS_PER) {
-        char buf[24];
-        int pages = (total + APPS_PER - 1) / APPS_PER, w;
-        snprintf(buf, sizeof(buf), "%d / %d", page + 1, pages);
-        w = fntCalcDimensions(FNT_DEFAULT, buf);
-        fntRenderString(FNT_DEFAULT, 640 - APPS_MARGIN - w, 458, ALIGN_NONE, 0, 0,
-                        buf, GS_SETREG_RGBA(0x5C, 0x66, 0x74, 0x80));
     }
 }
 
@@ -514,6 +558,7 @@ void shelfHandleInputApps(void)
 #define LIB_PER     (LIB_COLS * LIB_ROWS)
 #define LIB_DECL_W  96                 /* declared; 72 drawn in 16:9 */
 #define LIB_COV_H   144
+#define LIB_MARGIN  32
 #define LIB_Y0      70
 #define LIB_ROW_H   (LIB_COV_H + 34)
 
@@ -532,6 +577,13 @@ static int libSync(void)
 {
     item_list_t *list = menuGetActiveList();
     int count = (list && list->itemGetCount) ? list->itemGetCount(list) : 0;
+
+    /* A NULL list happens transiently while devices are being (re)selected.
+       Treating it as a change made libSync free and malloc on alternating
+       frames -- called twice a frame, from render and from input -- which is
+       heap thrash rather than a cache. Hold the previous arrays instead. */
+    if (!list)
+        return libCount;
 
     if (list != libList || count != libCount) {
         free(libCacheId);
@@ -557,7 +609,10 @@ static int libSync(void)
 
     /* Allocated on first use, so with SHELF UI off nothing is ever built. */
     if (!libCache && count > 0)
-        libCache = cacheInitCache(0, "ART", 1, "_COV", LIB_PER + LIB_COLS);
+        /* Suffix, not filename fragment: mmceGetImage builds "%s%s/%s_%s" and
+           texDiscoverLoad appends ".png", so passing "_COV" asked for
+           SERIAL__COV.png and nothing ever loaded. */
+        libCache = cacheInitCache(0, "ART", 1, "COV", LIB_PER + LIB_COLS);
 
     return count;
 }
@@ -580,23 +635,29 @@ void shelfRenderLibrary(void)
     int pitch, x0, page, first, i;
     char buf[64];
 
-    appsInitFont();
 
-    pitch = drawnW + 16;
-    x0 = (640 - (LIB_COLS * pitch - 16)) / 2;
+    /* Derive the pitch from the space available rather than from the cover
+       width, and clamp the cover to it. Building the row out of a fixed cover
+       width plus a fixed gap overflowed the screen as soon as the aspect
+       setting made the cover wider -- 4:3 gives 96 virtual where 16:9 gives 72,
+       and six of the former do not fit. This cannot overflow by construction. */
+    pitch = (640 - 2 * LIB_MARGIN) / LIB_COLS;
+    if (drawnW > pitch - 8)
+        drawnW = pitch - 8;
+    x0 = LIB_MARGIN + (pitch - drawnW) / 2;
     page = (total > 0) ? libSel / LIB_PER : 0;
     first = page * LIB_PER;
 
     rmDrawRect(0, 0, 640, 480, GS_SETREG_RGBA(0x0F, 0x12, 0x16, 0x80));
     rmDrawRect(0, 0, 640, 40, GS_SETREG_RGBA(0x18, 0x1C, 0x22, 0x80));
     rmDrawRect(0, 40, 640, 1, GS_SETREG_RGBA(0x2A, 0x30, 0x38, 0x80));
-    fntRenderString(FNT_DEFAULT, 32, 27, ALIGN_NONE, 0, 0, "Library",
+    fntRenderString(FNT_DEFAULT, 32, HDR_TEXT_Y, ALIGN_NONE, 0, 0, "Library",
                     GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80));
     if (total > 0) {
         int w;
         snprintf(buf, sizeof(buf), "%d titles", total);
         w = fntCalcDimensions(FNT_DEFAULT, buf);
-        fntRenderString(FNT_DEFAULT, 608 - w, 26, ALIGN_NONE, 0, 0, buf,
+        fntRenderString(FNT_DEFAULT, 608 - w, HDR_TEXT_Y, ALIGN_NONE, 0, 0, buf,
                         GS_SETREG_RGBA(0x5C, 0x66, 0x74, 0x80));
     }
 
@@ -632,8 +693,10 @@ void shelfRenderLibrary(void)
         }
 
         if (cov)
-            rmDrawPixmap(cov, cx, cy, ALIGN_NONE, LIB_DECL_W, LIB_COV_H,
-                         SCALING_RATIO, gDefaultCol);
+            /* SCALING_NONE: drawnW is already the virtual width we want, and
+               re-applying the ratio here would shrink it a second time. */
+            rmDrawPixmap(cov, cx, cy, ALIGN_NONE, drawnW, LIB_COV_H,
+                         SCALING_NONE, gDefaultCol);
         else
             /* Still loading, or no art. The classic grid shows nothing here
                either; a flat tile at least keeps the layout readable. */
@@ -649,22 +712,22 @@ void shelfRenderLibrary(void)
     }
 
     rmDrawRect(32, 438, 576, 1, GS_SETREG_RGBA(0x2A, 0x30, 0x38, 0x80));
-    fntRenderString(FNT_DEFAULT, 32, 458, ALIGN_NONE, 0, 0,
-                    "Circle  Back", GS_SETREG_RGBA(0x5C, 0x66, 0x74, 0x80));
     {
-        int w;
+        int hx = 32, w, rx = 608;
+        hx += shelfHint(hx, FTR_TEXT_Y, 0, "Play");
+        shelfHint(hx, FTR_TEXT_Y, 1, "Back");
+        if (total > LIB_PER) {
+            int pages = (total + LIB_PER - 1) / LIB_PER;
+            snprintf(buf, sizeof(buf), "%d / %d", page + 1, pages);
+            w = fntCalcDimensions(FNT_DEFAULT, buf);
+            fntRenderString(FNT_DEFAULT, rx - w, FTR_TEXT_Y, ALIGN_NONE, 0, 0, buf,
+                            GS_SETREG_RGBA(0x5C, 0x66, 0x74, 0x80));
+        }
         snprintf(buf, sizeof(buf), "~%u KB / %d binds", rmVramBoundBytes() >> 10,
                  rmVramBoundCount());
         w = fntCalcDimensions(appsFontSmall, buf);
-        fntRenderString(appsFontSmall, 320 - w / 2, 458, ALIGN_NONE, 0, 0, buf,
+        fntRenderString(appsFontSmall, rx - w, 424, ALIGN_NONE, 0, 0, buf,
                         GS_SETREG_RGBA(0x3C, 0x44, 0x4E, 0x80));
-    }
-    if (total > LIB_PER) {
-        int pages = (total + LIB_PER - 1) / LIB_PER, w;
-        snprintf(buf, sizeof(buf), "%d / %d", page + 1, pages);
-        w = fntCalcDimensions(FNT_DEFAULT, buf);
-        fntRenderString(FNT_DEFAULT, 608 - w, 458, ALIGN_NONE, 0, 0, buf,
-                        GS_SETREG_RGBA(0x5C, 0x66, 0x74, 0x80));
     }
 }
 
