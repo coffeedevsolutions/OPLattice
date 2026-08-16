@@ -436,6 +436,21 @@ void shelfRenderApps(void)
     fntRenderString(FNT_DEFAULT, APPS_MARGIN, 458, ALIGN_NONE, 0, 0,
                     "Cross  Launch     Circle  Back",
                     GS_SETREG_RGBA(0x5C, 0x66, 0x74, 0x80));
+    /* The acceptance test made visible. Deliberately labelled with a tilde:
+       this counts what was asked for this frame and cannot see gsKit's
+       evictions, because its block list is file-scope in gsTexManager.c and
+       reachable only through an internal symbol. Useful for "is this page
+       anywhere near the pool", useless for "how full is VRAM". */
+    {
+        char v[48];
+        int w;
+        snprintf(v, sizeof(v), "~%u KB / %d binds", rmVramBoundBytes() >> 10,
+                 rmVramBoundCount());
+        w = fntCalcDimensions(appsFontSmall, v);
+        fntRenderString(appsFontSmall, 320 - w / 2, 458, ALIGN_NONE, 0, 0, v,
+                        GS_SETREG_RGBA(0x3C, 0x44, 0x4E, 0x80));
+    }
+
     if (total > APPS_PER) {
         char buf[24];
         int pages = (total + APPS_PER - 1) / APPS_PER, w;

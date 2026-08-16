@@ -155,6 +155,26 @@ index dccdc44..70d12dc 100644
  void oplRecentLoad(void);
  int oplRecentCount(void);
  const char *oplRecentStartup(int index);
+diff --git a/include/renderman.h b/include/renderman.h
+index 6b1f380..836d683 100644
+--- a/include/renderman.h
++++ b/include/renderman.h
+@@ -102,6 +102,15 @@ void rmDrawRect(int x, int y, int w, int h, u64 color);
+ /** Queues a single color line to be rendered */
+ void rmDrawLine(int x1, int y1, int x2, int y2, u64 color);
+ 
++/** Upload a texture ahead of the quad that draws it. Same frame, earlier in the
++ *  packet -- gsKit has no async transfer. */
++void rmPrefetchTexture(GSTEXTURE *txt);
++
++/** Bytes and count of texture binds issued this frame. Approximate by
++ *  construction: it cannot see gsKit's evictions. Diagnostic only. */
++unsigned int rmVramBoundBytes(void);
++int rmVramBoundCount(void);
++
+ /** Starts the frame - first to call every frame */
+ void rmStartFrame(void);
+ 
 diff --git a/include/textures.h b/include/textures.h
 index 9407f43..22cf7db 100644
 --- a/include/textures.h
@@ -687,7 +707,7 @@ index 4389c39..1e857f5 100644
      gSelectButton = KEY_CIRCLE; // Default to Japan.
      gMMCEPrefix[0] = '\0';
 diff --git a/src/renderman.c b/src/renderman.c
-index 4d90251..0a83587 100644
+index 4d90251..f5f3f09 100644
 --- a/src/renderman.c
 +++ b/src/renderman.c
 @@ -10,6 +10,7 @@
@@ -698,7 +718,66 @@ index 4d90251..0a83587 100644
  
  // Allocateable space in vram, as indicated in GsKit's code
  #define __VRAM_SIZE 4194304
-@@ -135,7 +136,7 @@ void rmEndFrame(void)
+@@ -97,11 +98,58 @@ void rmUnloadTexture(GSTEXTURE *txt)
+     gsKit_TexManager_free(gsGlobal, txt);
+ }
+ 
++/* Bytes bound this frame, and the count of distinct binds. Reset per frame.
++ *
++ * APPROXIMATE, and it has to stay labelled that way. gsKit's block list is
++ * file-scope in gsTexManager.c and reachable only through an internal symbol,
++ * so nothing OPL-side can observe an eviction. This counts what we ask for; the
++ * manager may already hold some of it, and may have thrown some away. It is a
++ * diagnostic, not a contract -- useful for "is this page anywhere near the
++ * pool", useless for "exactly how full is VRAM". */
++static unsigned int vramBoundBytes;
++static int vramBoundCount;
++
++unsigned int rmVramBoundBytes(void) { return vramBoundBytes; }
++int rmVramBoundCount(void) { return vramBoundCount; }
++
++static void rmAccountBind(GSTEXTURE *txt)
++{
++    if (!txt)
++        return;
++    vramBoundBytes += gsKit_texture_size(txt->Width, txt->Height, txt->PSM);
++    if (txt->Clut)
++        vramBoundBytes += gsKit_texture_size(16, 16, GS_PSM_CT32);
++    vramBoundCount++;
++}
++
++/* Upload a texture before it is drawn.
++ *
++ * gsKit has no asynchronous path: both transfer routines put the upload in the
++ * current GS packet, so this means *earlier in this frame's draw list*, not
++ * during idle time. What it buys is that a texture needed at the bottom of a
++ * grid is already resident when the quad for it is issued, instead of causing a
++ * transfer mid-draw.
++ *
++ * One caveat worth knowing before leaning on it: bind increments the use count,
++ * and gsKit's eviction predictor scores by binds per frame. A texture prefetched
++ * and then not drawn ends the frame looking as wanted as one that was drawn
++ * twice. At a row of lookahead that is noise; at aggressive lookahead it would
++ * start costing residency for things actually on screen. */
++void rmPrefetchTexture(GSTEXTURE *txt)
++{
++    if (!txt || !txt->Mem)
++        return;
++    gsKit_TexManager_bind(gsGlobal, txt);
++    rmAccountBind(txt);
++}
++
+ void rmStartFrame(void)
+ {
+     if (hires == 0)
+         gsKit_clear(gsGlobal, gColBlack);
+ 
++    vramBoundBytes = 0;
++    vramBoundCount = 0;
+     order = 0;
+ }
+ 
+@@ -135,7 +183,7 @@ void rmEndFrame(void)
      gsKit_TexManager_nextFrame(gsGlobal);
  }
  
@@ -707,7 +786,7 @@ index 4d90251..0a83587 100644
  {
      if (guiWakeupCount == 0) {
          guiWakeupCount = 1;
-@@ -229,6 +230,11 @@ int rmSetMode(int force)
+@@ -229,6 +277,11 @@ int rmSetMode(int force)
          gsKit_set_test(gsGlobal, GS_ZTEST_OFF);
          gsKit_set_primalpha(gsGlobal, gDefaultAlpha, 0);
  
@@ -719,6 +798,22 @@ index 4d90251..0a83587 100644
          // reset the contents of the screen to avoid garbage being displayed
          if (hires) {
              gsKit_hires_sync(gsGlobal);
+@@ -331,6 +384,7 @@ void rmDrawQuad(rm_quad_t *q)
+     }
+ 
+     gsKit_TexManager_bind(gsGlobal, q->txt);
++    rmAccountBind(q->txt);
+     gsKit_prim_sprite_texture(gsGlobal, q->txt,
+                               q->ul.x + fRenderXOff, q->ul.y + fRenderYOff,
+                               q->ul.u, q->ul.v,
+@@ -366,6 +420,7 @@ void rmDrawOverlayPixmap(GSTEXTURE *overlay, int x, int y, short aligned, int w,
+         gsGlobal->PrimAlphaEnable = GS_SETTING_OFF;
+ 
+     gsKit_TexManager_bind(gsGlobal, inlay);
++    rmAccountBind(inlay);
+     gsKit_prim_quad_texture(gsGlobal, inlay,
+                             quad.ul.x + ulx + fRenderXOff, quad.ul.y + uly + fRenderYOff,
+                             0.0f, 0.0f,
 diff --git a/src/textures.c b/src/textures.c
 index b2539dd..787e273 100644
 --- a/src/textures.c

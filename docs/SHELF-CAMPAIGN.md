@@ -11,8 +11,8 @@ per-phase documents; this is the ledger.
 | 2 | Play-stats data dependency | **done** — minimal core, patch 08 |
 | ~~3~~ | ~~Streaming texture manager~~ | **STRUCK** — see below |
 | 4 | Sidebar shell + page routing | **closed, verified on hardware at 480p** — [SHELF-PHASE4.md](SHELF-PHASE4.md) |
-| 5 | Apps page | **design at gate** — [SHELF-PHASE5.md](SHELF-PHASE5.md) |
-| 6 | Library grid (absorbs Phase 3's remnants) | not started |
+| 5 | Apps page | **complete** — [SHELF-PHASE5-DONE.md](SHELF-PHASE5-DONE.md) |
+| 6 | Library grid (absorbs Phase 3's remnants) | **prefetch + instrumentation shipped; grid at gate** — [SHELF-PHASE6.md](SHELF-PHASE6.md) |
 | 7 | Home page | not started |
 | 8 | **Game grouping** (was region dual-launch) | not started — scope changed, see below |
 
