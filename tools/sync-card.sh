@@ -52,6 +52,12 @@ rsync -a --delete --no-perms --no-owner --no-group \
 rsync -a --delete --no-perms --no-owner --no-group \
       --exclude '._*' --exclude '.DS_Store' "_deploy/THM/$THEME/" "$V/THM/$THEME/"
 cp _deploy/APPS/OPNPS2LD.ELF "$V/APPS/OPNPS2LD.ELF"
+# The Apps page lists directories holding a title.cfg (opl.c:scanApps), but
+# FMCB's LK_L1 binding points at mmce0:/APPS/OPNPS2LD.ELF, so the boot copy
+# cannot move into one. Both copies are written from the same verified file
+# every sync, which is the only thing keeping them from drifting apart.
+rsync -a --delete --no-perms --no-owner --no-group \
+      --exclude '._*' --exclude '.DS_Store' _deploy/APPS/OPL/ "$V/APPS/OPL/"
 
 # A stray ._ file is not cosmetic: it walks into the use-after-free at
 # supportbase.c:337 and corrupts the game list.
@@ -69,6 +75,8 @@ for f in "themes/$THEME"/*; do
     cmp -s "$f" "$V/THM/$THEME/$(basename "$f")" || { echo "  THEME differs: $(basename "$f")"; fail=1; }
 done
 cmp -s patches/build/OPNPS2LD-MMCE.ELF "$V/APPS/OPNPS2LD.ELF" || { echo "  ELF differs"; fail=1; }
+cmp -s patches/build/OPNPS2LD-MMCE.ELF "$V/APPS/OPL/OPNPS2LD.ELF" || { echo "  APPS/OPL ELF differs"; fail=1; }
+cmp -s _deploy/APPS/OPL/title.cfg "$V/APPS/OPL/title.cfg" || { echo "  title.cfg differs"; fail=1; }
 
 # `find` exits nonzero when it cannot descend into the card's protected
 # directories, and `set -o pipefail` turns that into a fatal error even though

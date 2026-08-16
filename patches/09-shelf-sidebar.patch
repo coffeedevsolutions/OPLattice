@@ -12,10 +12,30 @@ index ed7a862..3d1b42f 100644
  		appsupport.o mmcesupport.o gui.o guigame.o textures.o opl.o atlas.o nbns.o httpclient.o gsm.o cheatman.o sound.o ps2cnf.o
  
 diff --git a/include/appsupport.h b/include/appsupport.h
-index 4fca27c..d6ae764 100644
+index 4fca27c..a7d9a47 100644
 --- a/include/appsupport.h
 +++ b/include/appsupport.h
-@@ -25,7 +25,7 @@ typedef struct
+@@ -9,10 +9,15 @@
+ #define APP_PATH_MAX  128
+ #define APP_BOOT_MAX  64
+ #define APP_ARGV1_MAX 128
++#define APP_SUBTITLE_MAX 64
+ 
+ #define APP_CONFIG_TITLE "title"
+ #define APP_CONFIG_BOOT  "boot"
+ #define APP_CONFIG_ARGV1 "argv1"
++/* Optional. title.cfg is already parsed into a config_set_t, and configWrite
++   preserves keys it does not recognise, so this survives anything OPL writes
++   and an older OPL ignores it. */
++#define APP_CONFIG_SUBTITLE "subtitle"
+ 
+ #define APP_TITLE_CONFIG_FILE "title.cfg"
+ 
+@@ -22,11 +27,17 @@ typedef struct
+     char path[APP_PATH_MAX + 1];
+     char boot[APP_BOOT_MAX + 1];
+     char argv1[APP_ARGV1_MAX + 1];
++    char subtitle[APP_SUBTITLE_MAX + 1];
      u8 legacy;
  } app_info_t;
  
@@ -24,6 +44,12 @@ index 4fca27c..d6ae764 100644
  item_list_t *appGetObject(int initOnly);
  void appPostUpdateCallback(int mode);
  
++/** Borrowed pointer to the apps list, or NULL. Count comes from the vtable's
++ *  itemGetCount. Exposed so the SHELF pages can render the same list the
++ *  classic screen shows without maintaining a second copy of it. */
++const app_info_t *appGetList(void);
++
+ #endif
 diff --git a/include/bdmsupport.h b/include/bdmsupport.h
 index 5c85b13..c3e877c 100644
 --- a/include/bdmsupport.h
@@ -155,6 +181,45 @@ index ce614a1..30ef5ae 100644
      short aligned;
      int width;
      int height;
+diff --git a/src/appsupport.c b/src/appsupport.c
+index 443a7bf..81db456 100644
+--- a/src/appsupport.c
++++ b/src/appsupport.c
+@@ -107,6 +107,11 @@ void appInit(item_list_t *itemList)
+     appItemList.enabled = 1;
+ }
+ 
++const app_info_t *appGetList(void)
++{
++    return appsList;
++}
++
+ item_list_t *appGetObject(int initOnly)
+ {
+     if (initOnly && !appItemList.enabled)
+@@ -185,6 +190,7 @@ static int addAppsLegacyList(struct app_info_linked **appsLinkedList)
+             app->app.path[APP_BOOT_MAX] = '\0';
+         }
+ 
++        app->app.subtitle[0] = '\0';
+         app->app.legacy = 1;
+         count++;
+         cur = cur->next;
+@@ -223,6 +229,14 @@ static int appScanCallback(const char *path, config_set_t *appConfig, void *arg)
+         app->app.boot[APP_BOOT_MAX] = '\0';
+         strncpy(app->app.path, path, APP_PATH_MAX + 1);
+         app->app.path[APP_PATH_MAX] = '\0';
++        {
++            const char *subtitle;
++            if (configGetStr(appConfig, APP_CONFIG_SUBTITLE, &subtitle) != 0) {
++                strncpy(app->app.subtitle, subtitle, APP_SUBTITLE_MAX + 1);
++                app->app.subtitle[APP_SUBTITLE_MAX] = '\0';
++            } else
++                app->app.subtitle[0] = '\0';
++        }
+         if (configGetStr(appConfig, APP_CONFIG_ARGV1, &argv1) != 0) {
+             strncpy(app->app.argv1, argv1, APP_ARGV1_MAX + 1);
+             app->app.argv1[APP_ARGV1_MAX] = '\0';
 diff --git a/src/bdmsupport.c b/src/bdmsupport.c
 index 770f0d8..f34ab4c 100644
 --- a/src/bdmsupport.c
@@ -205,7 +270,7 @@ index 4330f1e..88a442e 100644
      compatmask = sbPrepare(game, configSet, size_smb_cdvdman_irx, smb_cdvdman_irx, &i);
  
 diff --git a/src/gui.c b/src/gui.c
-index 5393a55..122a146 100644
+index 5393a55..8e5ecd4 100644
 --- a/src/gui.c
 +++ b/src/gui.c
 @@ -16,6 +16,7 @@
@@ -224,7 +289,7 @@ index 5393a55..122a146 100644
 +                                                {&menuHandleInputAppMenu, &menuRenderAppMenu, 1},
 +                                                {&shelfHandleInputPage, &shelfRenderHome, 1},
 +                                                {&shelfHandleInputPage, &shelfRenderLibrary, 1},
-+                                                {&shelfHandleInputPage, &shelfRenderApps, 1}};
++                                                {&shelfHandleInputApps, &shelfRenderApps, 1}};
  
  // default screen handler (menu screen)
  static gui_screen_handler_t *screenHandler = &screenHandlers[GUI_SCREEN_MENU];

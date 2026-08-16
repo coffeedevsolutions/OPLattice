@@ -18,6 +18,7 @@
 #include "include/fntsys.h"
 #include "include/pad.h"
 #include "include/shelf.h"
+#include "include/appsupport.h"
 #include "include/ioman.h"
 #include "include/gui.h"
 #include "include/system.h"
@@ -233,7 +234,6 @@ static void shelfRenderStub(const char *title, const char *note)
 
 void shelfRenderHome(void)    { shelfRenderStub("Home",    "Phase 7 fills this in."); }
 void shelfRenderLibrary(void) { shelfRenderStub("Library", "Phase 6 fills this in."); }
-void shelfRenderApps(void)    { shelfRenderStub("Apps",    "Phase 5 fills this in."); }
 
 /** Input for any SHELF page while the sidebar is closed.
  *
@@ -255,3 +255,224 @@ void shelfHandleInputPage(void)
     if (getKeyOn(gSelectButton == KEY_CIRCLE ? KEY_CROSS : KEY_CIRCLE))
         guiSwitchScreen(GUI_SCREEN_MAIN);
 }
+
+/* ------------------------------------------------------------------ Apps page
+
+   A card grid over the same list the classic Apps screen shows. Nothing here
+   enumerates or launches anything itself: the list comes from appGetList() and
+   X calls the support object's own itemLaunch, so with SHELF UI off there is no
+   second launch path that could have drifted from the first.
+
+   Six cards, three by two. Nine would fit at 112 tall, but the icon would drop
+   to about 56px with no air under the name; an app list is usually short and
+   paging beats shrinking. Geometry matches the previewer's SHELF Apps tab,
+   where the card widths were checked against real glyph advances.
+*/
+
+#define APPS_COLS   3
+#define APPS_PER    (APPS_COLS * 2)
+#define APPS_MARGIN 32
+#define APPS_GAP    16
+#define APPS_CW     ((640 - 2 * APPS_MARGIN - (APPS_COLS - 1) * APPS_GAP) / APPS_COLS)
+#define APPS_CH     170
+#define APPS_Y0     64
+
+static int appsSel;
+static int appsFontSmall;
+
+/* FNT_DEFAULT is a single size, so a subtitle at the same size is not a
+   subtitle. A NULL path makes fntLoadSlot fall back to the embedded face
+   (fntsys.c:249), so this costs no file and no art, and it survives theme
+   switches because fntRelease is only ever called with a theme's own ids
+   (themes.c:1724). */
+static void appsInitFont(void)
+{
+    if (appsFontSmall <= 0) {
+        int id = fntLoadFile(NULL, 12);
+        appsFontSmall = (id == FNT_ERROR) ? FNT_DEFAULT : id;
+    }
+}
+
+static int appsCount(void)
+{
+    item_list_t *list = appGetObject(1);
+    return (list && list->itemGetCount) ? list->itemGetCount(list) : 0;
+}
+
+/* Centred, and truncated with an ellipsis if it will not fit. Measuring is the
+   whole point: a name that silently runs past its card is the failure this page
+   exists to avoid. */
+static void appsCentred(int font, int cx, int y, const char *s, int maxw, u64 colour)
+{
+    char buf[APP_TITLE_MAX + 8];
+    int w = fntCalcDimensions(font, s);
+
+    if (w > maxw) {
+        int n = (int)strlen(s);
+        while (n > 1) {
+            snprintf(buf, sizeof(buf), "%.*s\xe2\x80\xa6", n, s);
+            if (fntCalcDimensions(font, buf) <= maxw)
+                break;
+            n--;
+        }
+        s = buf;
+        w = fntCalcDimensions(font, s);
+    }
+    fntRenderString(font, cx - w / 2, y, ALIGN_NONE, 0, 0, s, colour);
+}
+
+static void appsStatusBar(void)
+{
+    int rx = 608, w;
+
+    rmDrawRect(0, 0, 640, 40, GS_SETREG_RGBA(0x18, 0x1C, 0x22, 0x80));
+    rmDrawRect(0, 40, 640, 1, GS_SETREG_RGBA(0x2A, 0x30, 0x38, 0x80));
+    fntRenderString(FNT_DEFAULT, 32, 27, ALIGN_NONE, 0, 0, "Apps",
+                    GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80));
+
+    /* Placeholder until Phase 8 binds it. sceCdReadClock is available and
+       already used at OSDHistory.c:122, but its fields are BCD and its RTC runs
+       on JST, so an honest clock needs an offset this phase cannot configure. */
+    w = fntCalcDimensions(FNT_DEFAULT, "--:--");
+    fntRenderString(FNT_DEFAULT, rx - w, 26, ALIGN_NONE, 0, 0, "--:--",
+                    GS_SETREG_RGBA(0x5C, 0x66, 0x74, 0x80));
+    rx -= w + 22;
+
+    /* Free space has no query for this device class. Nothing in bdmsupport,
+       mmcesupport or ethsupport reports capacity; the only capacity call in the
+       tree is HDIOC_TOTALSECTOR for the internal HDD, which is total and not
+       free. The slot is real, the value is not, and inventing one is worse. */
+    w = fntCalcDimensions(FNT_DEFAULT, "\xe2\x80\x94 free");
+    fntRenderString(FNT_DEFAULT, rx - w, 26, ALIGN_NONE, 0, 0, "\xe2\x80\x94 free",
+                    GS_SETREG_RGBA(0x5C, 0x66, 0x74, 0x80));
+    rx -= w + 22;
+
+    {
+        const char *net = (gNetworkStartup == 0) ? "NET" : "OFF";
+        u64 col = (gNetworkStartup == 0) ? GS_SETREG_RGBA(0x64, 0xC8, 0x78, 0x80)
+                                         : GS_SETREG_RGBA(0x6E, 0x76, 0x81, 0x80);
+        w = fntCalcDimensions(FNT_DEFAULT, net);
+        fntRenderString(FNT_DEFAULT, rx - w, 26, ALIGN_NONE, 0, 0, net, col);
+        rmDrawRect(rx - w - 14, 17, 8, 8, col);
+    }
+}
+
+void shelfRenderApps(void)
+{
+    const app_info_t *apps = appGetList();
+    int total = appsCount();
+    int page, first, i;
+
+    appsInitFont();
+    if (appsSel >= total)
+        appsSel = total - 1;
+    if (appsSel < 0)
+        appsSel = 0;
+
+    page = (total > 0) ? appsSel / APPS_PER : 0;
+    first = page * APPS_PER;
+
+    rmDrawRect(0, 0, 640, 480, GS_SETREG_RGBA(0x0F, 0x12, 0x16, 0x80));
+    appsStatusBar();
+
+    if (total <= 0) {
+        /* An empty state, not a grid of nothing with a selection index pointing
+           at an item that does not exist. */
+        fntRenderString(FNT_DEFAULT, 32, 120, ALIGN_NONE, 0, 0,
+                        "No applications found.",
+                        GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80));
+        fntRenderString(appsFontSmall, 32, 148, ALIGN_NONE, 0, 0,
+                        "Put an ELF and a title.cfg under APPS/ on a device OPL can see.",
+                        GS_SETREG_RGBA(0x5C, 0x66, 0x74, 0x80));
+    }
+
+    for (i = 0; i < APPS_PER && first + i < total; i++) {
+        int idx = first + i;
+        int cx = APPS_MARGIN + (i % APPS_COLS) * (APPS_CW + APPS_GAP);
+        int cy = APPS_Y0 + (i / APPS_COLS) * (APPS_CH + APPS_GAP);
+        int on = (idx == appsSel);
+        int ix = cx + (APPS_CW - 88) / 2;
+        char initial[2];
+
+        rmDrawRect(cx, cy, APPS_CW, APPS_CH,
+                   on ? GS_SETREG_RGBA(0x26, 0x2C, 0x35, 0x80)
+                      : GS_SETREG_RGBA(0x1C, 0x20, 0x27, 0x80));
+        if (on) {
+            u64 e = GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80);
+            rmDrawRect(cx, cy, APPS_CW, 2, e);
+            rmDrawRect(cx, cy + APPS_CH - 2, APPS_CW, 2, e);
+            rmDrawRect(cx, cy, 2, APPS_CH, e);
+            rmDrawRect(cx + APPS_CW - 2, cy, 2, APPS_CH, e);
+        } else {
+            u64 e = GS_SETREG_RGBA(0x2A, 0x30, 0x38, 0x80);
+            rmDrawRect(cx, cy, APPS_CW, 1, e);
+            rmDrawRect(cx, cy + APPS_CH - 1, APPS_CW, 1, e);
+        }
+
+        /* Icon placeholder. Real icons are Phase 6's business: six textures is a
+           new simultaneous working set on a page that currently costs nothing in
+           VRAM, and the prefetch wrapper and VRAM debug line that would let
+           anyone size that budget honestly do not exist yet. */
+        rmDrawRect(ix, cy + 20, 88, 88, GS_SETREG_RGBA(0x2E, 0x35, 0x3F, 0x80));
+        if (!apps)
+            continue;
+
+        initial[0] = apps[idx].title[0];
+        initial[1] = '\0';
+        appsCentred(FNT_DEFAULT, cx + APPS_CW / 2, cy + 73, initial,
+                    APPS_CW - 16, GS_SETREG_RGBA(0x5C, 0x66, 0x74, 0x80));
+        appsCentred(FNT_DEFAULT, cx + APPS_CW / 2, cy + 134, apps[idx].title,
+                    APPS_CW - 16, GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80));
+        /* Legacy entries have no sidecar and so get no line at all rather than
+           an invented one: conf_apps.cfg is Name=path, with no third field. */
+        if (apps[idx].subtitle[0])
+            appsCentred(appsFontSmall, cx + APPS_CW / 2, cy + 154,
+                        apps[idx].subtitle, APPS_CW - 16,
+                        GS_SETREG_RGBA(0x5C, 0x66, 0x74, 0x80));
+    }
+
+    rmDrawRect(APPS_MARGIN, 438, 640 - 2 * APPS_MARGIN, 1,
+               GS_SETREG_RGBA(0x2A, 0x30, 0x38, 0x80));
+    fntRenderString(FNT_DEFAULT, APPS_MARGIN, 458, ALIGN_NONE, 0, 0,
+                    "Cross  Launch     Circle  Back",
+                    GS_SETREG_RGBA(0x5C, 0x66, 0x74, 0x80));
+    if (total > APPS_PER) {
+        char buf[24];
+        int pages = (total + APPS_PER - 1) / APPS_PER, w;
+        snprintf(buf, sizeof(buf), "%d / %d", page + 1, pages);
+        w = fntCalcDimensions(FNT_DEFAULT, buf);
+        fntRenderString(FNT_DEFAULT, 640 - APPS_MARGIN - w, 458, ALIGN_NONE, 0, 0,
+                        buf, GS_SETREG_RGBA(0x5C, 0x66, 0x74, 0x80));
+    }
+}
+
+void shelfHandleInputApps(void)
+{
+    int total = appsCount();
+
+    if (getKeyOn(KEY_CIRCLE)) {
+        guiSwitchScreen(GUI_SCREEN_MAIN);
+        return;
+    }
+    if (total <= 0)
+        return;
+
+    if (getKeyOn(KEY_LEFT) && appsSel > 0)
+        appsSel--;
+    else if (getKeyOn(KEY_RIGHT) && appsSel < total - 1)
+        appsSel++;
+    else if (getKeyOn(KEY_UP) && appsSel >= APPS_COLS)
+        appsSel -= APPS_COLS;
+    else if (getKeyOn(KEY_DOWN) && appsSel + APPS_COLS < total)
+        appsSel += APPS_COLS;
+    else if (getKeyOn(KEY_CROSS)) {
+        /* The support object's own launch, with the config it builds itself.
+           Anything else would be a second launch path to keep in step with the
+           classic screen, which is exactly what the master toggle promises not
+           to have. */
+        item_list_t *list = appGetObject(1);
+        if (list && list->itemLaunch && list->itemGetConfig)
+            list->itemLaunch(list, appsSel, list->itemGetConfig(list, appsSel));
+    }
+}
+
