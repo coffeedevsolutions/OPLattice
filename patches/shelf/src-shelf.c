@@ -22,6 +22,7 @@
 #include "include/appsupport.h"
 #include "include/menusys.h"
 #include "include/texcache.h"
+#include "include/config.h"
 #include "include/ioman.h"
 #include "include/gui.h"
 #include "include/system.h"
@@ -45,6 +46,8 @@ int gEnableShelfUI;
 #define SHELF_HOLD_FRAMES 12
 
 static enum ShelfState state;
+static void shelfHoldCron(void);
+
 static int frame;          /* 0..SHELF_FRAMES, position within the slide */
 static int selected;
 static int leftHeld;       /* frames LEFT has been held while at the edge */
@@ -65,6 +68,9 @@ static float shelfEase(float t)
 
 void shelfUpdate(void)
 {
+    if (state != SHELF_CLOSED)
+        shelfHoldCron();
+
     switch (state) {
         case SHELF_OPENING:
             if (++frame >= SHELF_FRAMES) {
@@ -139,6 +145,7 @@ int shelfTrigger(int atLeftEdge)
 
 void shelfHandleInput(void)
 {
+    shelfHoldCron();
     if (state == SHELF_OPENING || state == SHELF_CLOSING)
         return;                     /* swallow, but do not act, mid-slide */
 
@@ -246,6 +253,7 @@ void shelfRenderHome(void)    { shelfRenderStub("Home",    "Phase 7 fills this i
  */
 void shelfHandleInputPage(void)
 {
+    shelfHoldCron();
     if (shelfHasInput()) {
         shelfHandleInput();
         return;
@@ -317,6 +325,22 @@ static int shelfHint(int x, int y, int kind, const char *label)
                     GS_SETREG_RGBA(0x5C, 0x66, 0x74, 0x80));
     w = 18 + fntCalcDimensions(FNT_DEFAULT, label);
     return w + 22;
+}
+
+/* Hold OPL's auto-start countdown while the shelf owns the screen.
+ *
+ * The counter is cancelled in getKey() -- pad.c:369 -- and the shelf reads input
+ * exclusively through getKeyOn(), which does not touch it. Worse, the launch it
+ * counts down to fires from menuHandleInputMain (menusys.c:1238), and that never
+ * runs while a shelf page is up. So the display counted 5, 4, 3 ... and then
+ * straight past zero into negatives with nothing to stop it.
+ *
+ * Anyone pressing buttons in the shelf is demonstrably present, which is the
+ * whole question the countdown exists to ask. */
+static void shelfHoldCron(void)
+{
+    KeyPressedOnce = 1;
+    DisableCron = 1;
 }
 
 static int appsSel;
@@ -511,6 +535,8 @@ void shelfHandleInputApps(void)
 {
     int total = appsCount();
 
+    shelfHoldCron();
+
     if (getKeyOn(KEY_CIRCLE)) {
         guiSwitchScreen(GUI_SCREEN_MAIN);
         return;
@@ -559,12 +585,50 @@ void shelfHandleInputApps(void)
 #define LIB_DECL_W  96                 /* declared; 72 drawn in 16:9 */
 #define LIB_COV_H   144
 #define LIB_MARGIN  32
-#define LIB_Y0      70
-#define LIB_ROW_H   (LIB_COV_H + 34)
+#define LIB_Y0      56
+#define LIB_ROW_H   (LIB_COV_H + 32)
 
 static image_cache_t *libCache;
 static int *libCacheId, *libCacheUid;
 static item_list_t *libList;          /* what the arrays were sized against */
+
+/* Metadata for the highlighted title only, and cached against the index it was
+   read for. itemGetConfig reads the game's CFG off the device, so calling it
+   every frame would be a filesystem hit per frame for a line of text. */
+static int libMetaIdx = -1;
+static char libMetaLine[96];
+
+static void libReadMeta(int idx)
+{
+    config_set_t *cfg;
+    const char *genre = NULL, *year = NULL, *rating = NULL;
+    int n = 0;
+
+    if (idx == libMetaIdx)
+        return;
+    libMetaIdx = idx;
+    libMetaLine[0] = '\0';
+    if (!libList || !libList->itemGetConfig)
+        return;
+
+    cfg = libList->itemGetConfig(libList, idx);
+    if (!cfg)
+        return;
+    configGetStr(cfg, "Genre", &genre);
+    configGetStr(cfg, "Release", &year);
+    configGetStr(cfg, "Rating", &rating);
+
+    /* Absent fields take their separator with them, the same rule the details
+       page follows -- no dangling bullets on a game with no year. */
+    if (genre && *genre)
+        n += snprintf(libMetaLine + n, sizeof(libMetaLine) - n, "%s", genre);
+    if (year && *year)
+        n += snprintf(libMetaLine + n, sizeof(libMetaLine) - n,
+                      n ? "  \xc2\xb7  %s" : "%s", year);
+    if (rating && *rating)
+        snprintf(libMetaLine + n, sizeof(libMetaLine) - n,
+                 n ? "  \xc2\xb7  %s" : "%s", rating);
+}
 static int libCount, libSel;
 
 /* Reallocate and reset when the list changes identity or length.
@@ -603,6 +667,7 @@ static int libSync(void)
         }
         libList = list;
         libCount = count;
+        libMetaIdx = -1;
         if (libSel >= count)
             libSel = count > 0 ? count - 1 : 0;
     }
@@ -653,6 +718,15 @@ void shelfRenderLibrary(void)
     rmDrawRect(0, 40, 640, 1, GS_SETREG_RGBA(0x2A, 0x30, 0x38, 0x80));
     fntRenderString(FNT_DEFAULT, 32, HDR_TEXT_Y, ALIGN_NONE, 0, 0, "Library",
                     GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80));
+    /* Name the device, because this page shows one and saying so is the
+       difference between a scoped view and a lie by omission. */
+    if (libList && libList->itemGetPrefix) {
+        char *pfx = libList->itemGetPrefix(libList);
+        if (pfx)
+            fntRenderString(appsFontSmall, 32 + fntCalcDimensions(FNT_DEFAULT, "Library") + 12,
+                            HDR_TEXT_Y + 5, ALIGN_NONE, 0, 0, pfx,
+                            GS_SETREG_RGBA(0x5C, 0x66, 0x74, 0x80));
+    }
     if (total > 0) {
         int w;
         snprintf(buf, sizeof(buf), "%d titles", total);
@@ -703,12 +777,30 @@ void shelfRenderLibrary(void)
             rmDrawRect(cx, cy, drawnW, LIB_COV_H,
                        GS_SETREG_RGBA(0x1C, 0x20, 0x27, 0x80));
 
-        if (on && libList && libList->itemGetName) {
+        /* Every tile is labelled, not just the highlighted one. A grid of
+           unlabelled boxes is only readable if you already recognise the art,
+           which is exactly the case where you did not need the label. */
+        if (libList && libList->itemGetName) {
             char *name = libList->itemGetName(libList, idx);
             if (name)
-                appsCentred(appsFontSmall, 320, LIB_Y0 + 2 * LIB_ROW_H + 12,
-                            name, 560, GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80));
+                appsCentred(appsFontSmall, cx + drawnW / 2, cy + LIB_COV_H + 6,
+                            name, pitch - 4,
+                            on ? GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80)
+                               : GS_SETREG_RGBA(0x78, 0x83, 0x8F, 0x80));
         }
+    }
+
+    /* Detail strip for the highlighted title. */
+    if (total > 0 && libList && libList->itemGetName) {
+        char *name = libList->itemGetName(libList, libSel);
+        libReadMeta(libSel);
+        rmDrawRect(32, 396, 576, 1, GS_SETREG_RGBA(0x2A, 0x30, 0x38, 0x80));
+        if (name)
+            appsCentred(FNT_DEFAULT, 320, 404, name, 576,
+                        GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80));
+        if (libMetaLine[0])
+            appsCentred(appsFontSmall, 320, 424, libMetaLine, 576,
+                        GS_SETREG_RGBA(0x78, 0x83, 0x8F, 0x80));
     }
 
     rmDrawRect(32, 438, 576, 1, GS_SETREG_RGBA(0x2A, 0x30, 0x38, 0x80));
@@ -734,6 +826,8 @@ void shelfRenderLibrary(void)
 void shelfHandleInputLibrary(void)
 {
     int total = libSync();
+
+    shelfHoldCron();
 
     if (getKeyOn(KEY_CIRCLE)) {
         guiSwitchScreen(GUI_SCREEN_MAIN);
