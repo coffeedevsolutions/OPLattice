@@ -622,7 +622,7 @@ index 4389c39..1e857f5 100644
      gSelectButton = KEY_CIRCLE; // Default to Japan.
      gMMCEPrefix[0] = '\0';
 diff --git a/src/renderman.c b/src/renderman.c
-index 4d90251..6472468 100644
+index 4d90251..0a83587 100644
 --- a/src/renderman.c
 +++ b/src/renderman.c
 @@ -10,6 +10,7 @@
@@ -633,26 +633,7 @@ index 4d90251..6472468 100644
  
  // Allocateable space in vram, as indicated in GsKit's code
  #define __VRAM_SIZE 4194304
-@@ -102,6 +103,18 @@ void rmStartFrame(void)
-     if (hires == 0)
-         gsKit_clear(gsGlobal, gColBlack);
- 
-+    /* Clamp texture sampling to the texture. gsKit defaults to GS_CMODE_REPEAT
-+       and OPL never overrode it, so with GS_FILTER_LINEAR every quad's outermost
-+       row and column blended a texel fetched from the opposite edge. Nothing
-+       here tiles -- every textured primitive is issued with UV spanning exactly
-+       0..Width and 0..Height -- so wrapping could only ever pull in something
-+       wrong, and on art with transparent padding it puts a hairline around the
-+       edge of the texture rather than the edge of the artwork.
-+
-+       This has to be re-issued per frame: gsKit_set_clamp writes the CLAMP
-+       register into the current queue, and the queue is reset each frame. */
-+    gsKit_set_clamp(gsGlobal, GS_CMODE_CLAMP);
-+
-     order = 0;
- }
- 
-@@ -135,7 +148,7 @@ void rmEndFrame(void)
+@@ -135,7 +136,7 @@ void rmEndFrame(void)
      gsKit_TexManager_nextFrame(gsGlobal);
  }
  
@@ -661,7 +642,7 @@ index 4d90251..6472468 100644
  {
      if (guiWakeupCount == 0) {
          guiWakeupCount = 1;
-@@ -229,6 +242,11 @@ int rmSetMode(int force)
+@@ -229,6 +230,11 @@ int rmSetMode(int force)
          gsKit_set_test(gsGlobal, GS_ZTEST_OFF);
          gsKit_set_primalpha(gsGlobal, gDefaultAlpha, 0);
  

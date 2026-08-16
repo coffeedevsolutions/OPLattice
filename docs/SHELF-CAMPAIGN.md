@@ -430,3 +430,32 @@ on the fair test rather than the broken one.
 texture and the same CLUT — so this can be revisited at any time for free, and a
 future art batch with real gradient sources should be re-judged rather than
 inheriting this.
+
+## A correction: OPL already clamps
+
+`render: clamp texture sampling, which OPL never did` was wrong on its premise
+and caused an intermittent boot failure. Recorded here because the reasoning
+error is the kind that repeats.
+
+`GS_CMODE_REPEAT` is `0x00` in `gsCore.h`, and OPL never calls
+`gsKit_set_clamp`. From those two facts I concluded the mode was REPEAT. But
+`gsKit_init_global` explicitly initialises the struct:
+
+```c
+gsGlobal->Clamp->WMS = GS_CMODE_CLAMP;      /* gsInit.c:555 */
+gsGlobal->Clamp->WMT = GS_CMODE_CLAMP;
+```
+
+**Clamping was already on.** I read the constant's value and inferred the
+default from it, instead of reading the initialiser. A "default" in a library is
+whatever its init function writes, not whatever the zero value happens to name.
+
+The call was therefore semantically a no-op — but not a harmless one. It went in
+`rmStartFrame`, so every frame allocated an extra GIF_AD packet into the draw
+queue, on every screen including the boot path. The symptom was a boot that
+half the time reached the settings screen with an unresponsive pad.
+
+Two things follow. The hairline hypothesis it was meant to test is dead, since
+the mode it proposed to change was already set. And nothing should be added to
+`rmStartFrame` without a reason that survives the question "what does this cost
+on every frame of every screen".
