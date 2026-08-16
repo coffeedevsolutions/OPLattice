@@ -85,17 +85,28 @@ KEEP = "_art-truecolor"
 if DITHER not in ("riemersma", "o8x8", "none"):
     raise SystemExit(f"unknown dither mode: {DITHER}")
 
-# Pattern -> (colours, dither) to convert, or None to keep the truecolor source.
-# Only BG takes the configurable dither mode.
+# Pattern -> (target_w, target_h, mode). This table is the single source of
+# truth for both size and format, because keeping them in two places is how a
+# resize done by hand gets silently undone by the next quantise pass.
+#
+# The target is the texel count the element actually *draws*, which is not its
+# declared width: GameImage defaults to SCALING_RATIO, and rmSetupQuad computes
+# `X_SCALE(w * iAspectWidth) >> 2` -- three quarters of the declared width in
+# 16:9. Heights stay at the virtual value rather than the 448/480 the current
+# mode scans, so the art does not silently break on another video mode.
+#
+#   quant  quantise to 256 with the dither policy below
+#   exact  build an exact RGBA palette; lossless, for art with alpha
+#   keep   leave truecolor
 RECIPES = {
-    "BG":    (256, "bg"),
-    "COV":   (256, "off"),
-    "COVHD": (256, "off"),
-    "SCR":   (256, "off"),
-    "SCR2":  (256, "off"),
-    "LGO":   None,           # alpha -- see the module docstring
-    "PANEL": None,
-    "BTN":   None,
+    "BG":    (418, 180, "quant"),   # scaled=0, so declared width is drawn width
+    "COV":   (None, None, "quant"),  # classic grid; sized by stage-device.sh
+    "COVHD": (90,  180, "quant"),   # declared 120, RATIO -> 90
+    "SCR":   (101, 101, "quant"),   # declared 135, RATIO -> 101
+    "SCR2":  (101, 101, "quant"),
+    "LGO":   (150, 120, "keep"),    # 236 alpha levels; see the docstring
+    "PANEL": (96,    4, "exact"),
+    "BTN":   (90,   26, "exact"),   # declared 120, RATIO -> 90
 }
 
 
@@ -155,26 +166,34 @@ for f in files:
         skipped += 1
         continue
 
-    if recipe is None:
-        # Deliberately truecolor. Restore from the bank so a re-run after an
-        # earlier, wrong conversion puts the good edges back.
-        shutil.copy2(src, dst)
+    tw, th, mode = recipe
+    resize = ["-filter", "Lanczos", "-resize", f"{tw}x{th}!"] if tw else []
+
+    if mode == "keep":
+        # Truecolor by choice. Resize from the bank so a re-run cannot compound,
+        # and so a hand-made resize cannot be silently undone by this pass.
+        subprocess.run(["magick", src, *resize, "-strip", dst], check=True)
         after += cost(dst)
         skipped += 1
         continue
 
-    colors, mode = recipe
-    if mode == "bg" and DITHER != "none":
-        dither = ["-dither", "Riemersma"] if DITHER == "riemersma" \
-            else ["-ordered-dither", "o8x8"]
+    if mode == "exact":
+        # Alpha-bearing: resize here, then hand it to the RGBA palettiser, which
+        # is lossless when the image has at most 256 distinct RGBA values and
+        # verifies that by decoding its own output.
+        subprocess.run(["magick", src, *resize, "-strip", dst], check=True)
+        subprocess.run([sys.executable, "tools/palettize-rgba.py", dst],
+                       check=True, stdout=subprocess.DEVNULL)
     else:
         dither = ["+dither"]
-
-    subprocess.run([
-        "magick", src, *dither, "-colors", str(colors),
-        "-define", "png:color-type=3", "-define", "png:bit-depth=8",
-        "-strip", f"PNG8:{dst}",
-    ], check=True)
+        if pattern == "BG" and DITHER != "none":
+            dither = ["-dither", "Riemersma"] if DITHER == "riemersma" \
+                else ["-ordered-dither", "o8x8"]
+        subprocess.run([
+            "magick", src, *resize, *dither, "-colors", "256",
+            "-define", "png:color-type=3", "-define", "png:bit-depth=8",
+            "-strip", f"PNG8:{dst}",
+        ], check=True)
 
     w, h, bd, ct = ihdr(dst)
     if ct != 3:
@@ -182,6 +201,8 @@ for f in files:
             f"FAILED: {f} came out colour type {ct}, not 3 (palette).\n"
             f"An RGBA fallback is invisible until VRAM runs out, so this stops here."
         )
+    if tw and (w, h) != (tw, th):
+        raise SystemExit(f"FAILED: {f} is {w}x{h}, expected {tw}x{th}")
     c = cost(dst)
     after += c
     converted += 1

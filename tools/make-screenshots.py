@@ -45,7 +45,10 @@ import subprocess
 import sys
 
 SRC_W, SRC_H = 418, 180          # the BG art this library ships, in texels
-OUT_W, OUT_H = 135, 101          # the theme rect, in texels
+OUT_W, OUT_H = 101, 101          # the theme rect, in texels
+# 135 is the element's *declared* width. GameImage defaults to SCALING_RATIO,
+# and rmSetupQuad multiplies declared width by iAspectWidth/4 -- 3/4 in 16:9 --
+# so only 101 texels are ever sampled. Declared width is not drawn width.
 
 # The crop is a 4:3 region *as displayed*. The background displays 557 wide, so
 # a full-height 4:3 window is 240 display px -- which is 180 texels once the
