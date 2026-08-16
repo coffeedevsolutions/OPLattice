@@ -23,12 +23,15 @@ set -euo pipefail
 THEME=thm_GridHard
 COV_W=100
 COV_H=150
+COVHD_W=120        # the details-page rect, in texels
+COVHD_H=180
 
 root=$(cd "$(dirname "$0")/.." && pwd)
 art=${1:-$HOME/Documents/PS2/art-out}
 out=${2:-$root/_deploy}
 
 [ -d "$art" ] || { echo "no art dir: $art" >&2; exit 1; }
+command -v magick >/dev/null || { echo "needs ImageMagick" >&2; exit 1; }
 command -v sips >/dev/null || { echo "needs sips (macOS)" >&2; exit 1; }
 
 echo "staging into $out"
@@ -49,12 +52,19 @@ for f in "$art"/*.png; do
     base=$(basename "$f")
     case "$base" in
         *_COV.png)
-            # Two copies at two resolutions. The grid keeps twelve covers
-            # resident, so its source has to stay small; the info page shows one
-            # and reads a separate pattern, so it gets the art at full size.
-            cp "$f" "$out/ART/$base"
-            sips -z "$COV_H" "$COV_W" "$out/ART/$base" >/dev/null
-            cp "$f" "$out/ART/${base%_COV.png}_COVHD.png"
+            # Two copies at two resolutions, each sized to the rect that draws
+            # it. "Full size for the info page" was the old rule and it was
+            # wrong: that rect samples 120 texels however large the texture is,
+            # so a 300x450 source only bought a 2.5x hardware downscale and
+            # 131 KB of VRAM. One Lanczos pass to the rect is sharper and
+            # cheaper. See the art commit for why the same error was in BG,
+            # LGO and SCR.
+            magick "$f" -filter Lanczos -resize "${COV_W}x${COV_H}!" \
+                +dither -colors 256 -define png:color-type=3 \
+                -define png:bit-depth=8 -strip "PNG8:$out/ART/$base"
+            magick "$f" -filter Lanczos -resize "${COVHD_W}x${COVHD_H}!" \
+                +dither -colors 256 -define png:color-type=3 \
+                -define png:bit-depth=8 -strip "PNG8:$out/ART/${base%_COV.png}_COVHD.png"
             cov=$((cov + 1)) ;;
         *_LGO.png)
             # Not copied as-is. tools/make-logos.py rewrites these onto one
