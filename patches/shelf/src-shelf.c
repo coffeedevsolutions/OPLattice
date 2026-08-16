@@ -68,7 +68,7 @@ static float shelfEase(float t)
 
 void shelfUpdate(void)
 {
-    if (state != SHELF_CLOSED)
+    if (state != SHELF_CLOSED || guiOnShelfPage())
         shelfHoldCron();
 
     switch (state) {
@@ -580,12 +580,12 @@ void shelfHandleInputApps(void)
 */
 
 #define LIB_COLS    6
-#define LIB_ROWS    2
-#define LIB_PER     (LIB_COLS * LIB_ROWS)
+#define LIB_PER     LIB_COLS      /* one row: a shelf, under a hero */
 #define LIB_DECL_W  96                 /* declared; 72 drawn in 16:9 */
 #define LIB_COV_H   144
 #define LIB_MARGIN  32
-#define LIB_Y0      56
+#define LIB_HERO_H  200
+#define LIB_Y0      224
 #define LIB_ROW_H   (LIB_COV_H + 32)
 
 static image_cache_t *libCache;
@@ -770,6 +770,18 @@ void shelfRenderLibrary(void)
                         GS_SETREG_RGBA(0x5C, 0x66, 0x74, 0x80));
     }
 
+    /* The highlighted title, on the hero it belongs to. */
+    if (total > 0 && libList && libList->itemGetName) {
+        char *nm = libList->itemGetName(libList, libSel);
+        libReadMeta(libSel);
+        if (nm)
+            fntRenderString(FNT_DEFAULT, 32, LIB_HERO_H - 62, ALIGN_NONE, 0, 0,
+                            nm, GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80));
+        if (libMetaLine[0])
+            fntRenderString(appsFontSmall, 32, LIB_HERO_H - 36, ALIGN_NONE, 0, 0,
+                            libMetaLine, GS_SETREG_RGBA(0xB4, 0xBE, 0xC8, 0x80));
+    }
+
     if (total <= 0) {
         fntRenderString(FNT_DEFAULT, 32, 120, ALIGN_NONE, 0, 0,
                         "Nothing to show yet.",
@@ -825,20 +837,6 @@ void shelfRenderLibrary(void)
         }
     }
 
-    /* Detail strip for the highlighted title. */
-    if (total > 0 && libList && libList->itemGetName) {
-        char *name = libList->itemGetName(libList, libSel);
-        libReadMeta(libSel);
-        rmDrawRect(0, 390, 640, 90, GS_SETREG_RGBA(0x0A, 0x0C, 0x0F, 0x66));
-        rmDrawRect(32, 396, 576, 1, GS_SETREG_RGBA(0x2A, 0x30, 0x38, 0x80));
-        if (name)
-            appsCentred(FNT_DEFAULT, 320, 404, name, 576,
-                        GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80));
-        if (libMetaLine[0])
-            appsCentred(appsFontSmall, 320, 424, libMetaLine, 576,
-                        GS_SETREG_RGBA(0x78, 0x83, 0x8F, 0x80));
-    }
-
     rmDrawRect(32, 438, 576, 1, GS_SETREG_RGBA(0x2A, 0x30, 0x38, 0x80));
     {
         int hx = 32, w, rx = 608;
@@ -876,10 +874,11 @@ void shelfHandleInputLibrary(void)
         libSel--;
     else if (getKeyOn(KEY_RIGHT) && libSel < total - 1)
         libSel++;
-    else if (getKeyOn(KEY_UP) && libSel >= LIB_COLS)
-        libSel -= LIB_COLS;
-    else if (getKeyOn(KEY_DOWN) && libSel + LIB_COLS < total)
-        libSel += LIB_COLS;
+    /* One row, so up and down page: there is no row above or below to reach. */
+    else if (getKeyOn(KEY_UP))
+        libSel = (libSel >= LIB_PER) ? libSel - LIB_PER : 0;
+    else if (getKeyOn(KEY_DOWN))
+        libSel = (libSel + LIB_PER < total) ? libSel + LIB_PER : total - 1;
     else if (getKeyOn(KEY_CROSS) && libList && libList->itemLaunch && libList->itemGetConfig)
         libList->itemLaunch(libList, libSel, libList->itemGetConfig(libList, libSel));
 }
