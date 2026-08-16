@@ -303,8 +303,14 @@ static int shelfHint(int x, int y, int kind, const char *label)
 {
     int cy = y + 8, w;
     u64 col = (kind == 0) ? GS_SETREG_RGBA(0x6B, 0x99, 0xE8, 0x80)   /* cross  */
+            : (kind == 2) ? GS_SETREG_RGBA(0xD9, 0x6F, 0xBF, 0x80)   /* square */
                           : GS_SETREG_RGBA(0xE8, 0x55, 0x6B, 0x80);  /* circle */
-    if (kind == 0) {
+    if (kind == 2) {
+        rmDrawRect(x, cy - 5, 11, 2, col);
+        rmDrawRect(x, cy + 4, 11, 2, col);
+        rmDrawRect(x, cy - 5, 2, 11, col);
+        rmDrawRect(x + 9, cy - 5, 2, 11, col);
+    } else if (kind == 0) {
         /* Two bars crossed. Cheaper and crisper at this size than a glyph. */
         int i;
         for (i = 0; i < 11; i++) {
@@ -609,10 +615,13 @@ void shelfHandleInputApps(void)
 #define LIB_ART_W     (LIB_CELL_W - LIB_GAP)             /* 74 declared */
 #define LIB_ART_H     (LIB_CELL_H - LIB_GAP - LIB_LABEL_H) /* 111 */
 #define LIB_PER       LIB_COLS
-#define LIB_HERO_H    200
-#define LIB_GRID_Y    208
-#define LIB_GRID_H    204                                 /* 1.5 * 136 */
-#define LIB_FTR_Y     446
+#define LIB_HERO_H    196
+#define LIB_GRID_Y    240
+/* The theme's own footer: botbar is a 30px strip at y=-30, and HintText sits at
+   y=-26 in font2 (12px) #8894A2. Matched rather than invented, so the shelf and
+   the screen the console boots into agree about where the bottom of the page is. */
+#define LIB_FTR_Y     450
+#define LIB_FTR_TEXT  454
 
 static image_cache_t *libCache;
 static image_cache_t *libHeroCache;
@@ -817,17 +826,13 @@ void shelfRenderLibrary(void)
                          : (libList && libList->itemGetName
                             ? libList->itemGetName(libList, libSel) : NULL);
         if (name)
-            fntRenderString(FNT_DEFAULT, 32, 92, ALIGN_NONE, 0, 0, name,
+            fntRenderString(FNT_DEFAULT, 32, 100, ALIGN_NONE, 0, 0, name,
                             GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80));
+        /* One line, not four. The full set belongs on the details page, which
+           Square now opens; repeating it here only crowded the picture. */
         if (libMetaA[0])
-            fntRenderString(appsFontSmall, 32, 124, ALIGN_NONE, 0, 0, libMetaA,
+            fntRenderString(appsFontSmall, 32, 128, ALIGN_NONE, 0, 0, libMetaA,
                             GS_SETREG_RGBA(0x88, 0x94, 0xA2, 0x80));
-        if (libMetaB[0])
-            fntRenderString(appsFontSmall, 32, 142, ALIGN_NONE, 0, 0, libMetaB,
-                            GS_SETREG_RGBA(0x5C, 0x66, 0x74, 0x80));
-        if (libMetaDesc[0])
-            fntRenderString(appsFontSmall, 32, 166, ALIGN_NONE, 576, 14,
-                            libMetaDesc, GS_SETREG_RGBA(0x78, 0x83, 0x8F, 0x80));
     }
 
     if (total <= 0) {
@@ -851,23 +856,23 @@ void shelfRenderLibrary(void)
         int idx = first + n;
         int cx = x0 + (n % LIB_COLS) * pitchX;
         int cy = LIB_GRID_Y + (n / LIB_COLS) * LIB_CELL_H;
-        int visible = LIB_GRID_Y + LIB_GRID_H - cy;
-        GSTEXTURE *cov;
+        /* Full size, always. Passing a shorter height to rmDrawPixmap does not
+           clip -- it scales -- so the half row came out squashed rather than cut.
+           The bottom row is drawn whole and the footer, drawn afterwards, covers
+           whatever runs past it, which is what "continues off the page" means. */
+        GSTEXTURE *cov = libCover(idx);
 
-        if (visible <= 0)
+        if (cy >= LIB_FTR_Y)
             break;
 
-        cov = libCover(idx);
         if (cov)
-            rmDrawPixmap(cov, cx, cy, ALIGN_NONE, LIB_ART_W,
-                         visible < LIB_ART_H ? visible : LIB_ART_H,
+            rmDrawPixmap(cov, cx, cy, ALIGN_NONE, LIB_ART_W, LIB_ART_H,
                          SCALING_RATIO, gDefaultCol);
         else
-            rmDrawRect(cx, cy, drawnW,
-                       visible < LIB_ART_H ? visible : LIB_ART_H,
+            rmDrawRect(cx, cy, drawnW, LIB_ART_H,
                        GS_SETREG_RGBA(0x14, 0x17, 0x1C, 0x80));
 
-        if (idx == libSel && visible >= LIB_ART_H) {
+        if (idx == libSel) {
             u64 e = GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80);
             rmDrawRect(cx, cy, drawnW, LIB_FRAME, e);
             rmDrawRect(cx, cy + LIB_ART_H - LIB_FRAME, drawnW, LIB_FRAME, e);
@@ -875,7 +880,7 @@ void shelfRenderLibrary(void)
             rmDrawRect(cx + drawnW - LIB_FRAME, cy, LIB_FRAME, LIB_ART_H, e);
         }
 
-        if (visible >= LIB_ART_H + LIB_LABEL_H && libList && libList->itemGetName) {
+        if (cy + LIB_ART_H + LIB_LABEL_H <= LIB_FTR_Y && libList && libList->itemGetName) {
             char *t = libList->itemGetName(libList, idx);
             if (t)
                 fntRenderString(appsFontSmall, cx, cy + LIB_ART_H, ALIGN_NONE,
@@ -885,21 +890,21 @@ void shelfRenderLibrary(void)
         }
     }
 
-    /* One bar, carrying what a header would have said. */
-    rmDrawRect(0, LIB_FTR_Y, 640, 480 - LIB_FTR_Y, GS_SETREG_RGBA(0x18, 0x1C, 0x22, 0x80));
-    rmDrawRect(0, LIB_FTR_Y, 640, 1, GS_SETREG_RGBA(0x2A, 0x30, 0x38, 0x80));
+    /* Drawn last, so the bottom row of tiles runs under it. */
+    rmDrawRect(0, LIB_FTR_Y, 640, 480 - LIB_FTR_Y, GS_SETREG_RGBA(0x14, 0x17, 0x1C, 0x80));
     {
-        int hx = 32, w, rx = 608;
-        hx += shelfHint(hx, LIB_FTR_Y + 8, 0, "Play");
-        shelfHint(hx, LIB_FTR_Y + 8, 1, "Back");
+        int hx = 35, w, rx = 605;
+        hx += shelfHint(hx, LIB_FTR_TEXT, 0, "Play");
+        hx += shelfHint(hx, LIB_FTR_TEXT, 2, "Details");
+        shelfHint(hx, LIB_FTR_TEXT, 1, "Back");
         if (total > 0) {
-            char *pfx = (libList && libList->itemGetPrefix)
-                            ? libList->itemGetPrefix(libList) : NULL;
-            snprintf(buf, sizeof(buf), "Library   %s   %d of %d",
-                     pfx ? pfx : "", libSel + 1, total);
+            snprintf(buf, sizeof(buf), "%d of %d", libSel + 1, total);
             w = fntCalcDimensions(appsFontSmall, buf);
-            fntRenderString(appsFontSmall, rx - w, LIB_FTR_Y + 12, ALIGN_NONE, 0, 0,
-                            buf, GS_SETREG_RGBA(0x78, 0x83, 0x8F, 0x80));
+            /* Right-aligned, and only drawn if the hints have not reached it --
+               overlapping is worse than omitting a count you can infer. */
+            if (rx - w > hx + 8)
+                fntRenderString(appsFontSmall, rx - w, LIB_FTR_TEXT, ALIGN_NONE, 0, 0,
+                                buf, GS_SETREG_RGBA(0x88, 0x94, 0xA2, 0x80));
         }
     }
 }
@@ -937,6 +942,11 @@ void shelfHandleInputLibrary(void)
         libSel -= LIB_COLS;
     else if (getKeyOn(KEY_DOWN))
         libSel = (libSel + LIB_COLS < total) ? libSel + LIB_COLS : total - 1;
-    else if (getKeyOn(KEY_CROSS) && libList && libList->itemLaunch && libList->itemGetConfig)
+    else if (getKeyOn(KEY_SQUARE)) {
+        /* The theme's info page, not a second rendering of it. menuSelectIndex
+           hands the selection to the classic screen, which owns that layout. */
+        if (menuSelectIndex(libSel))
+            guiSwitchScreen(GUI_SCREEN_INFO);
+    } else if (getKeyOn(KEY_CROSS) && libList && libList->itemLaunch && libList->itemGetConfig)
         libList->itemLaunch(libList, libSel, libList->itemGetConfig(libList, libSel));
 }

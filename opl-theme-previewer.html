@@ -2162,6 +2162,11 @@ const SHELF_FNT = { size: 17, family: "PoeVetica" };
 const SHELF_FNT_SM = { size: 12, family: "PoeVetica" };
 
 function shelfText(x, y, str, colorHex, spec = SHELF_FNT, align = "left", maxW = 0) {
+  // fntRenderString takes the TOP of the glyph box, not the baseline --
+  // textBaselineOffset adds size-2 for ALIGN_NONE. Without this the previewer
+  // draws every hardcoded-page string higher than the console does, which is
+  // exactly the class of error it exists to catch.
+  y += textBaselineOffset(ALIGN_NONE, spec.size);
   useFont(spec);
   const sx = S.aspect / 4;
   let w = textWidth(str, spec);
@@ -2179,6 +2184,115 @@ function shelfText(x, y, str, colorHex, spec = SHELF_FNT, align = "left", maxW =
   for (const ch of str) { ctx.fillText(ch, pen / sx, y); pen += glyphMetrics(ch, spec).adv; }
   if (sx !== 1) ctx.restore();
   return w;
+}
+
+/* ------------------------------------------- SHELF Library (mirrors shelf.c)
+
+   Not a theme page: the SHELF pages are hardcoded C. This mirrors
+   shelfRenderLibrary numerically so the layout can be judged before it reaches
+   hardware -- the step whose absence produced squashed tiles, an overlapping
+   footer and a hero that was never drawn at all.
+
+   Grid constants are read from the loaded theme's ItemsList rather than typed
+   in again, so if conf_theme.cfg and shelf.c drift apart this page shows the
+   theme's answer and the difference becomes visible instead of silent.
+*/
+const LIBP = { HERO_H: 196, GRID_Y: 240, FTR_Y: 450, FTR_TEXT: 454 };
+
+function libGridConst() {
+  const il = (S.theme?.chains?.main || []).find(e => e.extended && e.extended.columns);
+  const x = (il && il.extended) || {};
+  return { cols: x.columns || 6, cw: x.cellWidth || 88, ch: x.cellHeight || 136,
+           gap: x.gap || 14, lh: x.labelHeight || 11, frame: x.frameSize || 3 };
+}
+
+/** shelf.c's shelfHint: a drawn face button and a label. Returns width used. */
+function shelfHintPv(x, y, kind, label) {
+  const col = { cross: 0x6B99E8, square: 0xD96FBF, circle: 0xE8556B }[kind];
+  const cy = y + 8;
+  ctx.fillStyle = rgbHex(col);
+  if (kind === "square") {
+    ctx.fillRect(x, cy - 5, 11, 2); ctx.fillRect(x, cy + 4, 11, 2);
+    ctx.fillRect(x, cy - 5, 2, 11); ctx.fillRect(x + 9, cy - 5, 2, 11);
+  } else if (kind === "cross") {
+    for (let i = 0; i < 11; i++) {
+      ctx.fillRect(x + i, cy - 5 + i, 2, 2);
+      ctx.fillRect(x + 10 - i, cy - 5 + i, 2, 2);
+    }
+  } else {
+    ctx.beginPath(); ctx.lineWidth = 2; ctx.strokeStyle = rgbHex(col);
+    ctx.arc(x + 5.5, cy, 5, 0, Math.PI * 2); ctx.stroke();
+  }
+  shelfText(x + 18, y, label, 0x8894A2, SHELF_FNT);
+  return 18 + textWidth(label, SHELF_FNT) + 22;
+}
+
+function renderShelfLibrary() {
+  const g = libGridConst();
+  const artW = g.cw - g.gap, artH = g.ch - g.gap - g.lh;
+  const wide = S.aspect === 3;
+  const sc = v => wide ? (v * 3) >> 2 : v;
+  const pitchX = sc(g.cw), drawnW = sc(artW);
+  const x0 = (SCREEN_W - pitchX * g.cols) / 2;
+  // gameList() is the previewer's own source of truth -- the same one drawElement
+  // uses -- rather than a second list that could disagree with the main page.
+  const games = gameList();
+  const game = games[S.gameIndex] || {};
+  const sel = Math.min(Math.max(S.gameIndex | 0, 0), Math.max(games.length - 1, 0));
+  const first = Math.floor(sel / g.cols) * g.cols;
+
+  ctx.save();
+  ctx.fillStyle = rgbHex(0x0A0C0F); ctx.fillRect(0, 0, SCREEN_W, SCREEN_H);
+
+  const bg = game.serial ? gameArt(game.serial, "BG") : null;
+  if (bg) ctx.drawImage(bg, 0, 0, SCREEN_W, LIBP.HERO_H);
+  else { ctx.fillStyle = rgbHex(0x14171C); ctx.fillRect(0, 0, SCREEN_W, LIBP.HERO_H); }
+  for (let i = 0; i < 12; i++) {
+    ctx.fillStyle = "rgba(10,12,15," + ((4 + i * 7) / 128) + ")";
+    ctx.fillRect(0, LIBP.HERO_H - 132 + i * 11, SCREEN_W, 11);
+  }
+
+  shelfText(32, 100, game.title || "—", 0xF2F5F8, SHELF_FNT);
+  const meta = [gameAttr(game, "genre"), gameAttr(game, "release"),
+                gameAttr(game, "developer")].filter(Boolean).join("  ·  ");
+  if (meta) shelfText(32, 128, meta, 0x8894A2, SHELF_FNT_SM);
+
+  for (let n = 0; n < g.cols * 2; n++) {
+    const cy = LIBP.GRID_Y + Math.floor(n / g.cols) * g.ch;
+    if (cy >= LIBP.FTR_Y) break;
+    const idx = first + n;
+    if (idx >= games.length) break;
+    const cx = x0 + (n % g.cols) * pitchX;
+    const cov = gameArt(games[idx].serial, "COV");
+    if (cov) ctx.drawImage(cov, cx, cy, drawnW, artH);
+    else { ctx.fillStyle = rgbHex(0x14171C); ctx.fillRect(cx, cy, drawnW, artH); }
+    if (idx === sel) {
+      ctx.fillStyle = rgbHex(0xF2F5F8);
+      ctx.fillRect(cx, cy, drawnW, g.frame);
+      ctx.fillRect(cx, cy + artH - g.frame, drawnW, g.frame);
+      ctx.fillRect(cx, cy, g.frame, artH);
+      ctx.fillRect(cx + drawnW - g.frame, cy, g.frame, artH);
+    }
+    if (cy + artH + g.lh <= LIBP.FTR_Y)
+      shelfText(cx, cy + artH, games[idx].title, idx === sel ? 0xF2F5F8 : 0x8894A2,
+                SHELF_FNT_SM, "left", drawnW);
+  }
+
+  /* Drawn last, so the bottom row runs under it rather than being squashed. */
+  ctx.fillStyle = rgbHex(0x14171C);
+  ctx.fillRect(0, LIBP.FTR_Y, SCREEN_W, SCREEN_H - LIBP.FTR_Y);
+  let hx = 35;
+  hx += shelfHintPv(hx, LIBP.FTR_TEXT, "cross", "Play");
+  hx += shelfHintPv(hx, LIBP.FTR_TEXT, "square", "Details");
+  hx += shelfHintPv(hx, LIBP.FTR_TEXT, "circle", "Back");
+  const count = (sel + 1) + " of " + games.length;
+  const cw = textWidth(count, SHELF_FNT_SM);
+  if (605 - cw > hx + 8)
+    shelfText(605 - cw, LIBP.FTR_TEXT, count, 0x8894A2, SHELF_FNT_SM);
+
+  ctx.restore();
+  octx.clearRect(0, 0, SCREEN_W, SCREEN_H);
+  applyViewport();
 }
 
 function renderShelfApps() {
@@ -2242,6 +2356,7 @@ function renderShelfApps() {
 
 function render() {
   if (S.chain === "shelfApps") return renderShelfApps();
+  if (S.chain === "shelfLibrary") return renderShelfLibrary();
   if (!S.theme) { ctx.clearRect(0, 0, SCREEN_W, SCREEN_H); octx.clearRect(0, 0, SCREEN_W, SCREEN_H); return; }
   ctx.save();
   ctx.clearRect(0, 0, SCREEN_W, SCREEN_H);
@@ -2597,9 +2712,9 @@ function renderTabs() {
   const host = document.getElementById("tabs");
   host.innerHTML = "";
   const labels = { main:"Main", info:"Info", appsMain:"Apps main", appsInfo:"Apps info",
-                   shelfApps:"SHELF Apps" };
-  for (const key of ["main","info","appsMain","appsInfo","shelfApps"]) {
-    const mock = key === "shelfApps";      // hardcoded C page, no element chain
+                   shelfApps:"SHELF Apps", shelfLibrary:"SHELF Library" };
+  for (const key of ["main","info","appsMain","appsInfo","shelfApps","shelfLibrary"]) {
+    const mock = key === "shelfApps" || key === "shelfLibrary";   // hardcoded C pages
     const n = S.theme ? (S.theme.chains[key] || []).length : 0;
     const b = document.createElement("button");
     b.textContent = mock ? `${labels[key]} (mock)` : `${labels[key]} (${n})`;
@@ -2760,7 +2875,7 @@ function loadCfgText(text, opts = {}) {
   if (!opts.fromPane) {
     S.syncing = true; cfgEl.value = text; S.syncing = false;
   }
-  const mockTab = S.chain === "shelfApps";   // has no chain; the guards below would evict it
+  const mockTab = S.chain === "shelfApps" || S.chain === "shelfLibrary";   // no chain; the guards below would evict them
   if (!mockTab && !(S.theme && S.theme.chains[S.chain])) S.chain = "main";
   rebuild(opts);
   if (!mockTab && (!S.theme.chains[S.chain] || !S.theme.chains[S.chain].length)) S.chain = "main";

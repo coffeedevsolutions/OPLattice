@@ -129,14 +129,15 @@ index ddbd949..1bbe60c 100644
  void hddLoadModules(void);
  void hddLoadSupportModules(void);
 diff --git a/include/menusys.h b/include/menusys.h
-index e2ef117..a50df35 100644
+index e2ef117..e284fb0 100644
 --- a/include/menusys.h
 +++ b/include/menusys.h
-@@ -81,6 +81,8 @@ typedef struct menu_list
+@@ -81,6 +81,9 @@ typedef struct menu_list
      struct menu_list *prev, *next;
  } menu_list_t;
  
 +item_list_t *menuGetActiveList(void);
++int menuSelectIndex(int n);
 +
  void menuInit();
  void menuEnd();
@@ -427,7 +428,7 @@ index e7cd888..cc3c2d2 100644
      char gid[5];
      configGetDiscIDBinary(configSet, gid);
 diff --git a/src/menusys.c b/src/menusys.c
-index 9cc2a8a..58ca367 100644
+index 9cc2a8a..980f8f4 100644
 --- a/src/menusys.c
 +++ b/src/menusys.c
 @@ -6,6 +6,7 @@
@@ -438,7 +439,7 @@ index 9cc2a8a..58ca367 100644
  #include "include/iosupport.h"
  #include "include/renderman.h"
  #include "include/fntsys.h"
-@@ -57,6 +58,17 @@ enum GAME_MENU_IDs {
+@@ -57,6 +58,40 @@ enum GAME_MENU_IDs {
  static menu_list_t *menu;
  static menu_list_t *selected_item;
  
@@ -446,6 +447,29 @@ index 9cc2a8a..58ca367 100644
 +   The SHELF Library page renders the same list rather than enumerating its own,
 +   so the two can never disagree about what is installed. NULL before the first
 +   device has been selected. */
++/* Point the main screen's selection at the nth entry of the active list, so a
++   SHELF page can hand a game to a screen that only knows about submenu items --
++   the info page reads selected_item->item->current, not an index. pagestart
++   follows so returning to the classic grid does not land somewhere unrelated. */
++int menuSelectIndex(int n)
++{
++    submenu_list_t *cur;
++    int i = 0;
++
++    if (!selected_item || !selected_item->item)
++        return 0;
++    cur = selected_item->item->submenu;
++    while (cur && i < n) {
++        cur = cur->next;
++        i++;
++    }
++    if (!cur)
++        return 0;
++    selected_item->item->current = cur;
++    selected_item->item->pagestart = cur;
++    return 1;
++}
++
 +item_list_t *menuGetActiveList(void)
 +{
 +    if (selected_item && selected_item->item)
@@ -456,7 +480,7 @@ index 9cc2a8a..58ca367 100644
  static int actionStatus;
  static int itemConfigId;
  static config_set_t *itemConfig;
-@@ -683,6 +695,18 @@ static void menuNextH()
+@@ -683,6 +718,18 @@ static void menuNextH()
      }
  }
  
@@ -475,7 +499,7 @@ index 9cc2a8a..58ca367 100644
  static void menuPrevH()
  {
      struct menu_list *prev = selected_item->prev;
-@@ -1133,6 +1157,31 @@ void menuHandleInputMain()
+@@ -1133,6 +1180,31 @@ void menuHandleInputMain()
       */
      int grid = menuRowStep() > 1;
  
