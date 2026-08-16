@@ -589,15 +589,30 @@ void shelfHandleInputApps(void)
    actually do rather than with the number written here.
 */
 
-#define LIB_COLS    6
-#define LIB_PER     LIB_COLS      /* one row: a shelf, under a hero */
-#define LIB_DECL_W  96                 /* declared; 72 drawn in 16:9 */
-#define LIB_COV_H   144
-#define LIB_MARGIN  32
-#define LIB_HERO_H  200
-#define LIB_FTR_Y   446   /* one bar, half the old footer region */
-#define LIB_Y0      224
-#define LIB_ROW_H   (LIB_COV_H + 32)
+/* The grid is the theme's, mirrored. thm_GridHard's ItemsList is columns=6,
+   cell_width=88, cell_height=136, gap=14, label_height=11, frame=3, and
+   drawItemsListGrid derives the art box from those as cellWidth-gap by
+   cellHeight-gap-labelHeight. These are duplicated rather than read from gTheme
+   because the shelf pages are hardcoded by design -- Phase 4 deliberately did
+   not build theme-format integration -- but they must stay in step with
+   conf_theme.cfg, and a difference will show as tiles that do not line up with
+   the classic grid.
+
+   One and a half rows: a full row with the next half-visible, so it reads as
+   scrollable rather than as everything there is. */
+#define LIB_COLS      6
+#define LIB_CELL_W    88
+#define LIB_CELL_H    136
+#define LIB_GAP       14
+#define LIB_LABEL_H   11
+#define LIB_FRAME     3
+#define LIB_ART_W     (LIB_CELL_W - LIB_GAP)             /* 74 declared */
+#define LIB_ART_H     (LIB_CELL_H - LIB_GAP - LIB_LABEL_H) /* 111 */
+#define LIB_PER       LIB_COLS
+#define LIB_HERO_H    200
+#define LIB_GRID_Y    208
+#define LIB_GRID_H    204                                 /* 1.5 * 136 */
+#define LIB_FTR_Y     446
 
 static image_cache_t *libCache;
 static image_cache_t *libHeroCache;
@@ -605,52 +620,66 @@ static int *libHeroId, *libHeroUid;
 static int libHeroLast = -1;
 static int *libCacheId, *libCacheUid;
 static item_list_t *libList;          /* what the arrays were sized against */
+static int libCount, libSel;
 
 /* Metadata for the highlighted title only, and cached against the index it was
    read for. itemGetConfig reads the game's CFG off the device, so calling it
    every frame would be a filesystem hit per frame for a line of text. */
 static int libMetaIdx = -1;
-static char libMetaLine[96];
+static char libMetaA[96];    /* Genre, Release, Developer          */
+static char libMetaB[96];    /* #Media, #Format, Rating, #Size     */
+static char libMetaDesc[192];
+static char libMetaName[128];
 
+/* Join present values with the theme's separator, skipping absent ones so they
+   take their bullet with them -- the same rule AttributeList follows, because
+   this is meant to read as the same page. */
+static void libJoin(char *out, size_t n, config_set_t *cfg, const char **keys, int count)
+{
+    int i, used = 0;
+    out[0] = '\0';
+    for (i = 0; i < count; i++) {
+        const char *v = NULL;
+        if (!configGetStr(cfg, keys[i], &v) || !v || !*v)
+            continue;
+        if (!strcmp(keys[i], CONFIG_ITEM_SIZE))
+            used += snprintf(out + used, n - used, used ? "  \xc2\xb7  %s MiB" : "%s MiB", v);
+        else
+            used += snprintf(out + used, n - used, used ? "  \xc2\xb7  %s" : "%s", v);
+        if (used >= (int)n)
+            break;
+    }
+}
+
+/* Exactly the fields the theme's info page carries, read once per selection --
+   itemGetConfig reads the game's CFG off the device, so per frame would be a
+   filesystem hit for a line of text. */
 static void libReadMeta(int idx)
 {
+    static const char *rowA[] = {"Genre", "Release", "Developer"};
+    static const char *rowB[] = {CONFIG_ITEM_MEDIA, CONFIG_ITEM_FORMAT, "Rating", CONFIG_ITEM_SIZE};
     config_set_t *cfg;
-    const char *genre = NULL, *year = NULL, *rating = NULL;
-    int n = 0;
+    const char *v = NULL;
 
     if (idx == libMetaIdx)
         return;
     libMetaIdx = idx;
-    libMetaLine[0] = '\0';
+    libMetaA[0] = libMetaB[0] = libMetaDesc[0] = libMetaName[0] = '\0';
     if (!libList || !libList->itemGetConfig)
         return;
-
     cfg = libList->itemGetConfig(libList, idx);
     if (!cfg)
         return;
-    configGetStr(cfg, "Genre", &genre);
-    configGetStr(cfg, "Release", &year);
-    configGetStr(cfg, "Rating", &rating);
 
-    /* Absent fields take their separator with them, the same rule the details
-       page follows -- no dangling bullets on a game with no year. */
-    if (genre && *genre)
-        n += snprintf(libMetaLine + n, sizeof(libMetaLine) - n, "%s", genre);
-    if (year && *year)
-        n += snprintf(libMetaLine + n, sizeof(libMetaLine) - n,
-                      n ? "  \xc2\xb7  %s" : "%s", year);
-    if (rating && *rating)
-        snprintf(libMetaLine + n, sizeof(libMetaLine) - n,
-                 n ? "  \xc2\xb7  %s" : "%s", rating);
+    if (configGetStr(cfg, CONFIG_ITEM_NAME, &v) && v)
+        snprintf(libMetaName, sizeof(libMetaName), "%s", v);
+    libJoin(libMetaA, sizeof(libMetaA), cfg, rowA, 3);
+    libJoin(libMetaB, sizeof(libMetaB), cfg, rowB, 4);
+    v = NULL;
+    if (configGetStr(cfg, "Description", &v) && v)
+        snprintf(libMetaDesc, sizeof(libMetaDesc), "%s", v);
 }
-static int libCount, libSel;
 
-/* Reallocate and reset when the list changes identity or length.
- *
- * The game list is rebuilt on device refresh, and a cache id left pointing into
- * a rebuilt list is how art gets drawn against the wrong game. Keying on the
- * support pointer and the count means this heals itself rather than depending on
- * an invalidation hook somebody has to remember to call. */
 static int libSync(void)
 {
     item_list_t *list = menuGetActiveList();
@@ -750,55 +779,55 @@ static GSTEXTURE *libCover(int idx)
 void shelfRenderLibrary(void)
 {
     int total = libSync();
-    int drawnW = rmWidthScaled(LIB_DECL_W);
-    int pitch, x0, page, first, i;
-    char buf[64];
+    int pitchX = rmWideScale(LIB_CELL_W);
+    int drawnW = rmWideScale(LIB_ART_W);
+    int gridW  = pitchX * LIB_COLS;
+    int x0     = (640 - gridW) / 2;
+    int first, i, n;
+    char buf[80];
 
+    if (total > 0) {
+        if (libSel >= total) libSel = total - 1;
+        if (libSel < 0)      libSel = 0;
+        libReadMeta(libSel);
+    }
+    /* The selected row is the top row, so the half row beneath is always the
+       next one along -- the peek shows where you are going, not where you were. */
+    first = (total > 0) ? (libSel / LIB_COLS) * LIB_COLS : 0;
 
-    /* Derive the pitch from the space available rather than from the cover
-       width, and clamp the cover to it. Building the row out of a fixed cover
-       width plus a fixed gap overflowed the screen as soon as the aspect
-       setting made the cover wider -- 4:3 gives 96 virtual where 16:9 gives 72,
-       and six of the former do not fit. This cannot overflow by construction. */
-    pitch = (640 - 2 * LIB_MARGIN) / LIB_COLS;
-    if (drawnW > pitch - 8)
-        drawnW = pitch - 8;
-    x0 = LIB_MARGIN + (pitch - drawnW) / 2;
-    page = (total > 0) ? libSel / LIB_PER : 0;
-    first = page * LIB_PER;
+    rmDrawRect(0, 0, 640, 480, GS_SETREG_RGBA(0x0A, 0x0C, 0x0F, 0x80));
 
-    rmDrawRect(0, 0, 640, 480, GS_SETREG_RGBA(0x0F, 0x12, 0x16, 0x80));
-
-    /* Hero band. No header bar above it: a title strip over a banner is two
-       headers, and everything it carried fits in the footer. */
+    /* Hero: the highlighted game, not the last played. */
     if (total > 0) {
         GSTEXTURE *hero = libHero(libSel);
-        int i;
-
         if (hero)
             rmDrawPixmap(hero, 0, 0, ALIGN_NONE, 640, LIB_HERO_H, SCALING_NONE,
                          gDefaultCol);
         else
             rmDrawRect(0, 0, 640, LIB_HERO_H, GS_SETREG_RGBA(0x14, 0x17, 0x1C, 0x80));
-
-        /* Graded wash over the lower part so the title has something to sit on
-           without flattening the whole image. */
-        for (i = 0; i < 10; i++)
-            rmDrawRect(0, LIB_HERO_H - 90 + i * 9, 640, 9,
-                       GS_SETREG_RGBA(0x0A, 0x0C, 0x0F, 6 + i * 8));
-        rmDrawRect(0, LIB_HERO_H, 640, 2, GS_SETREG_RGBA(0x2A, 0x30, 0x38, 0x80));
+        for (i = 0; i < 12; i++)
+            rmDrawRect(0, LIB_HERO_H - 132 + i * 11, 640, 11,
+                       GS_SETREG_RGBA(0x0A, 0x0C, 0x0F, 4 + i * 7));
     }
 
-    /* The highlighted title, on the hero it belongs to. */
-    if (total > 0 && libList && libList->itemGetName) {
-        char *nm = libList->itemGetName(libList, libSel);
-        libReadMeta(libSel);
-        if (nm)
-            fntRenderString(FNT_DEFAULT, 32, LIB_HERO_H - 62, ALIGN_NONE, 0, 0,
-                            nm, GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80));
-        if (libMetaLine[0])
-            fntRenderString(appsFontSmall, 32, LIB_HERO_H - 36, ALIGN_NONE, 0, 0,
-                            libMetaLine, GS_SETREG_RGBA(0xB4, 0xBE, 0xC8, 0x80));
+    /* The theme's own detail fields, in the theme's order: name, the two
+       attribute strips, then the description. */
+    if (total > 0) {
+        const char *name = libMetaName[0] ? libMetaName
+                         : (libList && libList->itemGetName
+                            ? libList->itemGetName(libList, libSel) : NULL);
+        if (name)
+            fntRenderString(FNT_DEFAULT, 32, 92, ALIGN_NONE, 0, 0, name,
+                            GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80));
+        if (libMetaA[0])
+            fntRenderString(appsFontSmall, 32, 124, ALIGN_NONE, 0, 0, libMetaA,
+                            GS_SETREG_RGBA(0x88, 0x94, 0xA2, 0x80));
+        if (libMetaB[0])
+            fntRenderString(appsFontSmall, 32, 142, ALIGN_NONE, 0, 0, libMetaB,
+                            GS_SETREG_RGBA(0x5C, 0x66, 0x74, 0x80));
+        if (libMetaDesc[0])
+            fntRenderString(appsFontSmall, 32, 166, ALIGN_NONE, 576, 14,
+                            libMetaDesc, GS_SETREG_RGBA(0x78, 0x83, 0x8F, 0x80));
     }
 
     if (total <= 0) {
@@ -806,80 +835,68 @@ void shelfRenderLibrary(void)
                         "Nothing to show yet.",
                         GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80));
         fntRenderString(appsFontSmall, 32, 148, ALIGN_NONE, 0, 0,
-                        "This page mirrors the device the main list is on. Pick one there first.",
+                        "This page follows the device the main list is on. Pick one there first.",
                         GS_SETREG_RGBA(0x5C, 0x66, 0x74, 0x80));
     }
 
-    /* Hero first: it is one request against a dozen, and asking last put it
-       behind a queue the covers had just filled. */
+    /* Hero first: one request against a row of covers, and asking last put it
+       behind a queue they had just filled. */
     if (total > 0)
         rmPrefetchTexture(libHero(libSel));
-
-    /* One row of lookahead, no more. bind raises the use count, and gsKit's
-       predictor scores by binds per frame, so a prefetched-and-undrawn texture
-       looks as wanted as one that was drawn. A row is noise; a page would start
-       costing residency for what is actually on screen. */
     for (i = LIB_PER; i < LIB_PER + LIB_COLS && first + i < total; i++)
         rmPrefetchTexture(libCover(first + i));
 
-    for (i = 0; i < LIB_PER && first + i < total; i++) {
-        int idx = first + i;
-        int cx = x0 + (i % LIB_COLS) * pitch;
-        int cy = LIB_Y0 + (i / LIB_COLS) * LIB_ROW_H;
-        int on = (idx == libSel);
-        GSTEXTURE *cov = libCover(idx);
+    /* Two rows drawn, the second clipped by the grid box to half a cell. */
+    for (n = 0; n < LIB_COLS * 2 && first + n < total; n++) {
+        int idx = first + n;
+        int cx = x0 + (n % LIB_COLS) * pitchX;
+        int cy = LIB_GRID_Y + (n / LIB_COLS) * LIB_CELL_H;
+        int visible = LIB_GRID_Y + LIB_GRID_H - cy;
+        GSTEXTURE *cov;
 
-        if (on) {
+        if (visible <= 0)
+            break;
+
+        cov = libCover(idx);
+        if (cov)
+            rmDrawPixmap(cov, cx, cy, ALIGN_NONE, LIB_ART_W,
+                         visible < LIB_ART_H ? visible : LIB_ART_H,
+                         SCALING_RATIO, gDefaultCol);
+        else
+            rmDrawRect(cx, cy, drawnW,
+                       visible < LIB_ART_H ? visible : LIB_ART_H,
+                       GS_SETREG_RGBA(0x14, 0x17, 0x1C, 0x80));
+
+        if (idx == libSel && visible >= LIB_ART_H) {
             u64 e = GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80);
-            rmDrawRect(cx - 3, cy - 3, drawnW + 6, 3, e);
-            rmDrawRect(cx - 3, cy + LIB_COV_H, drawnW + 6, 3, e);
-            rmDrawRect(cx - 3, cy - 3, 3, LIB_COV_H + 6, e);
-            rmDrawRect(cx + drawnW, cy - 3, 3, LIB_COV_H + 6, e);
+            rmDrawRect(cx, cy, drawnW, LIB_FRAME, e);
+            rmDrawRect(cx, cy + LIB_ART_H - LIB_FRAME, drawnW, LIB_FRAME, e);
+            rmDrawRect(cx, cy, LIB_FRAME, LIB_ART_H, e);
+            rmDrawRect(cx + drawnW - LIB_FRAME, cy, LIB_FRAME, LIB_ART_H, e);
         }
 
-        if (cov)
-            /* SCALING_NONE: drawnW is already the virtual width we want, and
-               re-applying the ratio here would shrink it a second time. */
-            rmDrawPixmap(cov, cx, cy, ALIGN_NONE, drawnW, LIB_COV_H,
-                         SCALING_NONE, gDefaultCol);
-        else
-            /* Still loading, or no art. The classic grid shows nothing here
-               either; a flat tile at least keeps the layout readable. */
-            rmDrawRect(cx, cy, drawnW, LIB_COV_H,
-                       GS_SETREG_RGBA(0x1C, 0x20, 0x27, 0x80));
-
-        /* Every tile is labelled, not just the highlighted one. A grid of
-           unlabelled boxes is only readable if you already recognise the art,
-           which is exactly the case where you did not need the label. */
-        if (libList && libList->itemGetName) {
-            char *name = libList->itemGetName(libList, idx);
-            if (name)
-                appsCentred(appsFontSmall, cx + drawnW / 2, cy + LIB_COV_H + 6,
-                            name, pitch - 4,
-                            on ? GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80)
-                               : GS_SETREG_RGBA(0x78, 0x83, 0x8F, 0x80));
+        if (visible >= LIB_ART_H + LIB_LABEL_H && libList && libList->itemGetName) {
+            char *t = libList->itemGetName(libList, idx);
+            if (t)
+                fntRenderString(appsFontSmall, cx, cy + LIB_ART_H, ALIGN_NONE,
+                                drawnW, LIB_LABEL_H, t,
+                                idx == libSel ? GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80)
+                                              : GS_SETREG_RGBA(0x88, 0x94, 0xA2, 0x80));
         }
     }
 
-    /* One bar, about half the old footer, carrying what the header used to:
-       page name, the device being shown, and the title count. */
+    /* One bar, carrying what a header would have said. */
     rmDrawRect(0, LIB_FTR_Y, 640, 480 - LIB_FTR_Y, GS_SETREG_RGBA(0x18, 0x1C, 0x22, 0x80));
     rmDrawRect(0, LIB_FTR_Y, 640, 1, GS_SETREG_RGBA(0x2A, 0x30, 0x38, 0x80));
     {
         int hx = 32, w, rx = 608;
         hx += shelfHint(hx, LIB_FTR_Y + 8, 0, "Play");
         shelfHint(hx, LIB_FTR_Y + 8, 1, "Back");
-
         if (total > 0) {
             char *pfx = (libList && libList->itemGetPrefix)
                             ? libList->itemGetPrefix(libList) : NULL;
-            if (total > LIB_PER)
-                snprintf(buf, sizeof(buf), "Library   %s   %d titles   %d/%d",
-                         pfx ? pfx : "", total,
-                         page + 1, (total + LIB_PER - 1) / LIB_PER);
-            else
-                snprintf(buf, sizeof(buf), "Library   %s   %d titles",
-                         pfx ? pfx : "", total);
+            snprintf(buf, sizeof(buf), "Library   %s   %d of %d",
+                     pfx ? pfx : "", libSel + 1, total);
             w = fntCalcDimensions(appsFontSmall, buf);
             fntRenderString(appsFontSmall, rx - w, LIB_FTR_Y + 12, ALIGN_NONE, 0, 0,
                             buf, GS_SETREG_RGBA(0x78, 0x83, 0x8F, 0x80));
@@ -915,10 +932,11 @@ void shelfHandleInputLibrary(void)
     else if (getKeyOn(KEY_RIGHT) && libSel < total - 1)
         libSel++;
     /* One row, so up and down page: there is no row above or below to reach. */
-    else if (getKeyOn(KEY_UP))
-        libSel = (libSel >= LIB_PER) ? libSel - LIB_PER : 0;
+    /* A row at a time, which is also what scrolls the grid. */
+    else if (getKeyOn(KEY_UP) && libSel >= LIB_COLS)
+        libSel -= LIB_COLS;
     else if (getKeyOn(KEY_DOWN))
-        libSel = (libSel + LIB_PER < total) ? libSel + LIB_PER : total - 1;
+        libSel = (libSel + LIB_COLS < total) ? libSel + LIB_COLS : total - 1;
     else if (getKeyOn(KEY_CROSS) && libList && libList->itemLaunch && libList->itemGetConfig)
         libList->itemLaunch(libList, libSel, libList->itemGetConfig(libList, libSel));
 }
