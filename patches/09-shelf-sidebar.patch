@@ -115,7 +115,7 @@ index e2ef117..e284fb0 100644
  void menuEnd();
  void menuReinitMainMenu(void);
 diff --git a/include/renderman.h b/include/renderman.h
-index 6b1f380..dfc094f 100644
+index 6b1f380..d610783 100644
 --- a/include/renderman.h
 +++ b/include/renderman.h
 @@ -102,6 +102,15 @@ void rmDrawRect(int x, int y, int w, int h, u64 color);
@@ -146,7 +146,7 @@ index 6b1f380..dfc094f 100644
  /** Set overscan in percentage/10 */
  void rmSetOverscan(int overscan);
  
-@@ -118,6 +132,12 @@ void rmSetOverscan(int overscan);
+@@ -118,6 +132,13 @@ void rmSetOverscan(int overscan);
   * When set, it will treat all pixmap widths/heights (not positions) as scaled with the ratios provided */
  void rmSetAspectRatio(enum rm_aratio dar);
  
@@ -155,6 +155,7 @@ index 6b1f380..dfc094f 100644
 +
 +/** Declared width that will be drawn `w` wide. Inverse of rmWidthScaled. */
 +int rmWidthUnscaled(int w);
++int rmUnscaleX(int x);
 +
  /** Widescreen scaling */
  int rmWideScale(int x);
@@ -214,6 +215,34 @@ index e7552f7..9a5e26c 100644
      {UI_LABEL, 0, 1, 1, -1, -40, 0, {.label = {NULL, _STR_LASTPLAYED}}},
      {UI_SPACER},
      {UI_BOOL, CFG_LASTPLAYED, 1, 1, -1, 0, 0, {.intvalue = {0, 0}}},
+diff --git a/src/fntsys.c b/src/fntsys.c
+index 35f50f1..3a56105 100644
+--- a/src/fntsys.c
++++ b/src/fntsys.c
+@@ -518,6 +518,11 @@ int fntRenderString(int id, int x, int y, short aligned, size_t width, size_t he
+         } else {
+             x -= fntCalcDimensions(id, string) >> 1;
+         }
++    } else if (aligned & ALIGN_RIGHT) {
++        /* Subtracted here, after x is in physical pixels, because
++           fntCalcDimensions is physical too. A caller doing this in virtual
++           space gets an error proportional to the string's own length. */
++        x -= fntCalcDimensions(id, string);
+     }
+ 
+     if (aligned & ALIGN_VCENTER) {
+@@ -644,6 +649,11 @@ int fntRenderString(int id, int x, int y, short aligned, size_t width, size_t he
+         } else {
+             x -= fntCalcDimensions(id, string) >> 1;
+         }
++    } else if (aligned & ALIGN_RIGHT) {
++        /* Subtracted here, after x is in physical pixels, because
++           fntCalcDimensions is physical too. A caller doing this in virtual
++           space gets an error proportional to the string's own length. */
++        x -= fntCalcDimensions(id, string);
+     }
+ 
+     if (aligned & ALIGN_VCENTER) {
 diff --git a/src/gui.c b/src/gui.c
 index e82bd2c..8e058a7 100644
 --- a/src/gui.c
@@ -517,7 +546,7 @@ index 4a037f6..fc23ef4 100644
      guiMainLoop();
  
 diff --git a/src/renderman.c b/src/renderman.c
-index 0a83587..f2c3ff4 100644
+index 0a83587..41738c9 100644
 --- a/src/renderman.c
 +++ b/src/renderman.c
 @@ -79,6 +79,10 @@ static int iDisplayYOff;
@@ -606,7 +635,7 @@ index 0a83587..f2c3ff4 100644
      gsKit_prim_quad_texture(gsGlobal, inlay,
                              quad.ul.x + ulx + fRenderXOff, quad.ul.y + uly + fRenderYOff,
                              0.0f, 0.0f,
-@@ -386,6 +439,28 @@ void rmDrawOverlayPixmap(GSTEXTURE *overlay, int x, int y, short aligned, int w,
+@@ -386,6 +439,41 @@ void rmDrawOverlayPixmap(GSTEXTURE *overlay, int x, int y, short aligned, int w,
      rmDrawQuad(&quad);
  }
  
@@ -627,6 +656,19 @@ index 0a83587..f2c3ff4 100644
 +   starts from the space available -- "five of these must fill 372" -- has to
 +   work back to a declared width, and doing that with a hardcoded 4/3 is only
 +   right in 16:9. */
++/* A measured text width, brought back into virtual space.
++ *
++ * fntCalcDimensions answers in physical pixels. Layout in this tree is virtual.
++ * Anywhere a measured width advances a virtual pen -- a row of hints, a
++ * right-to-left status bar -- it has to come back through here first, or the row
++ * drifts by (X_SCALE - 1) times its own length. Alignment does not need this:
++ * ALIGN_RIGHT and ALIGN_HCENTER subtract in physical space, where the width
++ * already is. */
++int rmUnscaleX(int x)
++{
++    return iDisplayWidth ? (x * 640) / iDisplayWidth : x;
++}
++
 +int rmWidthUnscaled(int w)
 +{
 +    return (w << 2) / iAspectWidth;
@@ -635,7 +677,7 @@ index 0a83587..f2c3ff4 100644
  void rmDrawRect(int x, int y, int w, int h, u64 color)
  {
      float fx = X_SCALE(x) + fRenderXOff;
-@@ -410,6 +485,31 @@ void rmDrawLine(int x1, int y1, int x2, int y2, u64 color)
+@@ -410,6 +498,31 @@ void rmDrawLine(int x1, int y1, int x2, int y2, u64 color)
      order++;
  }
  
@@ -667,7 +709,7 @@ index 0a83587..f2c3ff4 100644
  void rmSetDisplayOffset(int x, int y)
  {
      gsKit_set_display_offset(gsGlobal, x * rm_mode_table[vmode].VCK, y);
-@@ -488,6 +588,8 @@ void rmSetOverscan(int overscan)
+@@ -488,6 +601,8 @@ void rmSetOverscan(int overscan)
  
      fRenderXOff = (float)iDisplayXOff - 0.5f;
      fRenderYOff = (float)iDisplayYOff - 0.5f;

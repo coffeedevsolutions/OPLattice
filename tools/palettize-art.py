@@ -100,6 +100,7 @@ if DITHER not in ("riemersma", "o8x8", "none"):
 #   keep   leave truecolor
 RECIPES = {
     "BG":    (418, 180, "quant"),   # scaled=0, so declared width is drawn width
+    "HERO":  (612, 196, "quant"),   # the SHELF Library hero, 640 - SHELF_RAIL_W wide
     "COV":   (None, None, "quant"),  # classic grid; sized by stage-device.sh
     "COVHD": (90,  180, "quant"),   # declared 120, RATIO -> 90
     "SCR":   (101, 101, "quant"),   # declared 135, RATIO -> 101

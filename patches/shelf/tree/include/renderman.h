@@ -137,6 +137,7 @@ int rmWidthScaled(int w);
 
 /** Declared width that will be drawn `w` wide. Inverse of rmWidthScaled. */
 int rmWidthUnscaled(int w);
+int rmUnscaleX(int x);
 
 /** Widescreen scaling */
 int rmWideScale(int x);

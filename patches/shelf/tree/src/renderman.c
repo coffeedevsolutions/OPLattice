@@ -456,6 +456,19 @@ int rmWidthScaled(int w)
    starts from the space available -- "five of these must fill 372" -- has to
    work back to a declared width, and doing that with a hardcoded 4/3 is only
    right in 16:9. */
+/* A measured text width, brought back into virtual space.
+ *
+ * fntCalcDimensions answers in physical pixels. Layout in this tree is virtual.
+ * Anywhere a measured width advances a virtual pen -- a row of hints, a
+ * right-to-left status bar -- it has to come back through here first, or the row
+ * drifts by (X_SCALE - 1) times its own length. Alignment does not need this:
+ * ALIGN_RIGHT and ALIGN_HCENTER subtract in physical space, where the width
+ * already is. */
+int rmUnscaleX(int x)
+{
+    return iDisplayWidth ? (x * 640) / iDisplayWidth : x;
+}
+
 int rmWidthUnscaled(int w)
 {
     return (w << 2) / iAspectWidth;

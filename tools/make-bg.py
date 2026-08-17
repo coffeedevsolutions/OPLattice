@@ -41,8 +41,26 @@ import os
 import subprocess
 import sys
 
+# Two patterns, two rects, one source resample each.
+#
+#   BG    418x180  the theme's own background rect
+#   HERO  612x196  the SHELF Library hero, which spans 640 - SHELF_RAIL_W
+#
+# HERO exists because the Library hero was drawing BG's 418 texels across 612
+# and the GS filled the difference with a bilinear stretch -- which is why the
+# heroes looked soft on hardware while everything else looked sharp. It is not a
+# resize of BG; both come straight off the 1920-wide original, so HERO is one
+# resample rather than two.
+#
+# Pass --hero to build that one. The pattern to build is a whole separate run so
+# the source is only ever read once per output.
 TARGET_W, TARGET_H = 418, 180        # texels
 DISPLAY_W = 557                      # what those texels look like at 16:9
+if "--hero" in sys.argv:
+    TARGET_W, TARGET_H = 612, 196
+    DISPLAY_W = 816                  # 612 at 4:3 texels reads 816 wide at 16:9
+    sys.argv.remove("--hero")
+SUFFIX = "HERO" if TARGET_W == 612 else "BG"
 SQUEEZE = TARGET_W / DISPLAY_W       # 0.75, the anamorphic factor
 BG_HEX = "0A0C0F"
 TOLERANCE = 0.03          # within 3% of the frame aspect, just resize
@@ -87,7 +105,7 @@ for key, serial in sorted(pairs, key=lambda p: p[1]):
         continue
 
     sw, sh = dims(src)
-    dst = os.path.join(out, f"{serial}_BG.png")
+    dst = os.path.join(out, f"{serial}_{SUFFIX}.png")
     a = sw / sh
 
     if abs(a - target_aspect) / target_aspect <= TOLERANCE:

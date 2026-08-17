@@ -75,6 +75,22 @@ int gEnableShelfUI;
  */
 #define SHELF_HOLD_FRAMES 12
 
+/* SHELF_OK confirms, SHELF_BACK goes back, SHELF_ALT is the third action.
+ *
+ * Named rather than spelled X and O, because which physical button confirms is
+ * the console's decision and not this shell's: gSelectButton is O on a JP
+ * machine and X elsewhere. Every page used to test KEY_CROSS directly, so the
+ * shell confirmed with X on a console whose own menus confirm with O, and the
+ * footer drew whichever glyph was hardcoded rather than the one that works. */
+#define SHELF_OK    (gSelectButton)
+#define SHELF_BACK  (gSelectButton == KEY_CIRCLE ? KEY_CROSS : KEY_CIRCLE)
+#define SHELF_ALT   (KEY_SQUARE)
+
+/* Hint kinds are meanings, not shapes. shelfHint picks the glyph. */
+#define HINT_OK    0
+#define HINT_BACK  1
+#define HINT_ALT   2
+
 static enum ShelfState state;
 /* Resolved once per frame by shelfSyncFonts: a theme face when the theme supplies
    one, otherwise the embedded face below at the size the layout was drawn for. */
@@ -170,27 +186,18 @@ static int shelfPulse(int period)
     return (t < half) ? (t * 255 / half) : (255 - (t - half) * 255 / half);
 }
 
-/** Smooth 0..255 across `period`, offset by `phase` frames.
- *
- *  A raw triangle reverses instantly at each end and reads as a bounce. Putting
- *  it through a smoothstep softens both turns, which is the difference between
- *  something ticking and something drifting. */
-static int shelfWave(int period, int phase)
-{
-    int t = (guiFrameId + phase) % period, half = period / 2;
-    int lin = (t < half) ? t * 255 / half : (255 - (t - half) * 255 / half);
-    return (int)((long)lin * lin * (765 - 2 * lin) / 65025);
-}
 
 /** Vertical drift in pixels for a card, -amp..+amp.
  *
  *  Each card is given its own phase so they do not move as one slab. A shared
  *  phase looks like the screen is bobbing; staggered phases look like separate
  *  things suspended in the same medium, which is the intent. */
-static int shelfFloat(int phase, int amp)
-{
-    return (shelfWave(7 * FPS, phase) - 128) * amp / 128;
-}
+/* The idle bob is gone. Every card drifted a pixel or two on a seven-second
+   cycle and at this size it read as the layout being unsure of itself rather
+   than as life; shelfFloat went with it. The focus lift stays, because that one
+   is answering a question, and it turns out to be a plain three pixels rather
+   than anything that needed a curve -- so shelfWave went too. shelfPulse stays;
+   the colon and the focus outlines still breathe. */
 
 /** A vertical ramp between two alphas, for scrims and glows.
  *
@@ -327,7 +334,6 @@ static void shelfDrawRail(int active)
         };
         const int bw = 18, bh = 24, by = 424;
         int bx = (SHELF_RAIL_W - bw) / 2;
-        int tw = fntCalcDimensions(appsFontSmall, "L3");
         int k;
 
         for (k = 0; k < bh; k++) {
@@ -335,8 +341,8 @@ static void shelfDrawRail(int active)
             rmDrawRect(bx + lx, by + k, run, 1, LAND_INK);
             rmDrawRect(bx + bw - lx - run, by + k, run, 1, LAND_INK);
         }
-        fntRenderString(appsFontSmall, bx + (bw - tw) / 2, by + (bh - 12) / 2,
-                        ALIGN_NONE, 0, 0, "L3", LAND_INK);
+        fntRenderString(appsFontSmall, bx + bw / 2, by + (bh - 12) / 2,
+                        ALIGN_HCENTER, 0, 0, "L3", LAND_INK);
     }
     }
 }
@@ -462,9 +468,9 @@ void shelfHandleInput(void)
         selected--;
     else if (getKeyOn(KEY_DOWN) && selected < (int)SHELF_ITEMS - 1)
         selected++;
-    else if (getKeyOn(KEY_L3) || getKeyOn(gSelectButton == KEY_CIRCLE ? KEY_CROSS : KEY_CIRCLE))
+    else if (getKeyOn(KEY_L3) || getKeyOn(SHELF_BACK))
         state = SHELF_CLOSING;      /* cancel */
-    else if (getKeyOn(gSelectButton)) {
+    else if (getKeyOn(SHELF_OK)) {
         static const int route[] = {GUI_SCREEN_SHELF_HOME, GUI_SCREEN_SHELF_LIBRARY,
                                     GUI_SCREEN_SHELF_APPS, GUI_SCREEN_MENU};
 
@@ -639,13 +645,17 @@ static int shelfHint(int x, int y, int kind, const char *label)
     const u64 col = LAND_INK;
     int cy = y + 4;          /* centre of the 9px label's glyph box */
     int i, w;
+    /* Meaning to shape. Confirm draws whichever button actually confirms, so the
+       footer cannot disagree with the input handler about which one to press. */
+    int shape = (kind == HINT_ALT) ? 2
+              : (kind == HINT_OK) == (gSelectButton == KEY_CROSS) ? 0 : 1;
 
-    if (kind == 2) {         /* square */
+    if (shape == 2) {        /* square */
         rmDrawRect(x, cy - 4, 7, 1, col);
         rmDrawRect(x, cy + 4, 7, 1, col);
         rmDrawRect(x, cy - 4, 1, 9, col);
         rmDrawRect(x + 6, cy - 4, 1, 9, col);
-    } else if (kind == 0) {  /* cross */
+    } else if (shape == 0) {  /* cross */
         for (i = 0; i < 9; i++) {
             rmDrawRect(x + cross[i], cy - 4 + i, 1, 1, col);
             rmDrawRect(x + 6 - cross[i], cy - 4 + i, 1, 1, col);
@@ -659,7 +669,7 @@ static int shelfHint(int x, int y, int kind, const char *label)
         }
     }
     fntRenderString(appsFontLabel, x + 12, y, ALIGN_NONE, 0, 0, label, LAND_TEXT);
-    w = 12 + fntCalcDimensions(appsFontLabel, label);
+    w = 12 + rmUnscaleX(fntCalcDimensions(appsFontLabel, label));
     return w + 18;
 }
 
@@ -732,9 +742,20 @@ static void shelfSyncFonts(void)
     appsFontHead = shelfFace(SHELF_FNT_HEAD, fontEmbedHead);
 }
 
+/* appGetObject(1) is "only if already initialised" -- it returns NULL until
+   appInit has run, and appInit runs during opl.c's device sweep. Asking that way
+   meant the page showed an empty grid whenever it was drawn before the sweep
+   reached APPS, which is now the common case rather than the rare one: Home is
+   the boot screen, so we no longer pass through the device menu on the way in
+   and the page can easily be looked at first.
+
+   Asking with 0 returns the object regardless, and itemGetCount answers 0 until
+   there is something to count -- so the page fills itself in when the scan lands
+   instead of deciding, once, that there is nothing. Same self-healing shape as
+   libSync, and for the same reason. */
 static int appsCount(void)
 {
-    item_list_t *list = appGetObject(1);
+    item_list_t *list = appGetObject(0);
     return (list && list->itemGetCount) ? list->itemGetCount(list) : 0;
 }
 
@@ -744,20 +765,23 @@ static int appsCount(void)
 static void appsCentred(int font, int cx, int y, const char *s, int maxw, u64 colour)
 {
     char buf[APP_TITLE_MAX + 8];
-    int w = fntCalcDimensions(font, s);
+    /* maxw is a virtual width, fntCalcDimensions answers in physical, so the
+       comparison has to happen in one of them -- virtual, since that is what the
+       caller knows. Placement is left to ALIGN_HCENTER, which subtracts after
+       the scale and is the only place that subtraction is correct. */
+    int w = rmUnscaleX(fntCalcDimensions(font, s));
 
     if (w > maxw) {
         int n = (int)strlen(s);
         while (n > 1) {
             snprintf(buf, sizeof(buf), "%.*s\xe2\x80\xa6", n, s);
-            if (fntCalcDimensions(font, buf) <= maxw)
+            if (rmUnscaleX(fntCalcDimensions(font, buf)) <= maxw)
                 break;
             n--;
         }
         s = buf;
-        w = fntCalcDimensions(font, s);
     }
-    fntRenderString(font, cx - w / 2, y, ALIGN_NONE, 0, 0, s, colour);
+    fntRenderString(font, cx, y, ALIGN_HCENTER, 0, 0, s, colour);
 }
 
 static void appsStatusBar(void)
@@ -771,24 +795,22 @@ static void appsStatusBar(void)
     /* Placeholder until Phase 8 binds it. sceCdReadClock is available and
        already used at OSDHistory.c:122, but its fields are BCD and its RTC runs
        on JST, so an honest clock needs an offset this phase cannot configure. */
-    w = fntCalcDimensions(appsFontSmall, "--:--");
-    fntRenderString(appsFontSmall, rx - w, HDR_TEXT_Y, ALIGN_NONE, 0, 0, "--:--", LAND_MUTE);
-    rx -= w + 22;
+    fntRenderString(appsFontSmall, rx, HDR_TEXT_Y, ALIGN_RIGHT, 0, 0, "--:--", LAND_MUTE);
+    rx -= rmUnscaleX(fntCalcDimensions(appsFontSmall, "--:--")) + 22;
 
     /* Free space has no query for this device class. Nothing in bdmsupport,
        mmcesupport or ethsupport reports capacity; the only capacity call in the
        tree is HDIOC_TOTALSECTOR for the internal HDD, which is total and not
        free. The slot is real, the value is not, and inventing one is worse. */
-    w = fntCalcDimensions(appsFontSmall, "\xe2\x80\x94 free");
-    fntRenderString(appsFontSmall, rx - w, HDR_TEXT_Y, ALIGN_NONE, 0, 0, "\xe2\x80\x94 free", LAND_MUTE);
-    rx -= w + 22;
+    fntRenderString(appsFontSmall, rx, HDR_TEXT_Y, ALIGN_RIGHT, 0, 0, "\xe2\x80\x94 free", LAND_MUTE);
+    rx -= rmUnscaleX(fntCalcDimensions(appsFontSmall, "\xe2\x80\x94 free")) + 22;
 
     {
         const char *net = (gNetworkStartup == 0) ? "NET" : "OFF";
         u64 col = (gNetworkStartup == 0) ? GS_SETREG_RGBA(0x2E, 0x6E, 0x3C, 0x80)
                                          : LAND_MUTE;
-        w = fntCalcDimensions(appsFontSmall, net);
-        fntRenderString(appsFontSmall, rx - w, HDR_TEXT_Y, ALIGN_NONE, 0, 0, net, col);
+        w = rmUnscaleX(fntCalcDimensions(appsFontSmall, net));
+        fntRenderString(appsFontSmall, rx, HDR_TEXT_Y, ALIGN_RIGHT, 0, 0, net, col);
         rmDrawRect(rx - w - 14, HDR_CY(8), 5, 5, col);
     }
 }
@@ -813,10 +835,16 @@ void shelfRenderApps(void)
     if (total <= 0) {
         /* An empty state, not a grid of nothing with a selection index pointing
            at an item that does not exist. */
+        item_list_t *al = appGetObject(0);
+        int scanning = al && !al->enabled;
+
         fntRenderString(FNT_DEFAULT, CONTENT_X, 120, ALIGN_NONE, 0, 0,
-                        "No applications found.", LAND_TEXT);
+                        scanning ? "Looking for applications\xe2\x80\xa6"
+                                 : "No applications found.", LAND_TEXT);
         fntRenderString(appsFontSmall, CONTENT_X, 148, ALIGN_NONE, 0, 0,
-                        "Put an ELF and a title.cfg under APPS/ on a device OPL can see.",
+                        scanning
+                          ? "The device scan has not reached APPS yet."
+                          : "Put an ELF and a title.cfg under APPS/ on a device OPL can see.",
                         LAND_MUTE);
     }
 
@@ -872,7 +900,7 @@ void shelfRenderApps(void)
         int hx = APPS_MARGIN;
         /* No Back hint, because there is no Back. A footer that advertises a
            button which does nothing is worse than a footer with one fewer. */
-        shelfHint(hx, FTR_TEXT_Y, 0, "Launch");
+        shelfHint(hx, FTR_TEXT_Y, HINT_OK, "Launch");
     }
     /* The acceptance test made visible. Deliberately labelled with a tilde:
        this counts what was asked for this frame and cannot see gsKit's
@@ -883,17 +911,15 @@ void shelfRenderApps(void)
        put it straight through the control row. */
     {
         char v[48];
-        int w, rx = 640 - APPS_MARGIN;
+        int rx = 640 - APPS_MARGIN;
         if (total > APPS_PER) {
             int pages = (total + APPS_PER - 1) / APPS_PER;
             snprintf(v, sizeof(v), "%d / %d", page + 1, pages);
-            w = fntCalcDimensions(FNT_DEFAULT, v);
-            fntRenderString(FNT_DEFAULT, rx - w, FTR_TEXT_Y, ALIGN_NONE, 0, 0, v, LAND_MUTE);
+            fntRenderString(FNT_DEFAULT, rx, FTR_TEXT_Y, ALIGN_RIGHT, 0, 0, v, LAND_MUTE);
         }
         snprintf(v, sizeof(v), "~%u KB / %d binds", rmVramBoundBytes() >> 10,
                  rmVramBoundCount());
-        w = fntCalcDimensions(appsFontSmall, v);
-        fntRenderString(appsFontSmall, rx - w, 424, ALIGN_NONE, 0, 0, v, LAND_DIM);
+        fntRenderString(appsFontSmall, rx, 424, ALIGN_RIGHT, 0, 0, v, LAND_DIM);
     }
 
     shelfDrawRail(guiShelfPageIndex());
@@ -932,7 +958,7 @@ void shelfHandleInputApps(void)
         appsSel -= APPS_COLS;
     else if (getKeyOn(KEY_DOWN) && appsSel + APPS_COLS < total)
         appsSel += APPS_COLS;
-    else if (getKeyOn(KEY_CROSS)) {
+    else if (getKeyOn(SHELF_OK)) {
         /* The support object's own launch, with the config it builds itself.
            Anything else would be a second launch path to keep in step with the
            classic screen, which is exactly what the master toggle promises not
@@ -1026,6 +1052,17 @@ static int libHeroLast = -1;
 static int *libCacheId, *libCacheUid;
 static item_list_t *libList;          /* what the arrays were sized against */
 static int libCount, libSel;
+/* Display order. libSel and the grid's own indices are POSITIONS in this array;
+   everything that touches the device -- names, art, launching -- goes through
+   libAt() to get the real item index.
+ *
+ * The page needed its own order because gSortMode sorts the classic *menu*, not
+ * the item list, and this page reads the item list directly. It inherited
+ * whatever order the device handed over, which for a folder of ISOs is
+ * whatever the filesystem felt like. That was tolerable until the page grew an
+ * A-Z scale down its left edge, at which point the order stopped being a
+ * preference and started being a promise the page was not keeping. */
+static int *libOrder;
 
 /* Metadata for the highlighted title only, and cached against the index it was
    read for. itemGetConfig reads the game's CFG off the device, so calling it
@@ -1059,6 +1096,13 @@ static void libJoin(char *out, size_t n, config_set_t *cfg, const char **keys, i
 /* Exactly the fields the theme's info page carries, read once per selection --
    itemGetConfig reads the game's CFG off the device, so per frame would be a
    filesystem hit for a line of text. */
+/* A display position to the device's own index. Everything the page shows is
+   ordered; everything it asks the device for is not. */
+static int libAt(int pos)
+{
+    return (libOrder && pos >= 0 && pos < libCount) ? libOrder[pos] : pos;
+}
+
 static void libReadMeta(int idx)
 {
     static const char *rowA[] = {"Genre", "Release", "Developer"};
@@ -1085,6 +1129,44 @@ static void libReadMeta(int idx)
         snprintf(libMetaDesc, sizeof(libMetaDesc), "%s", v);
 }
 
+/* Case-insensitive A-Z over the item names, as an index permutation.
+ *
+ * Insertion sort, which is quadratic and does not matter: this runs when the
+ * list changes, not per frame, and it is comparing at most a few hundred names
+ * once. Anything faster here would be optimising a cost nobody pays.
+ *
+ * Names come from the device and can be NULL; those sort last rather than
+ * crashing strcasecmp, because a nameless entry is a device problem and not a
+ * reason for the page to stop drawing. */
+static void libSortOrder(item_list_t *list, int count)
+{
+    int i, j;
+
+    for (i = 0; i < count; i++)
+        libOrder[i] = i;
+    if (!list || !list->itemGetName)
+        return;
+
+    for (i = 1; i < count; i++) {
+        int key = libOrder[i];
+        char *kn = list->itemGetName(list, key);
+
+        for (j = i - 1; j >= 0; j--) {
+            char *jn = list->itemGetName(list, libOrder[j]);
+            int cmp;
+
+            if (!jn && !kn)      cmp = 0;
+            else if (!jn)        cmp = 1;      /* nameless sinks */
+            else if (!kn)        cmp = -1;
+            else                 cmp = strcasecmp(jn, kn);
+            if (cmp <= 0)
+                break;
+            libOrder[j + 1] = libOrder[j];
+        }
+        libOrder[j + 1] = key;
+    }
+}
+
 static int libSync(void)
 {
     item_list_t *list = menuGetActiveList();
@@ -1102,20 +1184,24 @@ static int libSync(void)
         free(libCacheUid);
         free(libHeroId);
         free(libHeroUid);
-        libCacheId = libCacheUid = libHeroId = libHeroUid = NULL;
+        free(libOrder);
+        libCacheId = libCacheUid = libHeroId = libHeroUid = libOrder = NULL;
         if (count > 0) {
             libCacheId = malloc(count * sizeof(int));
             libCacheUid = malloc(count * sizeof(int));
             libHeroId = malloc(count * sizeof(int));
             libHeroUid = malloc(count * sizeof(int));
+            libOrder = malloc(count * sizeof(int));
             if (libCacheId && libCacheUid && libHeroId && libHeroUid) {
                 memset(libCacheId, -1, count * sizeof(int));
                 memset(libCacheUid, -1, count * sizeof(int));
                 memset(libHeroId, -1, count * sizeof(int));
                 memset(libHeroUid, -1, count * sizeof(int));
+                libSortOrder(list, count);
             } else {
                 free(libCacheId); free(libCacheUid);
                 free(libHeroId); free(libHeroUid);
+                free(libOrder); libOrder = NULL;
                 libCacheId = libCacheUid = libHeroId = libHeroUid = NULL;
                 count = 0;
             }
@@ -1130,7 +1216,13 @@ static int libSync(void)
     /* One hero at a time, so a cache of two: the selected game's, and room for
        the one being moved to before the old one is dropped. */
     if (!libHeroCache && count > 0)
-        libHeroCache = cacheInitCache(1, "ART", 1, "BG", 2);
+        /* HERO, not BG. BG is 418 texels wide and this rect is 612, so the GS
+           was filling the difference with a bilinear stretch -- which is the
+           whole of why the heroes looked soft while the covers looked sharp.
+           HERO comes off the same 1920-wide original at the size it is actually
+           drawn, so it is one resample instead of two plus a hardware stretch.
+           Costs 172,032 against BG's 122,880, for one resident hero. */
+        libHeroCache = cacheInitCache(1, "ART", 1, "HERO", 2);
 
     /* Allocated on first use, so with SHELF UI off nothing is ever built. */
     if (!libCache && count > 0)
@@ -1285,7 +1377,7 @@ void shelfRenderLibrary(void)
     if (total > 0) {
         if (libSel >= total) libSel = total - 1;
         if (libSel < 0)      libSel = 0;
-        libReadMeta(libSel);
+        libReadMeta(libAt(libSel));
     }
     /* The selected row is the top row, so the half row beneath is always the
        next one along -- the peek shows where you are going, not where you were. */
@@ -1295,7 +1387,7 @@ void shelfRenderLibrary(void)
 
     /* Hero: the highlighted game, not the last played. */
     if (total > 0) {
-        GSTEXTURE *hero = libHero(libSel);
+        GSTEXTURE *hero = libHero(libAt(libSel));
         if (hero)
             rmDrawPixmap(hero, SHELF_RAIL_W, 0, ALIGN_NONE, 640 - SHELF_RAIL_W,
                          LIB_HERO_H, SCALING_NONE, gDefaultCol);
@@ -1303,9 +1395,13 @@ void shelfRenderLibrary(void)
             /* Ink, not tan. This stands in for artwork, and the title drawn on
                it is light because normally it sits on a photograph. */
             rmDrawRect(SHELF_RAIL_W, 0, 640 - SHELF_RAIL_W, LIB_HERO_H, LAND_INK);
-        for (i = 0; i < 12; i++)
-            rmDrawRect(SHELF_RAIL_W, LIB_HERO_H - 132 + i * 11, 640 - SHELF_RAIL_W, 11,
-                       GS_SETREG_RGBA(0x1E, 0x18, 0x12, 4 + i * 7));
+        /* Through shelfGradV, which steps in 2px bands. Twelve strips of eleven
+           pixels with the alpha jumping by 7 is not a gradient, it is a stack of
+           flat rectangles, and on a photograph that is exactly what it looked
+           like. shelfGradV was moved to 2px bands long ago; these two scrims
+           were simply never moved onto it. */
+        shelfGradV(SHELF_RAIL_W, LIB_HERO_H - 132, 640 - SHELF_RAIL_W, 132,
+                   0x04, 0x53, GS_SETREG_RGBA(0x1E, 0x18, 0x12, 0));
     }
 
     /* The theme's own detail fields, in the theme's order: name, the two
@@ -1313,7 +1409,7 @@ void shelfRenderLibrary(void)
     if (total > 0) {
         const char *name = libMetaName[0] ? libMetaName
                          : (libList && libList->itemGetName
-                            ? libList->itemGetName(libList, libSel) : NULL);
+                            ? libList->itemGetName(libList, libAt(libSel)) : NULL);
         /* Bottom-aligned, with the same 14 the text is inset from the container's
            left edge (CONTENT_X - SHELF_RAIL_W). The metadata line is the one that
            has to land on it, so it is placed first and the title hangs above. */
@@ -1338,9 +1434,9 @@ void shelfRenderLibrary(void)
     /* Hero first: one request against a row of covers, and asking last put it
        behind a queue they had just filled. */
     if (total > 0)
-        rmPrefetchTexture(libHero(libSel));
+        rmPrefetchTexture(libHero(libAt(libSel)));
     for (i = LIB_PER; i < LIB_PER + LIB_COLS && first + i < total; i++)
-        rmPrefetchTexture(libCover(first + i));
+        rmPrefetchTexture(libCover(libAt(first + i)));
 
     /* Two rows drawn, the second clipped by the grid box to half a cell. */
     for (n = 0; n < LIB_COLS * 2 && first + n < total; n++) {
@@ -1351,7 +1447,7 @@ void shelfRenderLibrary(void)
            clip -- it scales -- so the half row came out squashed rather than cut.
            The bottom row is drawn whole and the footer, drawn afterwards, covers
            whatever runs past it, which is what "continues off the page" means. */
-        GSTEXTURE *cov = libCover(idx);
+        GSTEXTURE *cov = libCover(libAt(idx));
 
         if (cy >= LIB_FTR_Y)
             break;
@@ -1371,7 +1467,7 @@ void shelfRenderLibrary(void)
         }
 
         if (cy + LIB_ART_H + LIB_LABEL_H <= LIB_FTR_Y && libList && libList->itemGetName) {
-            char *t = libList->itemGetName(libList, idx);
+            char *t = libList->itemGetName(libList, libAt(idx));
             if (t)
                 fntRenderString(appsFontSmall, cx, cy + LIB_ART_H, ALIGN_NONE,
                                 drawnW, LIB_LABEL_H, t,
@@ -1386,15 +1482,16 @@ void shelfRenderLibrary(void)
     rmDrawRect(SHELF_RAIL_W, LIB_FTR_Y, 640 - SHELF_RAIL_W, 1, LAND_RULE);
     {
         int hx = CONTENT_X, w, rx = 605;
-        hx += shelfHint(hx, LIB_FTR_TEXT, 0, "Play");
-        shelfHint(hx, LIB_FTR_TEXT, 2, "Details");
+        hx += shelfHint(hx, LIB_FTR_TEXT, HINT_OK, "Play");
+        shelfHint(hx, LIB_FTR_TEXT, HINT_ALT, "Details");
         if (total > 0) {
             snprintf(buf, sizeof(buf), "%d of %d", libSel + 1, total);
-            w = fntCalcDimensions(appsFontSmall, buf);
+            w = rmUnscaleX(fntCalcDimensions(appsFontSmall, buf));
             /* Right-aligned, and only drawn if the hints have not reached it --
-               overlapping is worse than omitting a count you can infer. */
+               overlapping is worse than omitting a count you can infer. The
+               overlap test is in virtual space, so the width has to be too. */
             if (rx - w > hx + 8)
-                fntRenderString(appsFontSmall, rx - w, LIB_FTR_TEXT, ALIGN_NONE, 0, 0,
+                fntRenderString(appsFontSmall, rx, LIB_FTR_TEXT, ALIGN_RIGHT, 0, 0,
                                 buf, LAND_MUTE);
         }
     }
@@ -1437,13 +1534,14 @@ void shelfHandleInputLibrary(void)
         libSel -= LIB_COLS;
     else if (getKeyOn(KEY_DOWN))
         libSel = (libSel + LIB_COLS < total) ? libSel + LIB_COLS : total - 1;
-    else if (getKeyOn(KEY_SQUARE)) {
+    else if (getKeyOn(SHELF_ALT)) {
         /* The theme's info page, not a second rendering of it. menuSelectIndex
            hands the selection to the classic screen, which owns that layout. */
-        if (menuSelectIndex(libSel))
+        if (menuSelectIndex(libAt(libSel)))
             guiSwitchScreen(GUI_SCREEN_INFO);
-    } else if (getKeyOn(KEY_CROSS) && libList && libList->itemLaunch && libList->itemGetConfig)
-        libList->itemLaunch(libList, libSel, libList->itemGetConfig(libList, libSel));
+    } else if (getKeyOn(SHELF_OK) && libList && libList->itemLaunch && libList->itemGetConfig)
+        libList->itemLaunch(libList, libAt(libSel),
+                            libList->itemGetConfig(libList, libAt(libSel)));
 }
 
 /* ------------------------------------------------------------------ Home page
@@ -1492,7 +1590,10 @@ static int homeFocus;
    landing, 1 is the dashboard; homeScrollT counts frames through the move.
    rmSetScrollY does the work, so neither panel's coordinates know the other
    exists. */
-#define HOME_SCROLL_FRAMES 22
+/* Eleven, not twenty-two. The easing curve is unchanged; only the duration is,
+   because at 60Hz twenty-two frames is nearly four tenths of a second and the
+   move stopped reading as a response to the button. */
+#define HOME_SCROLL_FRAMES 11
 static void homeDrawDash(void);
 
 /* Library-wide figures, scanned once per list; the landing's stream reads them
@@ -1579,12 +1680,13 @@ static void homeDrawLanding(int hh, int mm, int haveClock)
             /* No manual gap either side of the colon. The two pixels that used
                to be here were measured against the embedded face; on a grid
                face the advance is the design, and padding it opens a hole. */
-            int hw = fntCalcDimensions(appsFontBig, buf);
+            int hw = rmUnscaleX(fntCalcDimensions(appsFontBig, buf));
             fntRenderString(appsFontBig, 44 + hw, 150, ALIGN_NONE, 0, 0, ":",
                             GS_SETREG_RGBA(0x3A, 0x2E, 0x22,
                                            0x38 + shelfPulse(2 * FPS) / 3));
             snprintf(buf, sizeof(buf), "%02d", mm);
-            fntRenderString(appsFontBig, 44 + hw + fntCalcDimensions(appsFontBig, ":"),
+            fntRenderString(appsFontBig,
+                            44 + hw + rmUnscaleX(fntCalcDimensions(appsFontBig, ":")),
                             150, ALIGN_NONE, 0, 0, buf, LAND_INK);
         }
         fntRenderString(appsFontHead, 46, 212, ALIGN_NONE, 0, 0,
@@ -1607,8 +1709,7 @@ static void homeDrawLanding(int hh, int mm, int haveClock)
         if (alpha < 0x10)
             alpha = 0x10;
         {
-            int w = fntCalcDimensions(appsFontLabel, buf);
-            fntRenderString(appsFontLabel, RIGHT - w, y, ALIGN_NONE, 0, 0, buf,
+            fntRenderString(appsFontLabel, RIGHT, y, ALIGN_RIGHT, 0, 0, buf,
                             GS_SETREG_RGBA(0x3A, 0x2E, 0x22, alpha));
             if (age == 0)
                 rmDrawRect(RIGHT + 3, y + 1, 4, 8,
@@ -1650,6 +1751,14 @@ static int homeLocalTime(int *hh, int *mm, int *days)
     int minutes;
 
     if (!sceCdReadClock(&c))
+        return 0;
+    /* A PS2 whose RTC backup battery is flat reads zero at every boot and counts
+       up from there, which is how this clock came to show 00:14 on a console
+       that had been on for fourteen minutes. The year is the tell: the machine
+       did not exist before 2000, so anything below that is an unset clock rather
+       than a time. Saying nothing is better than saying something confident and
+       wrong -- and no software can fix a dead battery. */
+    if (btoi(c.year) < 1)
         return 0;
     *days = homeDaysFromCivil(2000 + btoi(c.year), btoi(c.month & 0x7F), btoi(c.day));
     minutes = btoi(c.hour) * 60 + btoi(c.minute) - 540 + configGetTimezone();
@@ -1766,11 +1875,11 @@ void shelfRenderHome(void)
     {
         int hx = CONTENT_X;
         if (homeView == 0) {
-            hx += shelfHint(hx, LIB_FTR_TEXT, 0, "Home");
+            hx += shelfHint(hx, LIB_FTR_TEXT, HINT_OK, "Home");
         } else if (total > 0) {
-            hx += shelfHint(hx, LIB_FTR_TEXT, 0,
+            hx += shelfHint(hx, LIB_FTR_TEXT, HINT_OK,
                             homeFocus >= 2 ? "Open" : homeFocus == 0 ? "Resume" : "Play");
-            shelfHint(hx, LIB_FTR_TEXT, 2, "Details");
+            shelfHint(hx, LIB_FTR_TEXT, HINT_ALT, "Details");
         }
     }
     shelfDrawRail(guiShelfPageIndex());
@@ -1818,7 +1927,7 @@ static GSTEXTURE *homeArt(image_cache_t *cache, int *ids, int *uids, int idx)
  *  floating over a background. */
 static int homeCard(int x, int y, int w, int h, const char *label, int phase)
 {
-    int dy = shelfFloat(phase, 2);
+    int dy = 0;
     rmDrawRect(x, y + dy, w, h, GS_SETREG_RGBA(0x3A, 0x2E, 0x22, 0x0C));
     rmDrawRect(x, y + dy, w, 1, LAND_RULE);
     rmDrawRect(x, y + dy + h - 1, w, 1, LAND_RULE);
@@ -1859,9 +1968,9 @@ static void homeDrawDash(void)
         int rx = 640 - HOME_M, w;
         if (haveClock) {
             snprintf(buf, sizeof(buf), "%02d:%02d", hh, mm);
-            w = fntCalcDimensions(appsFontSmall, buf);
+            w = rmUnscaleX(fntCalcDimensions(appsFontSmall, buf));
             rmDrawRect(rx - w - 16, 8, w + 16, 20, GS_SETREG_RGBA(0x3A, 0x2E, 0x22, 0x14));
-            fntRenderString(appsFontSmall, rx - w - 8, 12, ALIGN_NONE, 0, 0, buf,
+            fntRenderString(appsFontSmall, rx - 8, 12, ALIGN_RIGHT, 0, 0, buf,
                             LAND_TEXT);
             rx -= w + 26;
         }
@@ -1869,10 +1978,10 @@ static void homeDrawDash(void)
             const char *net = (gNetworkStartup == 0) ? "NET" : "OFFLINE";
             u64 col = (gNetworkStartup == 0) ? GS_SETREG_RGBA(0x64, 0xC8, 0x78, 0x80)
                                              : GS_SETREG_RGBA(0x6E, 0x76, 0x81, 0x80);
-            w = fntCalcDimensions(appsFontSmall, net);
+            w = rmUnscaleX(fntCalcDimensions(appsFontSmall, net));
             rmDrawRect(rx - w - 26, 8, w + 26, 20, GS_SETREG_RGBA(0x3A, 0x2E, 0x22, 0x14));
             rmDrawRect(rx - w - 18, 16, 5, 5, col);
-            fntRenderString(appsFontSmall, rx - w - 8, 12, ALIGN_NONE, 0, 0, net, col);
+            fntRenderString(appsFontSmall, rx - 8, 12, ALIGN_RIGHT, 0, 0, net, col);
         }
     }
 
@@ -1894,11 +2003,13 @@ static void homeDrawDash(void)
         snprintf(buf, sizeof(buf), "%02d", hh);
         fntRenderString(appsFontBig, HOME_M + 10, 86 + dyA, ALIGN_NONE, 0, 0, buf,
                         LAND_TEXT);
-        hw = fntCalcDimensions(appsFontBig, buf);
+        /* The pen is virtual, the measurements are physical. */
+        hw = rmUnscaleX(fntCalcDimensions(appsFontBig, buf));
         fntRenderString(appsFontBig, HOME_M + 10 + hw, 86 + dyA, ALIGN_NONE, 0, 0, ":",
                         GS_SETREG_RGBA(0x3A, 0x2E, 0x22, 0x30 + shelfPulse(2 * FPS) / 4));
         snprintf(buf, sizeof(buf), "%02d", mm);
-        fntRenderString(appsFontBig, HOME_M + 10 + hw + fntCalcDimensions(appsFontBig, ":"),
+        fntRenderString(appsFontBig,
+                        HOME_M + 10 + hw + rmUnscaleX(fntCalcDimensions(appsFontBig, ":")),
                         86 + dyA, ALIGN_NONE, 0, 0, buf, LAND_TEXT);
     } else {
         fntRenderString(appsFontSmall, HOME_M + 12, 90 + dyA, ALIGN_NONE, 0, 0,
@@ -1912,15 +2023,13 @@ static void homeDrawDash(void)
         static const char *lbl[2] = {"Library", "Apps"};
         int bw = (HOME_COL_W - 10) / 2, bh = 46, by = 172;
         int k;
-        dyB = shelfFloat(90, 2);
+        dyB = 0;
         for (k = 0; k < 2; k++) {
             int bx = HOME_M + k * (bw + 10);
             int on = (homeFocus == 2 + k);
             int lf = on ? 2 : 0;
             u64 face = on ? GS_SETREG_RGBA(0x3A, 0x2E, 0x22, 0x2E)
                           : GS_SETREG_RGBA(0x3A, 0x2E, 0x22, 0x0C);
-            int tw2 = fntCalcDimensions(appsFontSmall, lbl[k]);
-
             rmDrawRect(bx - lf, by + dyB - lf, bw + 2 * lf, bh + 2 * lf, face);
             rmDrawRect(bx - lf, by + dyB - lf, bw + 2 * lf, 1, LAND_RULE);
             rmDrawRect(bx - lf, by + dyB - lf + bh + 2 * lf - 1, bw + 2 * lf, 1, LAND_RULE);
@@ -1942,8 +2051,8 @@ static void homeDrawDash(void)
                 railGrid(bx + bw / 2 - 6, by + dyB + 10, on ? LAND_INK : LAND_MUTE);
             else
                 railPanel(bx + bw / 2 - 6, by + dyB + 10, on ? LAND_INK : LAND_MUTE);
-            fntRenderString(appsFontSmall, bx + (bw - tw2) / 2, by + dyB + 28,
-                            ALIGN_NONE, 0, 0, lbl[k], on ? LAND_INK : LAND_MUTE);
+            fntRenderString(appsFontSmall, bx + bw / 2, by + dyB + 28,
+                            ALIGN_HCENTER, 0, 0, lbl[k], on ? LAND_INK : LAND_MUTE);
         }
     }
 
@@ -1990,7 +2099,7 @@ static void homeDrawDash(void)
            size. Anything larger and the layout appears to reflow. */
         int lift = (homeFocus == 0) ? 3 : 0;
         int hx0 = HOME_R_X - lift, hy0, hw0 = HOME_R_W + 2 * lift, hh0 = HOME_HERO_H + 2 * lift;
-        dyH = shelfFloat(45, lift ? 3 : 2);
+        dyH = 0;                    /* the idle bob is gone; lift still lifts */
         hy0 = 40 - lift + dyH;
 
         /* The card *is* the artwork. A cover thumbnail on a flat panel was a list row
@@ -2059,7 +2168,7 @@ static void homeDrawDash(void)
                 int on = (homeFocus == 1 && idx == homeSel);
                 int lift = on ? 3 : 0;
                 int cx = HOME_R_X + (i % HOME_COLS) * (dw + HOME_GAP) - lift;
-                int ty = 202 + shelfFloat(idx * 37, on ? 3 : 2) - lift;
+                int ty = 202 - lift;
                 int tww = dw + 2 * lift, thh = th + 2 * lift;
                 GSTEXTURE *bg2 = homeArt(homeCover, homeCovId, homeCovUid, idx);
                 config_set_t *c2 = homeCfgOf(idx);
@@ -2085,7 +2194,12 @@ static void homeDrawDash(void)
                     if (nm)
                         fntRenderString(appsFontSmall, cx + lift, ty + thh + 6, ALIGN_NONE,
                                         dw, 12, nm,
-                                        i == homeSel ? LAND_TEXT : LAND_MUTE);
+                                        /* idx, not i: the frame compares the
+                                           recent index and the label compared
+                                           the loop position, so tile zero's
+                                           caption could never light -- homeSel
+                                           is clamped at 1. */
+                                        idx == homeSel ? LAND_TEXT : LAND_MUTE);
                 }
                 if (c2) configGetInt(c2, "Playtime", &m2);
                 homeWhen(when, sizeof(when), c2, days);
@@ -2131,7 +2245,7 @@ void shelfHandleInputHome(void)
         /* The landing has one control. Cross is the same as Down here, because
            a page that says DOWN FOR HOME should not also refuse the button
            everything else on this console uses to go forward. */
-        if (getKeyOn(KEY_DOWN) || getKeyOn(KEY_CROSS))
+        if (getKeyOn(KEY_DOWN) || getKeyOn(SHELF_OK))
             homeView = 1;
         return;
     }
@@ -2157,7 +2271,7 @@ void shelfHandleInputHome(void)
            would give this list something to have in it. */
         if (getKeyOn(KEY_LEFT) || getKeyOn(KEY_RIGHT))
             homeFocus = (homeFocus == 2) ? 3 : 2;
-        else if (homeFocus >= 2 && getKeyOn(KEY_CROSS))
+        else if (homeFocus >= 2 && getKeyOn(SHELF_OK))
             guiSwitchScreen(homeFocus == 2 ? GUI_SCREEN_SHELF_LIBRARY
                                            : GUI_SCREEN_SHELF_APPS);
         return;
@@ -2176,17 +2290,17 @@ void shelfHandleInputHome(void)
         else if (homeFocus == 1 && homeSel < total - 1 && homeSel < HOME_TILES)
             homeSel++;
     }
-    else if (homeFocus >= 2 && getKeyOn(KEY_CROSS)) {
+    else if (homeFocus >= 2 && getKeyOn(SHELF_OK)) {
         /* Straight to the page. guiSwitchScreen sets the screen the rail reads
            for its own marker, so the sidebar follows without being told. */
         guiSwitchScreen(homeFocus == 2 ? GUI_SCREEN_SHELF_LIBRARY
                                        : GUI_SCREEN_SHELF_APPS);
     }
-    else if (getKeyOn(KEY_SQUARE)) {
+    else if (getKeyOn(SHELF_ALT)) {
         idx = homeIndexOf(oplRecentStartup(homeFocus == 0 ? 0 : homeSel));
         if (idx >= 0 && menuSelectIndex(idx))
             guiSwitchScreen(GUI_SCREEN_INFO);
-    } else if (getKeyOn(KEY_CROSS)) {
+    } else if (getKeyOn(SHELF_OK)) {
         item_list_t *list = menuGetActiveList();
         idx = homeIndexOf(oplRecentStartup(homeFocus == 0 ? 0 : homeSel));
         if (idx >= 0 && list && list->itemLaunch && list->itemGetConfig)

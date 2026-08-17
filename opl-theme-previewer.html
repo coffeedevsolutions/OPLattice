@@ -2769,12 +2769,15 @@ function renderShelfLibrary() {
   ctx.save();
   ctx.fillStyle = rgbHex(0xC9BFA6); ctx.fillRect(0, 0, SCREEN_W, SCREEN_H);
 
-  const bg = game.serial ? gameArt(game.serial, "BG") : null;
+  // HERO, not BG: 612 texels for a 612-wide rect, so nothing is stretched.
+  const bg = game.serial ? (gameArt(game.serial, "HERO") || gameArt(game.serial, "BG")) : null;
   if (bg) ctx.drawImage(bg, RAIL_W, 0, SCREEN_W - RAIL_W, LIBP.HERO_H);
   else { ctx.fillStyle = rgbHex(0x3A2E22); ctx.fillRect(RAIL_W, 0, SCREEN_W - RAIL_W, LIBP.HERO_H); }
-  for (let i = 0; i < 12; i++) {
-    ctx.fillStyle = "rgba(30,24,18," + ((4 + i * 7) / 128) + ")";
-    ctx.fillRect(RAIL_W, LIBP.HERO_H - 132 + i * 11, SCREEN_W - RAIL_W, 11);
+  for (let i = 0; i < 66; i++) {
+    // 2px bands, as shelfGradV does. Twelve strips of eleven pixels is not a
+    // gradient, it is a stack of rectangles, and on a photograph it looked it.
+    ctx.fillStyle = "rgba(30,24,18," + ((4 + i * (0x53 - 4) / 65) / 128) + ")";
+    ctx.fillRect(RAIL_W, LIBP.HERO_H - 132 + i * 2, SCREEN_W - RAIL_W, 2);
   }
 
   // Bottom-aligned with the same inset it has from the left: CONTENT_X - RAIL_W.
