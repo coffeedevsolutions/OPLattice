@@ -2233,6 +2233,100 @@ function shelfHintPv(x, y, kind, label) {
   return 18 + textWidth(label, SHELF_FNT) + 22;
 }
 
+/* ------------------------------------------------ SHELF Home (mirrors shelf.c)
+
+   The recent list and Playtime are console-side state -- conf_last.cfg and a
+   per-game CFG key -- and the previewer has neither. Rather than draw an empty
+   page, the first six titles stand in for the recent list and PLAYTIME_MOCK
+   supplies minutes.
+
+   Those minutes are chosen to exercise every branch of homeFormatTime: one
+   under an hour, several over, and some at zero so the "counted in the
+   denominator only" rule is visible. Placeholder data whose shape is wrong is
+   worse than none, because the layout then looks fine for values that cannot
+   occur.
+*/
+const PLAYTIME_MOCK = [612, 47, 0, 183, 0, 1240, 0, 95];
+
+function homeFormatTimePv(mins) {
+  if (mins <= 0) return "";
+  if (mins < 60) return mins + " m";
+  return Math.floor(mins / 60) + " h " + (mins % 60) + " m";
+}
+
+function renderShelfHome() {
+  const g = libGridConst();
+  const artW = g.cw - g.gap, artH = g.ch - g.gap - g.lh;
+  const wide = S.aspect === 3;
+  const sc = v => wide ? (v * 3) >> 2 : v;
+  const pitchX = sc(g.cw), drawnW = sc(artW);
+  const TILES = 6, HERO_H = 196, GRID_Y = 240, FTR_Y = 450, FTR_TEXT = 454;
+  const x0 = (SCREEN_W - pitchX * TILES) / 2;
+  const games = gameList();
+  const recent = games.slice(0, 8);
+  const sel = Math.min(Math.max(S.gameIndex | 0, 0), Math.max(recent.length - 1, 0));
+
+  ctx.save();
+  ctx.fillStyle = rgbHex(0x0A0C0F); ctx.fillRect(0, 0, SCREEN_W, SCREEN_H);
+
+  if (!recent.length) {
+    shelfText(32, 120, "Nothing played yet.", 0xF2F5F8, SHELF_FNT);
+    shelfText(32, 150, "Launch something and it appears here, most recent first.",
+              0x5C6674, SHELF_FNT_SM);
+    ctx.restore(); octx.clearRect(0,0,SCREEN_W,SCREEN_H); applyViewport(); return;
+  }
+
+  const hero = gameArt(recent[sel].serial, "BG");
+  if (hero) ctx.drawImage(hero, 0, 0, SCREEN_W, HERO_H);
+  else { ctx.fillStyle = rgbHex(0x14171C); ctx.fillRect(0, 0, SCREEN_W, HERO_H); }
+  for (let i = 0; i < 12; i++) {
+    ctx.fillStyle = "rgba(10,12,15," + ((4 + i * 7) / 128) + ")";
+    ctx.fillRect(0, HERO_H - 132 + i * 11, SCREEN_W, 11);
+  }
+
+  // The eyebrow changes with position: only the newest entry is a "continue".
+  shelfText(32, 78, sel === 0 ? "CONTINUE" : "RECENTLY PLAYED", 0x64C878, SHELF_FNT_SM);
+  shelfText(32, 100, recent[sel].title, 0xF2F5F8, SHELF_FNT);
+  const t = homeFormatTimePv(PLAYTIME_MOCK[sel] || 0);
+  if (t) shelfText(32, 128, t + " played", 0x8894A2, SHELF_FNT_SM);
+
+  for (let i = 0; i < TILES && i < recent.length; i++) {
+    const cx = x0 + i * pitchX, cy = GRID_Y;
+    const cov = gameArt(recent[i].serial, "COV");
+    if (cov) ctx.drawImage(cov, cx, cy, drawnW, artH);
+    else { ctx.fillStyle = rgbHex(0x14171C); ctx.fillRect(cx, cy, drawnW, artH); }
+    if (i === sel) {
+      ctx.fillStyle = rgbHex(0xF2F5F8);
+      ctx.fillRect(cx, cy, drawnW, g.frame);
+      ctx.fillRect(cx, cy + artH - g.frame, drawnW, g.frame);
+      ctx.fillRect(cx, cy, g.frame, artH);
+      ctx.fillRect(cx + drawnW - g.frame, cy, g.frame, artH);
+    }
+    shelfText(cx, cy + artH, recent[i].title, i === sel ? 0xF2F5F8 : 0x8894A2,
+              SHELF_FNT_SM, "left", drawnW);
+  }
+
+  // Totals: the denominator is the point -- it is the sum of a few games, not
+  // a library statistic, and saying so is the difference from a bare number.
+  const played = PLAYTIME_MOCK.slice(0, games.length).filter(m => m > 0);
+  const mins = played.reduce((a, b) => a + b, 0);
+  const tt = homeFormatTimePv(mins);
+  shelfText(32, 410, tt ? `${tt} across ${played.length} of ${games.length} titles`
+                        : `${games.length} titles, none played yet`,
+            0x5C6674, SHELF_FNT_SM);
+
+  ctx.fillStyle = rgbHex(0x14171C);
+  ctx.fillRect(0, FTR_Y, SCREEN_W, SCREEN_H - FTR_Y);
+  let hx = 35;
+  hx += shelfHintPv(hx, FTR_TEXT, "cross", sel === 0 ? "Continue" : "Play");
+  hx += shelfHintPv(hx, FTR_TEXT, "square", "Details");
+  hx += shelfHintPv(hx, FTR_TEXT, "circle", "Back");
+
+  ctx.restore();
+  octx.clearRect(0, 0, SCREEN_W, SCREEN_H);
+  applyViewport();
+}
+
 function renderShelfLibrary() {
   const g = libGridConst();
   const artW = g.cw - g.gap, artH = g.ch - g.gap - g.lh;
@@ -2363,6 +2457,7 @@ function renderShelfApps() {
 function render() {
   if (S.chain === "shelfApps") return renderShelfApps();
   if (S.chain === "shelfLibrary") return renderShelfLibrary();
+  if (S.chain === "shelfHome") return renderShelfHome();
   if (!S.theme) { ctx.clearRect(0, 0, SCREEN_W, SCREEN_H); octx.clearRect(0, 0, SCREEN_W, SCREEN_H); return; }
   ctx.save();
   ctx.clearRect(0, 0, SCREEN_W, SCREEN_H);
@@ -2718,9 +2813,10 @@ function renderTabs() {
   const host = document.getElementById("tabs");
   host.innerHTML = "";
   const labels = { main:"Main", info:"Info", appsMain:"Apps main", appsInfo:"Apps info",
-                   shelfApps:"SHELF Apps", shelfLibrary:"SHELF Library" };
-  for (const key of ["main","info","appsMain","appsInfo","shelfApps","shelfLibrary"]) {
-    const mock = key === "shelfApps" || key === "shelfLibrary";   // hardcoded C pages
+                   shelfApps:"SHELF Apps", shelfLibrary:"SHELF Library",
+                   shelfHome:"SHELF Home" };
+  for (const key of ["main","info","appsMain","appsInfo","shelfHome","shelfLibrary","shelfApps"]) {
+    const mock = key.startsWith("shelf");   // hardcoded C pages
     const n = S.theme ? (S.theme.chains[key] || []).length : 0;
     const b = document.createElement("button");
     b.textContent = mock ? `${labels[key]} (mock)` : `${labels[key]} (${n})`;
@@ -2881,7 +2977,7 @@ function loadCfgText(text, opts = {}) {
   if (!opts.fromPane) {
     S.syncing = true; cfgEl.value = text; S.syncing = false;
   }
-  const mockTab = S.chain === "shelfApps" || S.chain === "shelfLibrary";   // no chain; the guards below would evict them
+  const mockTab = S.chain.startsWith("shelf");   // no chain; the guards below would evict them
   if (!mockTab && !(S.theme && S.theme.chains[S.chain])) S.chain = "main";
   rebuild(opts);
   if (!mockTab && (!S.theme.chains[S.chain] || !S.theme.chains[S.chain].length)) S.chain = "main";
