@@ -26,6 +26,7 @@
 #include "include/ioman.h"
 #include "include/gui.h"
 #include "include/system.h"
+#include "include/themes.h"
 
 int gEnableShelfUI;
 
@@ -58,11 +59,34 @@ int gEnableShelfUI;
 #define SHELF_HOLD_FRAMES 12
 
 static enum ShelfState state;
+/* Resolved once per frame by shelfSyncFonts: a theme face when the theme supplies
+   one, otherwise the embedded face below at the size the layout was drawn for. */
 static int appsFontSmall;   /* small face; used by the rail and every page */
 static int appsFontBig;     /* display face; the clock, and nothing else yet */
 static int appsFontLabel;   /* card headers; quieter than body, not the same size */
+static int fontEmbedSmall, fontEmbedBig, fontEmbedLabel;
+
+/* Theme font slots this shell asks for, by conf_theme.cfg key:
+     font5  body    12px
+     font6  labels   9px
+     font7  clock   46px
+   These are the theme's own slots, loaded by thmLoadFonts from the theme folder,
+   so the shell needs no path of its own and a theme switch reloads the faces for
+   free. thmLoadFonts leaves a slot pointing at fonts[0] when its key is missing
+   or its file will not open, which is why the embedded slots stay loaded: a slot
+   that did not take its own face is indistinguishable from one that was never
+   asked for, and falling back to the default face would silently draw the whole
+   page at 17px.
+
+   Five and up because thm_GridHard's own elements already reference font1
+   through font4 by number. Claiming a low slot would have restyled the classic
+   grid as a side effect of restyling these pages. */
+#define SHELF_FNT_BODY  5
+#define SHELF_FNT_LABEL 6
+#define SHELF_FNT_CLOCK 7
 
 static void shelfHoldCron(void);
+static void shelfSyncFonts(void);
 
 /** A 3x3 block of dots: Library. */
 static void railGrid(int x, int y, u64 c)
@@ -212,6 +236,8 @@ static float shelfEase(float t)
 
 void shelfUpdate(void)
 {
+    shelfSyncFonts();
+
     if (state != SHELF_CLOSED || guiOnShelfPage())
         shelfHoldCron();
 
@@ -493,13 +519,35 @@ static int appsSel;
 void shelfInitFonts(void)
 {
     int id = fntLoadFile(NULL, 12);
-    appsFontSmall = (id == FNT_ERROR) ? FNT_DEFAULT : id;
+    fontEmbedSmall = (id == FNT_ERROR) ? FNT_DEFAULT : id;
     /* 16:9 squeezes glyphs to three quarters width, so a display size that
        would be overbearing at 4:3 reads correctly here. */
     id = fntLoadFile(NULL, 46);
-    appsFontBig = (id == FNT_ERROR) ? FNT_DEFAULT : id;
+    fontEmbedBig = (id == FNT_ERROR) ? FNT_DEFAULT : id;
     id = fntLoadFile(NULL, 9);
-    appsFontLabel = (id == FNT_ERROR) ? appsFontSmall : id;
+    fontEmbedLabel = (id == FNT_ERROR) ? fontEmbedSmall : id;
+
+    appsFontSmall = fontEmbedSmall;
+    appsFontBig = fontEmbedBig;
+    appsFontLabel = fontEmbedLabel;
+}
+
+/* A theme slot that never loaded a face of its own is left equal to fonts[0], so
+   that comparison is the test for "the theme actually supplied this". */
+static int shelfFace(int slot, int fallback)
+{
+    if (gTheme && slot > 0 && slot < THM_MAX_FONTS && gTheme->fonts[slot] != gTheme->fonts[0])
+        return gTheme->fonts[slot];
+    return fallback;
+}
+
+/* Re-resolved every frame rather than cached at theme-load time: thmLoad frees
+   and reloads these handles, and a stale id here would index a released slot. */
+static void shelfSyncFonts(void)
+{
+    appsFontSmall = shelfFace(SHELF_FNT_BODY, fontEmbedSmall);
+    appsFontLabel = shelfFace(SHELF_FNT_LABEL, fontEmbedLabel);
+    appsFontBig = shelfFace(SHELF_FNT_CLOCK, fontEmbedBig);
 }
 
 static int appsCount(void)
@@ -1229,12 +1277,15 @@ static void homeDrawLanding(int hh, int mm, int haveClock)
         snprintf(buf, sizeof(buf), "%02d", hh);
         fntRenderString(appsFontBig, 44, 150, ALIGN_NONE, 0, 0, buf, LAND_INK);
         {
+            /* No manual gap either side of the colon. The two pixels that used
+               to be here were measured against the embedded face; on a grid
+               face the advance is the design, and padding it opens a hole. */
             int hw = fntCalcDimensions(appsFontBig, buf);
-            fntRenderString(appsFontBig, 46 + hw, 150, ALIGN_NONE, 0, 0, ":",
+            fntRenderString(appsFontBig, 44 + hw, 150, ALIGN_NONE, 0, 0, ":",
                             GS_SETREG_RGBA(0x3A, 0x2E, 0x22,
                                            0x38 + shelfPulse(2 * FPS) / 3));
             snprintf(buf, sizeof(buf), "%02d", mm);
-            fntRenderString(appsFontBig, 48 + hw + fntCalcDimensions(appsFontBig, ":"),
+            fntRenderString(appsFontBig, 44 + hw + fntCalcDimensions(appsFontBig, ":"),
                             150, ALIGN_NONE, 0, 0, buf, LAND_INK);
         }
         fntRenderString(appsFontLabel, 46, 212, ALIGN_NONE, 0, 0,
@@ -1546,10 +1597,10 @@ static void homeDrawDash(void)
         fntRenderString(appsFontBig, HOME_M + 10, 86 + dyA, ALIGN_NONE, 0, 0, buf,
                         LAND_TEXT);
         hw = fntCalcDimensions(appsFontBig, buf);
-        fntRenderString(appsFontBig, HOME_M + 12 + hw, 86 + dyA, ALIGN_NONE, 0, 0, ":",
+        fntRenderString(appsFontBig, HOME_M + 10 + hw, 86 + dyA, ALIGN_NONE, 0, 0, ":",
                         GS_SETREG_RGBA(0x3A, 0x2E, 0x22, 0x30 + shelfPulse(2 * FPS) / 4));
         snprintf(buf, sizeof(buf), "%02d", mm);
-        fntRenderString(appsFontBig, HOME_M + 14 + hw + fntCalcDimensions(appsFontBig, ":"),
+        fntRenderString(appsFontBig, HOME_M + 10 + hw + fntCalcDimensions(appsFontBig, ":"),
                         86 + dyA, ALIGN_NONE, 0, 0, buf, LAND_TEXT);
     } else {
         fntRenderString(appsFontSmall, HOME_M + 12, 90 + dyA, ALIGN_NONE, 0, 0,

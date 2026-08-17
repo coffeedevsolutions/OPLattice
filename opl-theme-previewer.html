@@ -84,6 +84,23 @@ h3{margin:0;padding:7px 10px;font-size:11px;letter-spacing:.09em;text-transform:
 #drop.on{display:grid}
 .empty{padding:14px 10px;color:var(--dim);font-size:12px}
 kbd{font-family:var(--mono);font-size:10.5px;background:#0f1216;border:1px solid var(--line);border-radius:3px;padding:0 4px}
+/* Screen only. Everything that is chrome collapses and the stage takes the
+   window, so a page can be judged at the size it will actually be watched at
+   rather than in a 330px column between two panels. The canvas is untouched --
+   this is purely layout, so "fit" recomputes and nothing about the render or
+   its metrics changes. */
+body.fullscreen #bar > *:not(#btnFull),
+body.fullscreen #left,
+body.fullscreen #right,
+body.fullscreen #cfgWrap { display:none }
+body.fullscreen #bar{position:fixed;top:0;right:0;z-index:20;background:transparent;border:0;padding:6px;opacity:.25}
+/* #bar is a grid item of #app, and taking it out of flow leaves #main as the
+   only in-flow child -- so it lands in row 1, which is `auto`, and collapses to
+   its content instead of filling the window. One row, and it fills. */
+body.fullscreen #app{grid-template-rows:1fr}
+body.fullscreen #bar:hover{opacity:1}
+body.fullscreen #main{grid-template-columns:1fr}
+body.fullscreen #stage{background:#000}
 </style>
 </head>
 <body>
@@ -105,6 +122,7 @@ kbd{font-family:var(--mono);font-size:10.5px;background:#0f1216;border:1px solid
     <span class="sep"></span>
     <button id="btnGrid" title="8px grid">Grid</button>
     <button id="btnSnap" title="Snap drags to 8px">Snap</button>
+    <button id="btnFull" title="Screen only — hide every panel (F, or Esc to leave)">Full screen</button>
     <button id="btnPlasma" class="on" title="Plasma vs flat bg_color fill">Plasma</button>
     <button id="btnLoad" title="Show the LoadingIcon overlay">Busy icon</button>
     <span class="sep"></span>
@@ -2163,12 +2181,49 @@ const SHELF_APPS_MOCK = [
   { name:"HDLoader",       sub:"—" },
 ];
 
+// The SHELF faces, mirroring conf_theme.cfg's font5/font6/font7 and the
+// SHELF_FNT_* slot numbers in shelf.c. Loaded from the theme folder rather than
+// embedded, so the previewer renders the same file the card gets and cannot
+// drift from it.
+//
+// These families used to read "PoeVetica", which is not the name loadBuiltinFont
+// registers -- that is FONT_FAMILY, "OPLPoeVetica". Every hardcoded page was
+// therefore measured and drawn in whatever the browser substituted, in the one
+// tool whose entire job is to be faithful about metrics.
+const SHELF_FACE_MONO = "ShelfMono";     // SUSEMono-Medium, body and labels
+const SHELF_FACE_CLOCK = "ShelfClock";   // BitcountGrid-SemiBold, the clock only
+let shelfFacesReady = false;
+
+async function loadShelfFaces() {
+  const want = [
+    [SHELF_FACE_MONO, "themes/thm_GridHard/SUSEMono-Medium.ttf"],
+    [SHELF_FACE_CLOCK, "themes/thm_GridHard/BitcountGrid-SemiBold.ttf"],
+  ];
+  try {
+    for (const [family, url] of want) {
+      const face = new FontFace(family, `url(${url})`);
+      await face.load();
+      document.fonts.add(face);
+    }
+    shelfFacesReady = true;
+  } catch (e) {
+    // file:// blocks the fetch, and a missing theme font is exactly the case
+    // shelf.c falls back on, so mirror that rather than drawing nothing.
+    console.warn("shelf faces unavailable, falling back to the embedded face:", e);
+  }
+  return shelfFacesReady;
+}
+
+const shelfBody = () => (shelfFacesReady ? SHELF_FACE_MONO : FONT_FAMILY);
+const shelfClockFace = () => (shelfFacesReady ? SHELF_FACE_CLOCK : FONT_FAMILY);
+
 // FNT_DEFAULT is 17px; the subtitle slot is a second fntLoadFile(NULL, 12).
-const SHELF_FNT = { size: 17, family: "PoeVetica" };
-const SHELF_FNT_SM = { size: 12, family: "PoeVetica" };
+const SHELF_FNT = { size: 17, get family() { return shelfBody(); } };
+const SHELF_FNT_SM = { size: 12, get family() { return shelfBody(); } };
 // Card headers get their own smaller slot in shelf.c; mirror it or the
 // spacing here will look right while the console's overlaps.
-const SHELF_FNT_LBL = { size: 9, family: "PoeVetica" };
+const SHELF_FNT_LBL = { size: 9, get family() { return shelfBody(); } };
+const SHELF_FNT_CLOCK = { size: 46, get family() { return shelfClockFace(); } };
 
 function shelfText(x, y, str, colorHex, spec = SHELF_FNT, align = "left", maxW = 0) {
   // fntRenderString takes the TOP of the glyph box, not the baseline --
@@ -2323,11 +2378,11 @@ function renderShelfLanding() {
   diag(30 + (frame / 4) % 90, 26 + (frame / 4) % 90, 24, 1, 1, 0x38);
   diag(596 - (frame / 5) % 90, 458 - (frame / 5) % 90, 24, -1, -1, 0x38);
 
-  const BIG = { size: 46, family: SHELF_FNT.family };
+  const BIG = SHELF_FNT_CLOCK;
   shelfText(44, 150, "21", INK, BIG);
   const hw = textWidth("21", BIG);
-  shelfText(46 + hw, 150, ":", INK, BIG);
-  shelfText(48 + hw + textWidth(":", BIG), 150, "01", INK, BIG);
+  shelfText(44 + hw, 150, ":", INK, BIG);
+  shelfText(44 + hw + textWidth(":", BIG), 150, "01", INK, BIG);
   shelfText(46, 212, "EVENING", INK, SHELF_FNT_LBL);
 
   /* Real values in shelf.c; representative ones here, in the same shapes so the
@@ -2432,13 +2487,13 @@ function renderShelfHome() {
   // the schematic sheet it read as a smudge.
   const dyA = card(M, 40, COLW, 122, "CLOCK", 0);
   shelfText(M + 12, 66 + dyA, "Good evening", 0x6B5A46, SHELF_FNT_SM);
-  const BIG = { size: 46, family: SHELF_FNT.family };
+  const BIG = SHELF_FNT_CLOCK;
   shelfText(M + 10, 86 + dyA, "21", 0x3A2E22, BIG);
   const hw = textWidth("21", BIG);
   ctx.globalAlpha = (0x30 + pulse / 4) / 128;
-  shelfText(M + 12 + hw, 86 + dyA, ":", 0x3A2E22, BIG);
+  shelfText(M + 10 + hw, 86 + dyA, ":", 0x3A2E22, BIG);
   ctx.globalAlpha = 1;
-  shelfText(M + 14 + hw + textWidth(":", BIG), 86 + dyA, "01", 0x3A2E22, BIG);
+  shelfText(M + 10 + hw + textWidth(":", BIG), 86 + dyA, "01", 0x3A2E22, BIG);
 
   // Two destinations rather than a ranking: this column had the only room for
   // something you can press.
@@ -3409,9 +3464,47 @@ document.getElementById("btnBig").onclick = e => {
 };
 addEventListener("resize", () => { if (S.zoom === "fit") render(); });
 
+/* Full screen. Layout only -- no Fullscreen API, because the point is to see the
+   page big while still being able to reach the tabs, and a real fullscreen
+   request would take the tab away from the rest of the tool. */
+function setFullscreen(on) {
+  document.body.classList.toggle("fullscreen", on);
+  document.getElementById("btnFull").textContent = on ? "Exit" : "Full screen";
+  if (on) {                       // a fixed zoom would overflow with no panels
+    S.zoom = "fit";
+    document.getElementById("zoom").value = "fit";
+  }
+  render();
+}
+
+/* "fit" reads stage.clientWidth, which is stale for any render issued in the
+   same task as a layout change -- entering full screen collapses three panels
+   and takes the toolbar out of flow, and the browser has not reflowed yet. A
+   frame or two of requestAnimationFrame happened to be enough sometimes, which
+   is the worst kind of fix. Observing the box is exact: when the stage really
+   has resized, fit is recomputed against the size it actually has. */
+{
+  const stage = document.getElementById("stage");
+  let lastW = 0, lastH = 0;
+  new ResizeObserver(() => {
+    const w = stage.clientWidth, h = stage.clientHeight;
+    if (w === lastW && h === lastH) return;    // render() never resizes #stage,
+    lastW = w; lastH = h;                      // but do not trust that blindly
+    if (S.zoom === "fit") render();
+  }).observe(stage);
+}
+document.getElementById("btnFull").onclick =
+  () => setFullscreen(!document.body.classList.contains("fullscreen"));
+addEventListener("keydown", e => {
+  if (e.target.matches("input,textarea,select")) return;
+  if (e.key === "f" || e.key === "F") setFullscreen(!document.body.classList.contains("fullscreen"));
+  else if (e.key === "Escape" && document.body.classList.contains("fullscreen")) setFullscreen(false);
+});
+
 /* Boot */
 (async () => {
   await loadBuiltinFont();
+  await loadShelfFaces();
   if (!fontReady) setStatus("Built-in font not embedded — run tools/embed-font.mjs. Text metrics will be approximate.");
   renderGames();
   renderTabs();
