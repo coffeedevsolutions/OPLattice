@@ -38,7 +38,11 @@ int gEnableShelfUI;
 
    Icons are drawn from rectangles. The pages load no art by design, and a glyph
    from the font would be at the mercy of whichever face the theme supplies. */
-#define SHELF_RAIL_W   34
+#define SHELF_RAIL_W   28
+/* Every rail icon is drawn on a 13-wide grid, and centred rather than placed:
+   the corrected width differs by aspect, so a hardcoded x would only be centred
+   in one of them. */
+#define RAIL_ICON_W    13
 #define SHELF_PEEK     SHELF_RAIL_W
 
 /* Content starts after the rail on every page, so the rail can never sit on
@@ -92,12 +96,34 @@ static void shelfHoldCron(void);
 static void shelfSyncFonts(void);
 
 /** A 3x3 block of dots: Library. */
+/* A rect of a rail icon, corrected for anamorphic output.
+ *
+ * These icons are rectangles in virtual coordinates, and virtual coordinates are
+ * not square: rmDrawRect lays x out across 640 while y goes down 480, so in 16:9
+ * the console stretches everything horizontally by four thirds. Textures get this
+ * for free through SCALING_RATIO and glyphs get it at rasterisation, where ws is
+ * 0.75 -- primitives get nothing, so every icon here has been a third too wide on
+ * a widescreen panel since the rail was written.
+ *
+ * Both edges are scaled rather than the offset and the width separately. Scaling
+ * a width independently rounds it down a second time, and a shape assembled from
+ * several of those loses a pixel at every seam; scaling edges means a run from a
+ * to b still ends exactly where the next one begins. In 4:3 rmWideScale is the
+ * identity and none of this does anything. */
+static void railR(int x, int y, int x0, int y0, int w, int h, u64 c)
+{
+    int a = rmWideScale(x0), b = rmWideScale(x0 + w);
+    if (b <= a)
+        b = a + 1;
+    rmDrawRect(x + a, y + y0, b - a, h, c);
+}
+
 static void railGrid(int x, int y, u64 c)
 {
     int i, j;
     for (j = 0; j < 3; j++)
         for (i = 0; i < 3; i++)
-            rmDrawRect(x + i * 5, y + j * 5, 3, 3, c);
+            railR(x, y, i * 5, j * 5, 3, 3, c);
 }
 
 /** A house: roof from stacked bars, then a body. Home. */
@@ -105,28 +131,28 @@ static void railHome(int x, int y, u64 c)
 {
     int i;
     for (i = 0; i < 6; i++)
-        rmDrawRect(x + 6 - i, y + i, 2 + i * 2, 2, c);
-    rmDrawRect(x + 2, y + 6, 10, 7, c);
+        railR(x, y, 6 - i, i, 2 + i * 2, 2, c);
+    railR(x, y, 2, 6, 10, 7, c);
 }
 
 /** A pane split by a divider: Apps. */
 static void railPanel(int x, int y, u64 c)
 {
-    rmDrawRect(x, y, 13, 2, c);
-    rmDrawRect(x, y + 11, 13, 2, c);
-    rmDrawRect(x, y, 2, 13, c);
-    rmDrawRect(x + 11, y, 2, 13, c);
-    rmDrawRect(x + 5, y + 2, 2, 9, c);
+    railR(x, y, 0, 0, 13, 2, c);
+    railR(x, y, 0, 11, 13, 2, c);
+    railR(x, y, 0, 0, 2, 13, c);
+    railR(x, y, 11, 0, 2, 13, c);
+    railR(x, y, 5, 2, 2, 9, c);
 }
 
 /** A ring with four teeth: Settings. */
 static void railGear(int x, int y, u64 c)
 {
-    rmDrawRect(x + 3, y + 1, 7, 2, c);
-    rmDrawRect(x + 3, y + 10, 7, 2, c);
-    rmDrawRect(x + 1, y + 3, 2, 7, c);
-    rmDrawRect(x + 10, y + 3, 2, 7, c);
-    rmDrawRect(x + 5, y + 5, 3, 3, c);
+    railR(x, y, 3, 1, 7, 2, c);
+    railR(x, y, 3, 10, 7, 2, c);
+    railR(x, y, 1, 3, 2, 7, c);
+    railR(x, y, 10, 3, 2, 7, c);
+    railR(x, y, 5, 5, 3, 3, c);
 }
 
 /** The collapsed rail: brand mark, the four destinations, and link state.
@@ -220,26 +246,38 @@ static void shelfDrawRail(int active)
     /* Brand mark. A filled slab with the letter knocked out of it, because a
        lone glyph at this size reads as debris rather than as a mark. Ink on tan
        now rather than white on near-black, so the letter is the tan. */
-    rmDrawRect(9, 14, 17, 17, LAND_INK);
-    fntRenderString(appsFontSmall, 14, 16, ALIGN_NONE, 0, 0, "S", LAND_BG);
+    {
+        /* A square on screen, which means not a square in these coordinates. */
+        int bw = rmWideScale(17), bx = (SHELF_RAIL_W - bw) / 2;
+        int sw = fntCalcDimensions(appsFontSmall, "S");
+        rmDrawRect(bx, 14, bw, 17, LAND_INK);
+        fntRenderString(appsFontSmall, bx + (bw - sw) / 2, 16, ALIGN_NONE, 0, 0,
+                        "S", LAND_BG);
+    }
 
-    for (i = 0; i < 4; i++) {
-        u64 c = (i == active) ? on : off;
-        if (i == active)
-            rmDrawRect(0, iconY[i] - 4, 3, 21, on);
-        switch (i) {
-            case 0: railHome(11, iconY[i], c);  break;
-            case 1: railGrid(10, iconY[i], c);  break;
-            case 2: railPanel(11, iconY[i], c); break;
-            default: railGear(11, iconY[i], c); break;
+    {
+        int ix = (SHELF_RAIL_W - rmWideScale(RAIL_ICON_W)) / 2;
+        for (i = 0; i < 4; i++) {
+            u64 c = (i == active) ? on : off;
+            if (i == active)
+                rmDrawRect(0, iconY[i] - 4, 3, 21, on);
+            switch (i) {
+                case 0: railHome(ix, iconY[i], c);  break;
+                case 1: railGrid(ix, iconY[i], c);  break;
+                case 2: railPanel(ix, iconY[i], c); break;
+                default: railGear(ix, iconY[i], c); break;
+            }
         }
     }
 
     /* Green stays green -- it means the network came up, and that is worth more
        than palette consistency. The dead state joins the sheet. */
-    rmDrawRect(15, 440, 5, 5,
-               (gNetworkStartup == 0) ? GS_SETREG_RGBA(0x64, 0xC8, 0x78, 0x80)
-                                      : LAND_DIM);
+    {
+        int dw = rmWideScale(5);
+        rmDrawRect((SHELF_RAIL_W - dw) / 2, 440, dw, 5,
+                   (gNetworkStartup == 0) ? GS_SETREG_RGBA(0x64, 0xC8, 0x78, 0x80)
+                                          : LAND_DIM);
+    }
     }
 }
 

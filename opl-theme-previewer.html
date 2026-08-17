@@ -2304,7 +2304,7 @@ function shelfText(x, y, str, colorHex, spec = SHELF_FNT, align = "left", maxW =
    in again, so if conf_theme.cfg and shelf.c drift apart this page shows the
    theme's answer and the difference becomes visible instead of silent.
 */
-const RAIL_W = 34, CONTENT_X = RAIL_W + 14;
+const RAIL_W = 28, CONTENT_X = RAIL_W + 14, RAIL_ICON_W = 13;
 // FTR_TEXT is derived from the height, as shelf.c derives LIB_FTR_TEXT: a 26px
 // bar with a 9px hint row centres at FTR_Y + (26 - 9) / 2.
 // GRID_Y and ALPHA_Y0 are the same number on purpose: the covers start where
@@ -2366,19 +2366,43 @@ function shelfRailPv(active) {
   // previewer starts lying about contrast.
   const on = 0x3A2E22, off = 0x6B604F, iconY = [66, 102, 138, 174];
   const R = (x, y, w, h, c) => { ctx.fillStyle = rgbHex(c); ctx.fillRect(x, y, w, h); };
+  // Anamorphic correction, as shelf.c's railR: virtual coordinates lay x out
+  // across 640 and y down 480, so in 16:9 an uncorrected icon is drawn a third
+  // too wide. Both edges are scaled rather than offset and width separately, so
+  // a run from a to b still ends where the next one begins.
+  const ws = v => S.aspect === 3 ? (v * 3) >> 2 : v;
+  const IR = (x, y, x0, y0, w, h, c) => {
+    const a = ws(x0); let b = ws(x0 + w);
+    if (b <= a) b = a + 1;
+    R(x + a, y + y0, b - a, h, c);
+  };
   R(0, 0, RAIL_W, SCREEN_H, 0xC9BFA6);
   R(RAIL_W, 0, 1, SCREEN_H, 0x726756);
-  R(9, 14, 17, 17, 0x3A2E22);
-  shelfText(14, 16, "S", 0xC9BFA6, SHELF_FNT_SM);
+
+  const bw = ws(17), bx = (RAIL_W - bw) >> 1;      // a square on screen
+  R(bx, 14, bw, 17, 0x3A2E22);
+  const sw = textWidth("S", SHELF_FNT_SM);
+  shelfText(bx + ((bw - sw) >> 1), 16, "S", 0xC9BFA6, SHELF_FNT_SM);
+
+  const ix = (RAIL_W - ws(RAIL_ICON_W)) >> 1;
   iconY.forEach((y, i) => {
     const c = i === active ? on : off;
     if (i === active) R(0, y - 4, 3, 21, on);
-    if (i === 0) { for (let k = 0; k < 6; k++) R(17 - k, y + k, 2 + k * 2, 2, c); R(13, y + 6, 10, 7, c); }
-    else if (i === 1) { for (let j = 0; j < 3; j++) for (let k = 0; k < 3; k++) R(10 + k * 5, y + j * 5, 3, 3, c); }
-    else if (i === 2) { R(11, y, 13, 2, c); R(11, y + 11, 13, 2, c); R(11, y, 2, 13, c); R(22, y, 2, 13, c); R(16, y + 2, 2, 9, c); }
-    else { R(14, y + 1, 7, 2, c); R(14, y + 10, 7, 2, c); R(12, y + 3, 2, 7, c); R(21, y + 3, 2, 7, c); R(16, y + 5, 3, 3, c); }
+    if (i === 0) {
+      for (let k = 0; k < 6; k++) IR(ix, y, 6 - k, k, 2 + k * 2, 2, c);
+      IR(ix, y, 2, 6, 10, 7, c);
+    } else if (i === 1) {
+      for (let j = 0; j < 3; j++) for (let k = 0; k < 3; k++) IR(ix, y, k * 5, j * 5, 3, 3, c);
+    } else if (i === 2) {
+      IR(ix, y, 0, 0, 13, 2, c); IR(ix, y, 0, 11, 13, 2, c);
+      IR(ix, y, 0, 0, 2, 13, c); IR(ix, y, 11, 0, 2, 13, c); IR(ix, y, 5, 2, 2, 9, c);
+    } else {
+      IR(ix, y, 3, 1, 7, 2, c); IR(ix, y, 3, 10, 7, 2, c);
+      IR(ix, y, 1, 3, 2, 7, c); IR(ix, y, 10, 3, 2, 7, c); IR(ix, y, 5, 5, 3, 3, c);
+    }
   });
-  R(15, 440, 5, 5, 0x64C878);   // green means the link came up; it stays green
+  const dw = ws(5);
+  R((RAIL_W - dw) >> 1, 440, dw, 5, 0x64C878);   // green means the link came up
 }
 
 /* shelf.c's LIB_* constants, and nothing else.
