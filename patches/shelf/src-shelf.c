@@ -42,7 +42,7 @@ int gEnableShelfUI;
 /* Every rail icon is drawn on a 13-wide grid, and centred rather than placed:
    the corrected width differs by aspect, so a hardcoded x would only be centred
    in one of them. */
-#define RAIL_ICON_W    13
+#define RAIL_ICON_W    16
 #define SHELF_PEEK     SHELF_RAIL_W
 
 /* Content starts after the rail on every page, so the rail can never sit on
@@ -113,8 +113,13 @@ static void shelfSyncFonts(void);
 static void railR(int x, int y, int x0, int y0, int w, int h, u64 c)
 {
     int a = rmWideScale(x0), b = rmWideScale(x0 + w);
-    if (b <= a)
-        b = a + 1;
+    /* Two, not one. Design coordinates are screen-proportional for position, but
+       a stroke does not survive the round trip: two design pixels scale to one
+       virtual, which comes back as 1.33 on screen against the 2 of a horizontal
+       bar of the same nominal weight, and the icon reads as half-drawn. Two
+       virtual overshoots to 2.67 instead, which is the error you cannot see. */
+    if (b - a < 2)
+        b = a + 2;
     rmDrawRect(x + a, y + y0, b - a, h, c);
 }
 
@@ -123,36 +128,36 @@ static void railGrid(int x, int y, u64 c)
     int i, j;
     for (j = 0; j < 3; j++)
         for (i = 0; i < 3; i++)
-            railR(x, y, i * 5, j * 5, 3, 3, c);
+            railR(x, y, i * 6, j * 6, 4, 4, c);
 }
 
 /** A house: roof from stacked bars, then a body. Home. */
 static void railHome(int x, int y, u64 c)
 {
     int i;
-    for (i = 0; i < 6; i++)
-        railR(x, y, 6 - i, i, 2 + i * 2, 2, c);
-    railR(x, y, 2, 6, 10, 7, c);
+    for (i = 0; i < 8; i++)
+        railR(x, y, 7 - i, i, 2 + i * 2, 2, c);
+    railR(x, y, 3, 8, 10, 8, c);
 }
 
 /** A pane split by a divider: Apps. */
 static void railPanel(int x, int y, u64 c)
 {
-    railR(x, y, 0, 0, 13, 2, c);
-    railR(x, y, 0, 11, 13, 2, c);
-    railR(x, y, 0, 0, 2, 13, c);
-    railR(x, y, 11, 0, 2, 13, c);
-    railR(x, y, 5, 2, 2, 9, c);
+    railR(x, y, 0, 0, 16, 2, c);
+    railR(x, y, 0, 14, 16, 2, c);
+    railR(x, y, 0, 0, 2, 16, c);
+    railR(x, y, 14, 0, 2, 16, c);
+    railR(x, y, 7, 2, 2, 12, c);
 }
 
 /** A ring with four teeth: Settings. */
 static void railGear(int x, int y, u64 c)
 {
-    railR(x, y, 3, 1, 7, 2, c);
-    railR(x, y, 3, 10, 7, 2, c);
-    railR(x, y, 1, 3, 2, 7, c);
-    railR(x, y, 10, 3, 2, 7, c);
-    railR(x, y, 5, 5, 3, 3, c);
+    railR(x, y, 4, 1, 8, 2, c);
+    railR(x, y, 4, 13, 8, 2, c);
+    railR(x, y, 1, 4, 2, 8, c);
+    railR(x, y, 13, 4, 2, 8, c);
+    railR(x, y, 6, 6, 4, 4, c);
 }
 
 /** The collapsed rail: brand mark, the four destinations, and link state.
@@ -225,7 +230,7 @@ static void shelfGradV(int x, int y, int w, int h, int a0, int a1, u64 rgb)
 
 static void shelfDrawRail(int active)
 {
-    static const int iconY[4] = {66, 102, 138, 174};
+    static const int iconY[4] = {64, 100, 136, 172};
     /* The pages call this as part of their own draw, but while the panel is out
        the panel IS the rail -- expanded. Drawing both would put the icon strip
        next to the item list it turns into. */
