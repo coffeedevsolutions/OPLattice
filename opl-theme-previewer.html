@@ -2166,6 +2166,9 @@ const SHELF_APPS_MOCK = [
 // FNT_DEFAULT is 17px; the subtitle slot is a second fntLoadFile(NULL, 12).
 const SHELF_FNT = { size: 17, family: "PoeVetica" };
 const SHELF_FNT_SM = { size: 12, family: "PoeVetica" };
+// Card headers get their own smaller slot in shelf.c; mirror it or the
+// spacing here will look right while the console's overlaps.
+const SHELF_FNT_LBL = { size: 9, family: "PoeVetica" };
 
 function shelfText(x, y, str, colorHex, spec = SHELF_FNT, align = "left", maxW = 0) {
   // fntRenderString takes the TOP of the glyph box, not the baseline --
@@ -2288,7 +2291,7 @@ function renderShelfHome() {
   };
   const card = (x, y, w, h, label) => {
     R(x, y, w, h, 0x161A20); R(x, y, w, 1, 0x2A3038);
-    if (label) shelfText(x + 12, y + 10, label, 0x5C6674, SHELF_FNT_SM);
+    if (label) shelfText(x + 12, y + 9, label, 0x5C6674, SHELF_FNT_LBL);
   };
   const gradV = (x, y, w, h, n, a0, a1, c) => {
     const st = Math.max(1, Math.floor(h / n));
@@ -2317,21 +2320,21 @@ function renderShelfHome() {
   // clock card, with the evening tint and the display face
   card(M, 40, COLW, 122, "CLOCK");
   gradV(M, 41, COLW, 120, 10, 0x48, 0x00, 0x3A2C52);
-  shelfText(M + 12, 60, "Good evening", 0xB4BEC8, SHELF_FNT_SM);
+  shelfText(M + 12, 66, "Good evening", 0xB4BEC8, SHELF_FNT_SM);
   const BIG = { size: 46, family: SHELF_FNT.family };
-  shelfText(M + 10, 80, "21", 0xF2F5F8, BIG);
+  shelfText(M + 10, 86, "21", 0xF2F5F8, BIG);
   const hw = textWidth("21", BIG);
-  ctx.globalAlpha = (0x2E + pulse / 3) / 128;
-  shelfText(M + 12 + hw, 80, ":", 0x64C878, BIG);
+  ctx.globalAlpha = (0x38 + pulse / 3) / 128;
+  shelfText(M + 12 + hw, 86, ":", 0xF2F5F8, BIG);
   ctx.globalAlpha = 1;
-  shelfText(M + 14 + hw + textWidth(":", BIG), 80, "01", 0xF2F5F8, BIG);
+  shelfText(M + 14 + hw + textWidth(":", BIG), 86, "01", 0xF2F5F8, BIG);
 
   card(M, 170, COLW, 128, "MOST PLAYED");
   const ramp = [0xE8556B, 0xE89B45, 0x64C878, 0x6B99E8];
   const top = PLAYTIME_MOCK.map((m, i) => ({ m, t: (games[i] || {}).title || "" }))
                            .filter(x => x.m > 0).sort((a, b) => b.m - a.m).slice(0, 4);
   top.forEach((e, i) => {
-    const y = 194 + i * 26;
+    const y = 200 + i * 26;
     shelfText(M + 12, y, e.t, 0xF2F5F8, SHELF_FNT_SM, "left", COLW - 60);
     const tw = textWidth(fmt(e.m), SHELF_FNT_SM);
     shelfText(M + COLW - 12 - tw, y, fmt(e.m), 0x5C6674, SHELF_FNT_SM);
@@ -2341,9 +2344,9 @@ function renderShelfHome() {
 
   card(M, 306, COLW, 108, "SYSTEM");
   const totalM = PLAYTIME_MOCK.filter(m => m > 0).reduce((a, b) => a + b, 0);
-  shelfText(M + 12, 330, `${top.length} of ${games.length} played`, 0x8894A2, SHELF_FNT_SM);
-  shelfText(M + 12, 350, `${fmt(totalM)} total`, 0x8894A2, SHELF_FNT_SM);
-  shelfText(M + 12, 370, "v1.2.0-Beta-2216", 0x5C6674, SHELF_FNT_SM);
+  shelfText(M + 12, 336, `${top.length} of ${games.length} played`, 0x8894A2, SHELF_FNT_SM);
+  shelfText(M + 12, 356, `${fmt(totalM)} total`, 0x8894A2, SHELF_FNT_SM);
+  shelfText(M + 12, 376, "v1.2.0-Beta-2216", 0x5C6674, SHELF_FNT_SM);
 
   // the continue card IS the artwork
   R(RX, 40, RW, HERO_H, 0x14171C);
@@ -2358,7 +2361,7 @@ function renderShelfHome() {
     R(RX, 40, 2, HERO_H, e, a); R(RX + RW - 2, 40, 2, HERO_H, e, a);
   }
   shelfText(RX + 14, 40 + HERO_H - 84, sel === 0 ? "CONTINUE PLAYING" : "RECENTLY PLAYED",
-            0x64C878, SHELF_FNT_SM);
+            0xB4BEC8, SHELF_FNT_LBL);
   shelfText(RX + 14, 40 + HERO_H - 68, (recent[sel] || {}).title || "—",
             0xF2F5F8, SHELF_FNT, "left", RW - 84);
   shelfText(RX + 14, 40 + HERO_H - 38,
@@ -2370,7 +2373,7 @@ function renderShelfHome() {
   R(RX + 21, by + 5, 5, 5, 0x0A0C0F);
   shelfText(RX + 32, by + 2, lbl, 0x0A0C0F, SHELF_FNT_SM);
 
-  shelfText(RX, 186, "RECENTLY PLAYED", 0x5C6674, SHELF_FNT_SM);
+  shelfText(RX, 188, "RECENTLY PLAYED", 0x5C6674, SHELF_FNT_LBL);
   const tw2 = (RW - (COLS - 1) * 10) / COLS, th2 = Math.round(tw2 * 180 / 418);
   for (let i = 0; i < TILES && i < recent.length; i++) {
     const cx = RX + (i % COLS) * (tw2 + 10);

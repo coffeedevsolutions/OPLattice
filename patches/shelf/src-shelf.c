@@ -60,6 +60,7 @@ int gEnableShelfUI;
 static enum ShelfState state;
 static int appsFontSmall;   /* small face; used by the rail and every page */
 static int appsFontBig;     /* display face; the clock, and nothing else yet */
+static int appsFontLabel;   /* card headers; quieter than body, not the same size */
 
 static void shelfHoldCron(void);
 
@@ -479,6 +480,8 @@ void shelfInitFonts(void)
        would be overbearing at 4:3 reads correctly here. */
     id = fntLoadFile(NULL, 46);
     appsFontBig = (id == FNT_ERROR) ? FNT_DEFAULT : id;
+    id = fntLoadFile(NULL, 9);
+    appsFontLabel = (id == FNT_ERROR) ? appsFontSmall : id;
 }
 
 static int appsCount(void)
@@ -1250,7 +1253,7 @@ static void homeCard(int x, int y, int w, int h, const char *label)
     rmDrawRect(x, y, w, h, GS_SETREG_RGBA(0x16, 0x1A, 0x20, 0x80));
     rmDrawRect(x, y, w, 1, GS_SETREG_RGBA(0x2A, 0x30, 0x38, 0x80));
     if (label)
-        fntRenderString(appsFontSmall, x + 12, y + 10, ALIGN_NONE, 0, 0, label,
+        fntRenderString(appsFontLabel, x + 12, y + 9, ALIGN_NONE, 0, 0, label,
                         GS_SETREG_RGBA(0x5C, 0x66, 0x74, 0x80));
 }
 
@@ -1314,27 +1317,27 @@ void shelfRenderHome(void)
                            : GS_SETREG_RGBA(0x3A, 0x2C, 0x52, 0);
         int hw;
         shelfGradV(HOME_M, 41, HOME_COL_W, 120, 10, 0x48, 0x00, tint);
-        fntRenderString(appsFontSmall, HOME_M + 12, 60, ALIGN_NONE, 0, 0, greet,
+        fntRenderString(appsFontSmall, HOME_M + 12, 66, ALIGN_NONE, 0, 0, greet,
                         GS_SETREG_RGBA(0xB4, 0xBE, 0xC8, 0x80));
         /* Hours, colon and minutes drawn separately so the colon can breathe
            without the digits moving. A blink that shifts the time is worse than
            no blink. */
         snprintf(buf, sizeof(buf), "%02d", hh);
-        fntRenderString(appsFontBig, HOME_M + 10, 80, ALIGN_NONE, 0, 0, buf,
+        fntRenderString(appsFontBig, HOME_M + 10, 86, ALIGN_NONE, 0, 0, buf,
                         GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80));
         hw = fntCalcDimensions(appsFontBig, buf);
-        fntRenderString(appsFontBig, HOME_M + 12 + hw, 80, ALIGN_NONE, 0, 0, ":",
-                        GS_SETREG_RGBA(0x64, 0xC8, 0x78, 0x2E + shelfPulse(2 * FPS) / 3));
+        fntRenderString(appsFontBig, HOME_M + 12 + hw, 86, ALIGN_NONE, 0, 0, ":",
+                        GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x38 + shelfPulse(2 * FPS) / 3));
         snprintf(buf, sizeof(buf), "%02d", mm);
         fntRenderString(appsFontBig, HOME_M + 14 + hw + fntCalcDimensions(appsFontBig, ":"),
-                        80, ALIGN_NONE, 0, 0, buf, GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80));
+                        86, ALIGN_NONE, 0, 0, buf, GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80));
     } else {
-        fntRenderString(appsFontSmall, HOME_M + 12, 84, ALIGN_NONE, 0, 0,
+        fntRenderString(appsFontSmall, HOME_M + 12, 90, ALIGN_NONE, 0, 0,
                         "RTC unreadable", GS_SETREG_RGBA(0x5C, 0x66, 0x74, 0x80));
     }
 
     homeCard(HOME_M, 170, HOME_COL_W, 128, "MOST PLAYED");
-    y = 194;
+    y = 200;
     for (i = 0; i < HOME_TOP_N; i++) {
         int barW;
         if (!homeTopMins[i])
@@ -1363,12 +1366,12 @@ void shelfRenderHome(void)
         y += 26;
     }
     if (!homeTopMins[0])
-        fntRenderString(appsFontSmall, HOME_M + 12, 198, ALIGN_NONE, 0, 0,
+        fntRenderString(appsFontSmall, HOME_M + 12, 204, ALIGN_NONE, 0, 0,
                         "No sessions recorded yet.",
                         GS_SETREG_RGBA(0x5C, 0x66, 0x74, 0x80));
 
     homeCard(HOME_M, 306, HOME_COL_W, 108, "SYSTEM");
-    y = 330;
+    y = 336;
     homeFormatTime(t, sizeof(t), homeTotalMinutes);
     snprintf(buf, sizeof(buf), "%d of %d played", homeTotalPlayed, homeTotalTitles);
     fntRenderString(appsFontSmall, HOME_M + 12, y, ALIGN_NONE, 0, 0, buf,
@@ -1432,10 +1435,10 @@ void shelfRenderHome(void)
             rmDrawRect(HOME_R_X + HOME_R_W - 2, 40, 2, HOME_HERO_H, e);
         }
 
-        fntRenderString(appsFontSmall, HOME_R_X + 14, 40 + HOME_HERO_H - 84,
+        fntRenderString(appsFontLabel, HOME_R_X + 14, 40 + HOME_HERO_H - 84,
                         ALIGN_NONE, 0, 0,
                         homeSel == 0 ? "CONTINUE PLAYING" : "RECENTLY PLAYED",
-                        GS_SETREG_RGBA(0x64, 0xC8, 0x78, 0x80));
+                        GS_SETREG_RGBA(0xB4, 0xBE, 0xC8, 0x80));
         if (title)
             fntRenderString(FNT_DEFAULT, HOME_R_X + 14, 40 + HOME_HERO_H - 68,
                             ALIGN_NONE, HOME_R_W - 84, 24, title,
@@ -1466,7 +1469,7 @@ void shelfRenderHome(void)
                             GS_SETREG_RGBA(0x0A, 0x0C, 0x0F, 0x80));
         }
 
-        fntRenderString(appsFontSmall, HOME_R_X, 186, ALIGN_NONE, 0, 0,
+        fntRenderString(appsFontLabel, HOME_R_X, 188, ALIGN_NONE, 0, 0,
                         "RECENTLY PLAYED", GS_SETREG_RGBA(0x5C, 0x66, 0x74, 0x80));
         {
             int tw = (HOME_R_W - (HOME_COLS - 1) * 10) / HOME_COLS;
