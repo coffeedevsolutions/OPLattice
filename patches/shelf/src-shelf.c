@@ -63,13 +63,15 @@ static enum ShelfState state;
    one, otherwise the embedded face below at the size the layout was drawn for. */
 static int appsFontSmall;   /* small face; used by the rail and every page */
 static int appsFontBig;     /* display face; the clock, and nothing else yet */
-static int appsFontLabel;   /* card headers; quieter than body, not the same size */
-static int fontEmbedSmall, fontEmbedBig, fontEmbedLabel;
+static int appsFontLabel;   /* small values; quieter than body, not the same size */
+static int appsFontHead;    /* headers only -- the dot face, never a sentence */
+static int fontEmbedSmall, fontEmbedBig, fontEmbedLabel, fontEmbedHead;
 
 /* Theme font slots this shell asks for, by conf_theme.cfg key:
-     font5  body    12px
-     font6  labels   9px
-     font7  clock   46px
+     font5  body     12px
+     font6  values    9px
+     font7  clock    46px
+     font8  headers  11px
    These are the theme's own slots, loaded by thmLoadFonts from the theme folder,
    so the shell needs no path of its own and a theme switch reloads the faces for
    free. thmLoadFonts leaves a slot pointing at fonts[0] when its key is missing
@@ -84,6 +86,7 @@ static int fontEmbedSmall, fontEmbedBig, fontEmbedLabel;
 #define SHELF_FNT_BODY  5
 #define SHELF_FNT_LABEL 6
 #define SHELF_FNT_CLOCK 7
+#define SHELF_FNT_HEAD  8
 
 static void shelfHoldCron(void);
 static void shelfSyncFonts(void);
@@ -526,10 +529,16 @@ void shelfInitFonts(void)
     fontEmbedBig = (id == FNT_ERROR) ? FNT_DEFAULT : id;
     id = fntLoadFile(NULL, 9);
     fontEmbedLabel = (id == FNT_ERROR) ? fontEmbedSmall : id;
+    /* Headers sit at 11 rather than with the 9px values. The dot face needs the
+       extra two pixels: below 11 its grid stops resolving and the lettering
+       closes up into a smudge. */
+    id = fntLoadFile(NULL, 11);
+    fontEmbedHead = (id == FNT_ERROR) ? fontEmbedSmall : id;
 
     appsFontSmall = fontEmbedSmall;
     appsFontBig = fontEmbedBig;
     appsFontLabel = fontEmbedLabel;
+    appsFontHead = fontEmbedHead;
 }
 
 /* A theme slot that never loaded a face of its own is left equal to fonts[0], so
@@ -548,6 +557,7 @@ static void shelfSyncFonts(void)
     appsFontSmall = shelfFace(SHELF_FNT_BODY, fontEmbedSmall);
     appsFontLabel = shelfFace(SHELF_FNT_LABEL, fontEmbedLabel);
     appsFontBig = shelfFace(SHELF_FNT_CLOCK, fontEmbedBig);
+    appsFontHead = shelfFace(SHELF_FNT_HEAD, fontEmbedHead);
 }
 
 static int appsCount(void)
@@ -1288,7 +1298,7 @@ static void homeDrawLanding(int hh, int mm, int haveClock)
             fntRenderString(appsFontBig, 44 + hw + fntCalcDimensions(appsFontBig, ":"),
                             150, ALIGN_NONE, 0, 0, buf, LAND_INK);
         }
-        fntRenderString(appsFontLabel, 46, 212, ALIGN_NONE, 0, 0,
+        fntRenderString(appsFontHead, 46, 212, ALIGN_NONE, 0, 0,
                         hh < 5 ? "NIGHT" : hh < 12 ? "MORNING"
                         : hh < 18 ? "AFTERNOON" : "EVENING", LAND_DIM);
     }
@@ -1527,7 +1537,7 @@ static int homeCard(int x, int y, int w, int h, const char *label, int phase)
     rmDrawRect(x, y + dy, 1, h, LAND_RULE);
     rmDrawRect(x + w - 1, y + dy, 1, h, LAND_RULE);
     if (label)
-        fntRenderString(appsFontLabel, x + 10, y + dy + 7, ALIGN_NONE, 0, 0, label,
+        fntRenderString(appsFontHead, x + 10, y + dy + 7, ALIGN_NONE, 0, 0, label,
                         LAND_DIM);
     return dy;
 }
@@ -1555,7 +1565,7 @@ static void homeDrawDash(void)
     rmDrawRect(0, 0, 640, 480, LAND_BG);
 
     /* ---- header ---- */
-    fntRenderString(appsFontSmall, HOME_M, 14, ALIGN_NONE, 0, 0, "HOME",
+    fntRenderString(appsFontHead, HOME_M, 14, ALIGN_NONE, 0, 0, "HOME",
                     LAND_MUTE);
     {
         int rx = 640 - HOME_M, w;
@@ -1723,7 +1733,7 @@ static void homeDrawDash(void)
             rmDrawRect(hx0 + hw0 - 2, hy0, 2, hh0, e);
         }
 
-        fntRenderString(appsFontLabel, hx0 + 14, hy0 + hh0 - 84,
+        fntRenderString(appsFontHead, hx0 + 14, hy0 + hh0 - 84,
                         ALIGN_NONE, 0, 0,
                         "CONTINUE PLAYING",
                         GS_SETREG_RGBA(0xE8, 0xE2, 0xD4, 0x80));
@@ -1746,7 +1756,7 @@ static void homeDrawDash(void)
             fntRenderString(appsFontSmall, hx0 + 14, hy0 + hh0 - 38,
                             ALIGN_NONE, HOME_R_W - 28, 14, buf,
                             GS_SETREG_RGBA(0xD8, 0xD0, 0xC0, 0x80));
-                fntRenderString(appsFontLabel, HOME_R_X, 188, ALIGN_NONE, 0, 0,
+                fntRenderString(appsFontHead, HOME_R_X, 188, ALIGN_NONE, 0, 0,
                         "RECENTLY PLAYED", LAND_DIM);
         {
             /* Work back from the space, not forward from a guess. The row has

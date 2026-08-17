@@ -1350,6 +1350,38 @@ function loadArt(name, file) {
   });
 }
 
+/* Art, without the folder picker.
+ *
+ * The picker is an <input webkitdirectory>, and nothing it hands over can
+ * outlive a reload -- so every refresh silently dropped the art and the mock
+ * pages went back to drawing placeholder swatches. That looks exactly like art
+ * that is missing or misnamed, which is the one thing this tool exists to tell
+ * you the truth about.
+ *
+ * When the file is served over HTTP the art is simply fetchable, so fetch it.
+ * Parsed out of the directory index rather than guessed from the game list,
+ * because a file that is present under an unexpected name is a finding, not
+ * something to silently skip. From file:// this fetch fails and the picker is
+ * still there, which is why it stays.
+ */
+const ART_DIR = "_deploy/ART/";
+async function autoLoadArt() {
+  if (!location.protocol.startsWith("http")) return 0;
+  let names;
+  try {
+    const html = await (await fetch(ART_DIR)).text();
+    names = [...html.matchAll(/href="([^"]+\.(?:png|jpe?g))"/gi)].map(m => decodeURIComponent(m[1]));
+  } catch { return 0; }
+  const loaded = await Promise.all(names.map(async name => {
+    try {
+      const blob = await (await fetch(ART_DIR + encodeURIComponent(name))).blob();
+      await loadArt(name, blob);
+      return 1;
+    } catch { return 0; }
+  }));
+  return loaded.reduce((a, b) => a + b, 0);
+}
+
 /** The set validateTheme() checks referenced filenames against. */
 function assetIndex() {
   // Largest per pattern, not the last one seen: the memory and VRAM figures are
@@ -2190,14 +2222,16 @@ const SHELF_APPS_MOCK = [
 // registers -- that is FONT_FAMILY, "OPLPoeVetica". Every hardcoded page was
 // therefore measured and drawn in whatever the browser substituted, in the one
 // tool whose entire job is to be faithful about metrics.
-const SHELF_FACE_MONO = "ShelfMono";     // SUSEMono-Medium, body and labels
-const SHELF_FACE_CLOCK = "ShelfClock";   // BitcountGrid-SemiBold, the clock only
+const SHELF_FACE_MONO = "ShelfMono";     // SUSEMono-Medium, body and values
+const SHELF_FACE_CLOCK = "ShelfClock";   // SUSEMono-SemiBold, the clock
+const SHELF_FACE_HEAD = "ShelfHead";     // BitcountGrid-SemiBold, headers only
 let shelfFacesReady = false;
 
 async function loadShelfFaces() {
   const want = [
     [SHELF_FACE_MONO, "themes/thm_GridHard/SUSEMono-Medium.ttf"],
-    [SHELF_FACE_CLOCK, "themes/thm_GridHard/BitcountGrid-SemiBold.ttf"],
+    [SHELF_FACE_CLOCK, "themes/thm_GridHard/SUSEMono-SemiBold.ttf"],
+    [SHELF_FACE_HEAD, "themes/thm_GridHard/BitcountGrid-SemiBold.ttf"],
   ];
   try {
     for (const [family, url] of want) {
@@ -2216,6 +2250,7 @@ async function loadShelfFaces() {
 
 const shelfBody = () => (shelfFacesReady ? SHELF_FACE_MONO : FONT_FAMILY);
 const shelfClockFace = () => (shelfFacesReady ? SHELF_FACE_CLOCK : FONT_FAMILY);
+const shelfHeadFace = () => (shelfFacesReady ? SHELF_FACE_HEAD : FONT_FAMILY);
 
 // FNT_DEFAULT is 17px; the subtitle slot is a second fntLoadFile(NULL, 12).
 const SHELF_FNT = { size: 17, get family() { return shelfBody(); } };
@@ -2224,6 +2259,9 @@ const SHELF_FNT_SM = { size: 12, get family() { return shelfBody(); } };
 // spacing here will look right while the console's overlaps.
 const SHELF_FNT_LBL = { size: 9, get family() { return shelfBody(); } };
 const SHELF_FNT_CLOCK = { size: 46, get family() { return shelfClockFace(); } };
+// Headers sit at 11, not with the 9px values: the dot grid stops resolving
+// below that once 16:9 rasterises it at three quarters width.
+const SHELF_FNT_HD = { size: 11, get family() { return shelfHeadFace(); } };
 
 function shelfText(x, y, str, colorHex, spec = SHELF_FNT, align = "left", maxW = 0) {
   // fntRenderString takes the TOP of the glyph box, not the baseline --
@@ -2383,7 +2421,7 @@ function renderShelfLanding() {
   const hw = textWidth("21", BIG);
   shelfText(44 + hw, 150, ":", INK, BIG);
   shelfText(44 + hw + textWidth(":", BIG), 150, "01", INK, BIG);
-  shelfText(46, 212, "EVENING", INK, SHELF_FNT_LBL);
+  shelfText(46, 212, "EVENING", INK, SHELF_FNT_HD);
 
   /* Real values in shelf.c; representative ones here, in the same shapes so the
      column width can be judged. */
@@ -2444,7 +2482,7 @@ function renderShelfHome() {
     R(x, y + dy, w, h, 0x3A2E22, 0x0C);
     R(x, y + dy, w, 1, 0x3A2E22, 0x4E); R(x, y + dy + h - 1, w, 1, 0x3A2E22, 0x4E);
     R(x, y + dy, 1, h, 0x3A2E22, 0x4E); R(x + w - 1, y + dy, 1, h, 0x3A2E22, 0x4E);
-    if (label) shelfText(x + 10, y + dy + 7, label, 0x7A6A55, SHELF_FNT_LBL);
+    if (label) shelfText(x + 10, y + dy + 7, label, 0x7A6A55, SHELF_FNT_HD);
     return dy;
   };
   // 2px bands, matching shelf.c. The step count used to be a parameter set far
@@ -2471,7 +2509,7 @@ function renderShelfHome() {
   ctx.save();
   R(0, 0, SCREEN_W, SCREEN_H, 0xC9BFA6);
 
-  shelfText(M, 14, "HOME", 0x6B5A46, SHELF_FNT_SM);
+  shelfText(M, 14, "HOME", 0x6B5A46, SHELF_FNT_HD);
   let rx = SCREEN_W - 24;
   const hhmm = "21:01";
   let w = textWidth(hhmm, SHELF_FNT_SM);
@@ -2546,14 +2584,14 @@ function renderShelfHome() {
     R(hx0, hy0, hw0, 2, e, a); R(hx0, hy0 + hh0 - 2, hw0, 2, e, a);
     R(hx0, hy0, 2, hh0, e, a); R(hx0 + hw0 - 2, hy0, 2, hh0, e, a);
   }
-  shelfText(hx0 + 14, hy0 + hh0 - 84, "CONTINUE PLAYING", 0xE8E2D4, SHELF_FNT_LBL);
+  shelfText(hx0 + 14, hy0 + hh0 - 84, "CONTINUE PLAYING", 0xE8E2D4, SHELF_FNT_HD);
   shelfText(hx0 + 14, hy0 + hh0 - 68, (recent[0] || {}).title || "—",
             0xF6F2E8, SHELF_FNT, "left", RW - 84);
   shelfText(hx0 + 14, hy0 + hh0 - 38,
             `Last played yesterday  ·  ${fmt(PLAYTIME_MOCK[0] || 0)} total  ·  14 launches`,
             0xD8D0C0, SHELF_FNT_SM, "left", RW - 28);
 
-  shelfText(RX, 188, "RECENTLY PLAYED", 0x7A6A55, SHELF_FNT_LBL);
+  shelfText(RX, 188, "RECENTLY PLAYED", 0x7A6A55, SHELF_FNT_HD);
   // Drawn width first, declared width from it -- the row must fill RW.
   const GAP = 10;
   const dw2 = Math.floor((RW - (COLS - 1) * GAP) / COLS);
@@ -3505,7 +3543,9 @@ addEventListener("keydown", e => {
 (async () => {
   await loadBuiltinFont();
   await loadShelfFaces();
+  const nArt = await autoLoadArt();
   if (!fontReady) setStatus("Built-in font not embedded — run tools/embed-font.mjs. Text metrics will be approximate.");
+  else if (nArt) setStatus(`Loaded ${nArt} art files from ${ART_DIR}`);
   renderGames();
   renderTabs();
   loadCfgText(
