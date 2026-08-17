@@ -59,6 +59,7 @@ int gEnableShelfUI;
 
 static enum ShelfState state;
 static int appsFontSmall;   /* small face; used by the rail and every page */
+static int appsFontBig;     /* display face; the clock, and nothing else yet */
 
 static void shelfHoldCron(void);
 
@@ -102,6 +103,29 @@ static void railGear(int x, int y, u64 c)
 
 /** The collapsed rail: brand mark, the four destinations, and link state.
  *  `active` is the item to mark, or -1 on the classic list where none applies. */
+/* Animation runs off guiFrameId, which advances once per rendered frame. There
+   is no frame delta to integrate, so everything here is a function of the count
+   rather than of elapsed time -- slower on a dropped frame, which is the honest
+   failure mode for a menu. */
+#define FPS 60
+
+/** Triangle wave, 0..255 across `period` frames. */
+static int shelfPulse(int period)
+{
+    int t = guiFrameId % period, half = period / 2;
+    return (t < half) ? (t * 255 / half) : (255 - (t - half) * 255 / half);
+}
+
+/** A vertical ramp between two alphas, for scrims and glows. */
+static void shelfGradV(int x, int y, int w, int h, int n, int a0, int a1, u64 rgb)
+{
+    int i, step = h / n;
+    if (step < 1) step = 1;
+    for (i = 0; i < n; i++)
+        rmDrawRect(x, y + i * step, w, step,
+                   rgb | ((u64)(a0 + (a1 - a0) * i / (n - 1)) << 24));
+}
+
 static void shelfDrawRail(int active)
 {
     static const int iconY[4] = {66, 102, 138, 174};
@@ -451,6 +475,10 @@ void shelfInitFonts(void)
 {
     int id = fntLoadFile(NULL, 12);
     appsFontSmall = (id == FNT_ERROR) ? FNT_DEFAULT : id;
+    /* 16:9 squeezes glyphs to three quarters width, so a display size that
+       would be overbearing at 4:3 reads correctly here. */
+    id = fntLoadFile(NULL, 46);
+    appsFontBig = (id == FNT_ERROR) ? FNT_DEFAULT : id;
 }
 
 static int appsCount(void)
@@ -1063,7 +1091,9 @@ void shelfHandleInputLibrary(void)
    not a layout one, and none is fixed by drawing a box for it.
 */
 
-#define HOME_TILES   4
+#define HOME_TILES   8
+#define HOME_COLS    4
+#define HOME_HERO_H  132
 #define HOME_M       CONTENT_X
 #define HOME_COL_W   184
 #define HOME_R_X     (HOME_M + HOME_COL_W + 12)
@@ -1239,8 +1269,9 @@ void shelfRenderHome(void)
     if (!homeCover) {
         for (i = 0; i < OPL_RECENT_MAX; i++)
             homeCovId[i] = homeCovUid[i] = homeHeroId[i] = homeHeroUid[i] = -1;
-        homeHero  = cacheInitCache(2, "ART", 1, "COVHD", 2);
-        homeCover = cacheInitCache(3, "ART", 1, "BG", HOME_TILES + 2);
+        /* BG for the hero and the strip; COVHD only for the inset on the card. */
+        homeHero  = cacheInitCache(2, "ART", 1, "BG", HOME_TILES + 2);
+        homeCover = cacheInitCache(3, "ART", 1, "COVHD", 2);
     }
     haveClock = homeLocalTime(&hh, &mm, &days);
 
@@ -1271,22 +1302,39 @@ void shelfRenderHome(void)
     }
 
     /* ---- left column: clock, most played, system ---- */
-    homeCard(HOME_M, 40, HOME_COL_W, 108, "CLOCK");
+    homeCard(HOME_M, 40, HOME_COL_W, 122, "CLOCK");
     if (haveClock) {
         const char *greet = hh < 5 ? "Good night" : hh < 12 ? "Good morning"
                           : hh < 18 ? "Good afternoon" : "Good evening";
-        fntRenderString(appsFontSmall, HOME_M + 12, 32 + 30, ALIGN_NONE, 0, 0, greet,
+        /* A wash tinted by the hour. PSBBN changed character through the day,
+           and it is the cheapest way to stop a static panel reading as dead. */
+        u64 tint = hh < 5  ? GS_SETREG_RGBA(0x2A, 0x2E, 0x5A, 0)
+                 : hh < 12 ? GS_SETREG_RGBA(0x2E, 0x4A, 0x5A, 0)
+                 : hh < 18 ? GS_SETREG_RGBA(0x1E, 0x44, 0x50, 0)
+                           : GS_SETREG_RGBA(0x3A, 0x2C, 0x52, 0);
+        int hw;
+        shelfGradV(HOME_M, 41, HOME_COL_W, 120, 10, 0x48, 0x00, tint);
+        fntRenderString(appsFontSmall, HOME_M + 12, 60, ALIGN_NONE, 0, 0, greet,
+                        GS_SETREG_RGBA(0xB4, 0xBE, 0xC8, 0x80));
+        /* Hours, colon and minutes drawn separately so the colon can breathe
+           without the digits moving. A blink that shifts the time is worse than
+           no blink. */
+        snprintf(buf, sizeof(buf), "%02d", hh);
+        fntRenderString(appsFontBig, HOME_M + 10, 80, ALIGN_NONE, 0, 0, buf,
                         GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80));
-        snprintf(buf, sizeof(buf), "%02d:%02d", hh, mm);
-        fntRenderString(FNT_DEFAULT, HOME_M + 12, 82, ALIGN_NONE, 0, 0, buf,
-                        GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80));
+        hw = fntCalcDimensions(appsFontBig, buf);
+        fntRenderString(appsFontBig, HOME_M + 12 + hw, 80, ALIGN_NONE, 0, 0, ":",
+                        GS_SETREG_RGBA(0x64, 0xC8, 0x78, 0x2E + shelfPulse(2 * FPS) / 3));
+        snprintf(buf, sizeof(buf), "%02d", mm);
+        fntRenderString(appsFontBig, HOME_M + 14 + hw + fntCalcDimensions(appsFontBig, ":"),
+                        80, ALIGN_NONE, 0, 0, buf, GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80));
     } else {
-        fntRenderString(appsFontSmall, HOME_M + 12, 70, ALIGN_NONE, 0, 0,
+        fntRenderString(appsFontSmall, HOME_M + 12, 84, ALIGN_NONE, 0, 0,
                         "RTC unreadable", GS_SETREG_RGBA(0x5C, 0x66, 0x74, 0x80));
     }
 
-    homeCard(HOME_M, 156, HOME_COL_W, 132, "MOST PLAYED");
-    y = 182;
+    homeCard(HOME_M, 170, HOME_COL_W, 128, "MOST PLAYED");
+    y = 194;
     for (i = 0; i < HOME_TOP_N; i++) {
         int barW;
         if (!homeTopMins[i])
@@ -1304,16 +1352,23 @@ void shelfRenderHome(void)
         barW = homeTopMins[0] ? (HOME_COL_W - 24) * homeTopMins[i] / homeTopMins[0] : 0;
         rmDrawRect(HOME_M + 12, y + 15, HOME_COL_W - 24, 2,
                    GS_SETREG_RGBA(0x2A, 0x30, 0x38, 0x80));
-        rmDrawRect(HOME_M + 12, y + 15, barW, 2, GS_SETREG_RGBA(0x64, 0xC8, 0x78, 0x80));
-        y += 28;
+        {
+            /* Warm at the top of the ranking, cool below, so the order reads
+               before the numbers do. */
+            static const u64 ramp[HOME_TOP_N] = {
+                GS_SETREG_RGBA(0xE8, 0x55, 0x6B, 0x80), GS_SETREG_RGBA(0xE8, 0x9B, 0x45, 0x80),
+                GS_SETREG_RGBA(0x64, 0xC8, 0x78, 0x80), GS_SETREG_RGBA(0x6B, 0x99, 0xE8, 0x80)};
+            rmDrawRect(HOME_M + 12, y + 15, barW, 2, ramp[i]);
+        }
+        y += 26;
     }
     if (!homeTopMins[0])
-        fntRenderString(appsFontSmall, HOME_M + 12, 186, ALIGN_NONE, 0, 0,
+        fntRenderString(appsFontSmall, HOME_M + 12, 198, ALIGN_NONE, 0, 0,
                         "No sessions recorded yet.",
                         GS_SETREG_RGBA(0x5C, 0x66, 0x74, 0x80));
 
-    homeCard(HOME_M, 296, HOME_COL_W, 118, "SYSTEM");
-    y = 322;
+    homeCard(HOME_M, 306, HOME_COL_W, 108, "SYSTEM");
+    y = 330;
     homeFormatTime(t, sizeof(t), homeTotalMinutes);
     snprintf(buf, sizeof(buf), "%d of %d played", homeTotalPlayed, homeTotalTitles);
     fntRenderString(appsFontSmall, HOME_M + 12, y, ALIGN_NONE, 0, 0, buf,
@@ -1338,7 +1393,8 @@ void shelfRenderHome(void)
                         "Launch something and it appears here.",
                         GS_SETREG_RGBA(0x5C, 0x66, 0x74, 0x80));
     } else {
-        GSTEXTURE *cov = homeArt(homeHero, homeHeroId, homeHeroUid, homeSel);
+        GSTEXTURE *bg  = homeArt(homeHero, homeHeroId, homeHeroUid, homeSel);
+        GSTEXTURE *cov = homeArt(homeCover, homeCovId, homeCovUid, homeSel);
         config_set_t *cfg = homeCfgOf(homeSel);
         const char *title = oplRecentTitle(homeSel);
         int mins = 0, plays = 0;
@@ -1349,69 +1405,92 @@ void shelfRenderHome(void)
         }
         homeWhen(when, sizeof(when), cfg, days);
 
-        homeCard(HOME_R_X, 40, HOME_R_W, 108, "CONTINUE PLAYING");
-        if (homeSel == 0) {
-            u64 e = GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80);
-            rmDrawRect(HOME_R_X, 40, HOME_R_W, 2, e);
-            rmDrawRect(HOME_R_X, 146, HOME_R_W, 2, e);
-            rmDrawRect(HOME_R_X, 40, 2, 108, e);
-            rmDrawRect(HOME_R_X + HOME_R_W - 2, 40, 2, 108, e);
-        }
+        /* The card *is* the artwork. A cover thumbnail on a flat panel was a list row
+           wearing a hero's label; the BG is what the game looks like. */
+        rmDrawRect(HOME_R_X, 40, HOME_R_W, HOME_HERO_H,
+                   GS_SETREG_RGBA(0x14, 0x17, 0x1C, 0x80));
+        if (bg)
+            rmDrawPixmap(bg, HOME_R_X, 40, ALIGN_NONE, HOME_R_W, HOME_HERO_H,
+                         SCALING_NONE, gDefaultCol);
+        /* Scrim from the bottom, so the type sits on something whatever the art
+           does. Everything above it has to stay readable over a white sky. */
+        shelfGradV(HOME_R_X, 40 + HOME_HERO_H - 92, HOME_R_W, 92, 11,
+                   0x06, 0x6A, GS_SETREG_RGBA(0x0A, 0x0C, 0x0F, 0));
+
         if (cov)
-            rmDrawPixmap(cov, HOME_R_X + HOME_R_W - 66, 52, ALIGN_NONE, 56, 84,
+            rmDrawPixmap(cov, HOME_R_X + HOME_R_W - 62, 52, ALIGN_NONE, 56, 84,
                          SCALING_RATIO, gDefaultCol);
 
+        if (homeSel == 0) {
+            /* The selection breathes rather than sitting still, which is the
+               one place on this page the eye should return to. */
+            int a = 0x40 + shelfPulse(3 * FPS) / 4;
+            u64 e = GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, a);
+            rmDrawRect(HOME_R_X, 40, HOME_R_W, 2, e);
+            rmDrawRect(HOME_R_X, 40 + HOME_HERO_H - 2, HOME_R_W, 2, e);
+            rmDrawRect(HOME_R_X, 40, 2, HOME_HERO_H, e);
+            rmDrawRect(HOME_R_X + HOME_R_W - 2, 40, 2, HOME_HERO_H, e);
+        }
+
+        fntRenderString(appsFontSmall, HOME_R_X + 14, 40 + HOME_HERO_H - 84,
+                        ALIGN_NONE, 0, 0,
+                        homeSel == 0 ? "CONTINUE PLAYING" : "RECENTLY PLAYED",
+                        GS_SETREG_RGBA(0x64, 0xC8, 0x78, 0x80));
         if (title)
-            fntRenderString(FNT_DEFAULT, HOME_R_X + 14, 62, ALIGN_NONE,
-                            HOME_R_W - 90, 24, title,
+            fntRenderString(FNT_DEFAULT, HOME_R_X + 14, 40 + HOME_HERO_H - 68,
+                            ALIGN_NONE, HOME_R_W - 84, 24, title,
                             GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80));
         homeFormatTime(t, sizeof(t), mins);
         buf[0] = '\0';
-        if (when[0] && t[0])      snprintf(buf, sizeof(buf), "Last played %s  \xc2\xb7  %s total", when, t);
-        else if (when[0])         snprintf(buf, sizeof(buf), "Last played %s", when);
-        else if (t[0])            snprintf(buf, sizeof(buf), "%s total", t);
-        if (buf[0])
-            fntRenderString(appsFontSmall, HOME_R_X + 14, 92, ALIGN_NONE, 0, 0, buf,
-                            GS_SETREG_RGBA(0x88, 0x94, 0xA2, 0x80));
+        if (when[0] && t[0])  snprintf(buf, sizeof(buf), "Last played %s  \xc2\xb7  %s total", when, t);
+        else if (when[0])     snprintf(buf, sizeof(buf), "Last played %s", when);
+        else if (t[0])        snprintf(buf, sizeof(buf), "%s total", t);
         if (plays > 0) {
-            snprintf(buf, sizeof(buf), "%d launch%s", plays, plays == 1 ? "" : "es");
-            fntRenderString(appsFontSmall, HOME_R_X + 14, 110, ALIGN_NONE, 0, 0, buf,
-                            GS_SETREG_RGBA(0x5C, 0x66, 0x74, 0x80));
+            char pl[24];
+            snprintf(pl, sizeof(pl), "%s%d launch%s", buf[0] ? "  \xc2\xb7  " : "",
+                     plays, plays == 1 ? "" : "es");
+            strncat(buf, pl, sizeof(buf) - strlen(buf) - 1);
         }
+        if (buf[0])
+            fntRenderString(appsFontSmall, HOME_R_X + 14, 40 + HOME_HERO_H - 38,
+                            ALIGN_NONE, HOME_R_W - 28, 14, buf,
+                            GS_SETREG_RGBA(0xB4, 0xBE, 0xC8, 0x80));
         {
             const char *lbl = homeSel == 0 ? "Resume" : "Play";
             int w = fntCalcDimensions(appsFontSmall, lbl);
-            rmDrawRect(HOME_R_X + 14, 126, w + 22, 18,
-                       GS_SETREG_RGBA(0x2E, 0x35, 0x3F, 0x80));
-            rmDrawRect(HOME_R_X + 20, 132, 6, 6, GS_SETREG_RGBA(0x64, 0xC8, 0x78, 0x80));
-            fntRenderString(appsFontSmall, HOME_R_X + 32, 128, ALIGN_NONE, 0, 0, lbl,
-                            GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80));
+            int by = 40 + HOME_HERO_H - 18;
+            rmDrawRect(HOME_R_X + 14, by, w + 24, 16,
+                       GS_SETREG_RGBA(0x64, 0xC8, 0x78, 0x60));
+            rmDrawRect(HOME_R_X + 21, by + 5, 5, 5, GS_SETREG_RGBA(0x0A, 0x0C, 0x0F, 0x80));
+            fntRenderString(appsFontSmall, HOME_R_X + 32, by + 2, ALIGN_NONE, 0, 0, lbl,
+                            GS_SETREG_RGBA(0x0A, 0x0C, 0x0F, 0x80));
         }
 
-        fntRenderString(appsFontSmall, HOME_R_X, 162, ALIGN_NONE, 0, 0,
+        fntRenderString(appsFontSmall, HOME_R_X, 186, ALIGN_NONE, 0, 0,
                         "RECENTLY PLAYED", GS_SETREG_RGBA(0x5C, 0x66, 0x74, 0x80));
         {
-            int tw = (HOME_R_W - 3 * 10) / HOME_TILES;
+            int tw = (HOME_R_W - (HOME_COLS - 1) * 10) / HOME_COLS;
             int th = tw * 180 / 418;          /* the BG art's own proportions */
             for (i = 0; i < HOME_TILES && i < total; i++) {
-                int cx = HOME_R_X + i * (tw + 10);
-                GSTEXTURE *bg = homeArt(homeCover, homeCovId, homeCovUid, i);
+                int cx = HOME_R_X + (i % HOME_COLS) * (tw + 10);
+                int ty = 206 + (i / HOME_COLS) * (th + 46);
+                GSTEXTURE *bg2 = homeArt(homeHero, homeHeroId, homeHeroUid, i);
                 config_set_t *c2 = homeCfgOf(i);
                 int m2 = 0;
 
-                if (bg) rmDrawPixmap(bg, cx, 182, ALIGN_NONE, tw, th, SCALING_NONE, gDefaultCol);
-                else    rmDrawRect(cx, 182, tw, th, GS_SETREG_RGBA(0x16, 0x1A, 0x20, 0x80));
+                if (bg2) rmDrawPixmap(bg2, cx, ty, ALIGN_NONE, tw, th, SCALING_NONE, gDefaultCol);
+                else    rmDrawRect(cx, ty, tw, th, GS_SETREG_RGBA(0x16, 0x1A, 0x20, 0x80));
                 if (i == homeSel) {
                     u64 e = GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80);
-                    rmDrawRect(cx, 182, tw, 2, e);
-                    rmDrawRect(cx, 182 + th - 2, tw, 2, e);
-                    rmDrawRect(cx, 182, 2, th, e);
-                    rmDrawRect(cx + tw - 2, 182, 2, th, e);
+                    rmDrawRect(cx, ty, tw, 2, e);
+                    rmDrawRect(cx, ty + th - 2, tw, 2, e);
+                    rmDrawRect(cx, ty, 2, th, e);
+                    rmDrawRect(cx + tw - 2, ty, 2, th, e);
                 }
                 {
                     const char *nm = oplRecentTitle(i);
                     if (nm)
-                        fntRenderString(appsFontSmall, cx, 182 + th + 6, ALIGN_NONE,
+                        fntRenderString(appsFontSmall, cx, ty + th + 6, ALIGN_NONE,
                                         tw, 12, nm,
                                         i == homeSel ? GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80)
                                                      : GS_SETREG_RGBA(0x88, 0x94, 0xA2, 0x80));
@@ -1424,7 +1503,7 @@ void shelfRenderHome(void)
                 else if (when[0])    snprintf(buf, sizeof(buf), "%s", when);
                 else if (t[0])       snprintf(buf, sizeof(buf), "%s", t);
                 if (buf[0])
-                    fntRenderString(appsFontSmall, cx, 182 + th + 20, ALIGN_NONE,
+                    fntRenderString(appsFontSmall, cx, ty + th + 20, ALIGN_NONE,
                                     tw, 12, buf, GS_SETREG_RGBA(0x5C, 0x66, 0x74, 0x80));
             }
         }
