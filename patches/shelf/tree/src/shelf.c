@@ -28,6 +28,7 @@
 #include "include/gui.h"
 #include "include/system.h"
 #include "include/themes.h"
+#include "include/sound.h"
 
 int gEnableShelfUI;
 
@@ -122,6 +123,21 @@ static int fontEmbedSmall, fontEmbedBig, fontEmbedLabel, fontEmbedHead;
 #define SHELF_FNT_HEAD  8
 
 static void shelfHoldCron(void);
+
+/* The shell was silent. Every sfxPlay in the tree is in the classic screens, so
+ * the console chimed on settings and said nothing on Home, Library or Apps --
+ * which reads as the new pages being less finished than the old ones.
+ *
+ * Movement is reported by comparing where the cursor was against where it ended
+ * up, rather than by a sfxPlay in each of twenty-odd branches. Two reasons: the
+ * branches drift apart as they get edited, and a sound hung on the key press
+ * fires when you push against an edge and nothing moves. A tick means the
+ * selection changed. */
+static void shelfSfxMoved(int before, int now)
+{
+    if (before != now)
+        sfxPlay(SFX_CURSOR);
+}
 static void shelfSyncFonts(void);
 
 /** A 3x3 block of dots: Library. */
@@ -439,6 +455,7 @@ int shelfTrigger(int atLeftEdge)
 
     /* L3: works anywhere, including screens with no meaningful left edge. */
     if (getKeyOn(KEY_L3)) {
+        sfxPlay(SFX_TRANSITION);
         state = SHELF_OPENING;
         selected = shelfOpenSelection();
         leftHeld = 0;
@@ -454,6 +471,7 @@ int shelfTrigger(int atLeftEdge)
 
     leftPending = 1;
     if (++leftHeld >= SHELF_HOLD_FRAMES) {
+        sfxPlay(SFX_TRANSITION);
         state = SHELF_OPENING;
         selected = shelfOpenSelection();
         leftHeld = 0;
@@ -471,21 +489,28 @@ void shelfHandleInput(void)
     if (state == SHELF_OPENING || state == SHELF_CLOSING)
         return;                     /* swallow, but do not act, mid-slide */
 
+    int was = selected;
+
     if (getKeyOn(KEY_UP) && selected > 0)
         selected--;
     else if (getKeyOn(KEY_DOWN) && selected < (int)SHELF_ITEMS - 1)
         selected++;
-    else if (getKeyOn(KEY_L3) || getKeyOn(SHELF_BACK))
+    else if (getKeyOn(KEY_L3) || getKeyOn(SHELF_BACK)) {
+        sfxPlay(SFX_CANCEL);
         state = SHELF_CLOSING;      /* cancel */
+    }
     else if (getKeyOn(SHELF_OK)) {
         static const int route[] = {GUI_SCREEN_SHELF_HOME, GUI_SCREEN_SHELF_LIBRARY,
                                     GUI_SCREEN_SHELF_APPS, GUI_SCREEN_MENU};
 
         /* Close first: guiSwitchScreen runs its own crossfade, and leaving the
          * panel open across it would composite over the transition. */
+        sfxPlay(SFX_CONFIRM);
         state = SHELF_CLOSING;
         guiSwitchScreen(route[selected]);
+        return;
     }
+    shelfSfxMoved(was, selected);
 }
 
 /* How far the page is pushed aside, in virtual pixels.
@@ -934,6 +959,7 @@ void shelfRenderApps(void)
 
 void shelfHandleInputApps(void)
 {
+    int was;
     int total = appsCount();
 
     shelfHoldCron();
@@ -957,6 +983,7 @@ void shelfHandleInputApps(void)
     if (total <= 0)
         return;
 
+    was = appsSel;
     if (getKeyOn(KEY_LEFT) && appsSel > 0)
         appsSel--;
     else if (getKeyOn(KEY_RIGHT) && appsSel < total - 1)
@@ -966,6 +993,7 @@ void shelfHandleInputApps(void)
     else if (getKeyOn(KEY_DOWN) && appsSel + APPS_COLS < total)
         appsSel += APPS_COLS;
     else if (getKeyOn(SHELF_OK)) {
+        sfxPlay(SFX_CONFIRM);
         /* The support object's own launch, with the config it builds itself.
            Anything else would be a second launch path to keep in step with the
            classic screen, which is exactly what the master toggle promises not
@@ -974,6 +1002,7 @@ void shelfHandleInputApps(void)
         if (list && list->itemLaunch && list->itemGetConfig)
             list->itemLaunch(list, appsSel, list->itemGetConfig(list, appsSel));
     }
+    shelfSfxMoved(was, appsSel);
 }
 
 
@@ -1590,6 +1619,7 @@ void shelfRenderLibrary(void)
 
 void shelfHandleInputLibrary(void)
 {
+    int was;
     int total = libSync();
 
     shelfHoldCron();
@@ -1613,6 +1643,7 @@ void shelfHandleInputLibrary(void)
     if (total <= 0)
         return;
 
+    was = libSel;
     if (getKeyOn(KEY_LEFT) && libSel > 0)
         libSel--;
     else if (getKeyOn(KEY_RIGHT) && libSel < total - 1)
@@ -1624,6 +1655,7 @@ void shelfHandleInputLibrary(void)
     else if (getKeyOn(KEY_DOWN))
         libSel = (libSel + LIB_COLS < total) ? libSel + LIB_COLS : total - 1;
     else if (getKeyOn(SHELF_ALT)) {
+        sfxPlay(SFX_CONFIRM);
         /* The theme's info page, not a second rendering of it. menuSelectIndex
            hands the selection to the classic screen, which owns that layout. */
         if (menuSelectIndex(libAt(libSel)))
@@ -1633,9 +1665,13 @@ void shelfHandleInputLibrary(void)
                              : GUI_SCREEN_MAIN);
             guiSwitchScreen(GUI_SCREEN_INFO);
         }
-    } else if (getKeyOn(SHELF_OK) && libList && libList->itemLaunch && libList->itemGetConfig)
+    } else if (getKeyOn(SHELF_OK) && libList && libList->itemLaunch && libList->itemGetConfig) {
+        sfxPlay(SFX_CONFIRM);
         libList->itemLaunch(libList, libAt(libSel),
                             libList->itemGetConfig(libList, libAt(libSel)));
+        return;
+    }
+    shelfSfxMoved(was, libSel);
 }
 
 /* ------------------------------------------------------------------ Home page
@@ -2315,6 +2351,7 @@ static void homeDrawDash(void)
 
 void shelfHandleInputHome(void)
 {
+    int was;
     int total = oplRecentCount();
     int idx;
 
@@ -2338,16 +2375,21 @@ void shelfHandleInputHome(void)
         /* The landing has one control. Cross is the same as Down here, because
            a page that says DOWN FOR HOME should not also refuse the button
            everything else on this console uses to go forward. */
-        if (getKeyOn(KEY_DOWN) || getKeyOn(SHELF_OK))
+        if (getKeyOn(KEY_DOWN) || getKeyOn(SHELF_OK)) {
+            sfxPlay(SFX_TRANSITION);
             homeView = 1;
+        }
         return;
     }
 
     if (getKeyOn(KEY_UP)) {
-        if (homeFocus >= 2 || homeFocus == 0)
+        if (homeFocus >= 2 || homeFocus == 0) {
+            sfxPlay(SFX_TRANSITION);
             homeView = 0;          /* already at the top of a column */
-        else
+        } else {
+            sfxPlay(SFX_CURSOR);
             homeFocus = 0;
+        }
         return;
     }
 
@@ -2364,12 +2406,15 @@ void shelfHandleInputHome(void)
            would give this list something to have in it. */
         if (getKeyOn(KEY_LEFT) || getKeyOn(KEY_RIGHT))
             homeFocus = (homeFocus == 2) ? 3 : 2;
-        else if (homeFocus >= 2 && getKeyOn(SHELF_OK))
+        else if (homeFocus >= 2 && getKeyOn(SHELF_OK)) {
+            sfxPlay(SFX_CONFIRM);
             guiSwitchScreen(homeFocus == 2 ? GUI_SCREEN_SHELF_LIBRARY
                                            : GUI_SCREEN_SHELF_APPS);
+        }
         return;
     }
 
+    was = homeFocus * 1000 + homeSel;
     if (getKeyOn(KEY_DOWN) && homeFocus < 2 && total > 1) {
         homeFocus = 1;
     } else if (getKeyOn(KEY_LEFT)) {
@@ -2388,12 +2433,14 @@ void shelfHandleInputHome(void)
             homeSel++;
     }
     else if (homeFocus >= 2 && getKeyOn(SHELF_OK)) {
+        sfxPlay(SFX_CONFIRM);
         /* Straight to the page. guiSwitchScreen sets the screen the rail reads
            for its own marker, so the sidebar follows without being told. */
         guiSwitchScreen(homeFocus == 2 ? GUI_SCREEN_SHELF_LIBRARY
                                        : GUI_SCREEN_SHELF_APPS);
     }
     else if (getKeyOn(SHELF_ALT)) {
+        sfxPlay(SFX_CONFIRM);
         idx = homeIndexOf(oplRecentStartup(homeFocus == 0 ? 0 : homeSel));
         if (idx >= 0 && menuSelectIndex(idx))
             {
@@ -2403,9 +2450,11 @@ void shelfHandleInputHome(void)
             guiSwitchScreen(GUI_SCREEN_INFO);
         }
     } else if (getKeyOn(SHELF_OK)) {
+        sfxPlay(SFX_CONFIRM);
         item_list_t *list = menuGetActiveList();
         idx = homeIndexOf(oplRecentStartup(homeFocus == 0 ? 0 : homeSel));
         if (idx >= 0 && list && list->itemLaunch && list->itemGetConfig)
             list->itemLaunch(list, idx, list->itemGetConfig(list, idx));
     }
+    shelfSfxMoved(was, homeFocus * 1000 + homeSel);
 }
