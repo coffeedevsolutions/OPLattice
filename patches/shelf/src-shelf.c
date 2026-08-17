@@ -952,49 +952,115 @@ void shelfHandleInputLibrary(void)
 
 /* ------------------------------------------------------------------ Home page
 
-   What you were last doing, and what you have been doing. Both come from data
-   OPL already keeps: oplRecent* is the most-recently-launched list, persisted
-   in conf_last.cfg and global rather than per-device, and Playtime is the
-   per-game minute total patch 08 writes on return from a session.
+   Built to the mockup, and honest about the parts that have no data behind
+   them. Everything shown here comes from something OPL already records:
 
-   The library-wide pass over CFGs is the index scan Phase 0 anticipated and
-   Phase 8 reuses for Group=/Label=. It runs once per list, not per frame: 28
-   files of about 150 bytes is nothing to read once and unaffordable to read
-   sixty times a second.
+     clock          sceCdReadClock, corrected by the console's own OSD timezone
+     Playtime       minutes, written by patch 08 on return from a session
+     LastPlayed     "DD-MM-YYYY", written by patch 08 on launch
+     PlayCount      launches, same
+     recent order   oplRecent*, conf_last.cfg, global rather than per-device
+     network        gNetworkStartup
+     version        OPL_VERSION, compiled in
+
+   Four things in the mockup are NOT here, because inventing them is worse than
+   omitting them: a star rating (no source -- the CFG's Rating is CERO/ESRB, a
+   classification, not a score); free space (no query exists for this device
+   class); "save synced" (MMCE state, no API); and captures (IGS writes BMPs to
+   the memory card and nothing has produced one yet). Each is a data problem,
+   not a layout one, and none is fixed by drawing a box for it.
 */
 
-#define HOME_TILES   6
-#define HOME_HERO_H  196
-#define HOME_GRID_Y  240
+#define HOME_TILES   4
+#define HOME_M       24
+#define HOME_COL_W   184
+#define HOME_R_X     (HOME_M + HOME_COL_W + 12)
+#define HOME_R_W     (640 - HOME_R_X - HOME_M)
 
 static image_cache_t *homeCover, *homeHero;
 static int homeCovId[OPL_RECENT_MAX], homeCovUid[OPL_RECENT_MAX];
 static int homeHeroId[OPL_RECENT_MAX], homeHeroUid[OPL_RECENT_MAX];
 static int homeSel;
 
-static item_list_t *homeScanList;   /* what the totals were scanned against */
-static int homeScanCount;
-static int homeTotalMinutes, homeTotalTitles, homeTotalPlayed;
+/* Library-wide figures, scanned once per list. This is the index pass Phase 0
+   anticipated and Phase 8 reuses for Group=/Label=. Keyed on the support object
+   and the item count, so it re-runs on a device change and never otherwise. */
+#define HOME_TOP_N 4
+static item_list_t *homeScanList;
+static int homeScanCount, homeTotalMinutes, homeTotalTitles, homeTotalPlayed;
+static char homeTopName[HOME_TOP_N][40];
+static int  homeTopMins[HOME_TOP_N];
 
-static int homeMetaIdx = -1;
-static int homeMetaMinutes;
+static int homeDaysFromCivil(int y, int m, int d)
+{
+    int era, yoe, doy, doe;
+    y -= (m <= 2);
+    era = (y >= 0 ? y : y - 399) / 400;
+    yoe = y - era * 400;
+    doy = (153 * (m + (m > 2 ? -3 : 9)) + 2) / 5 + d - 1;
+    doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    return era * 146097 + doe - 719468;
+}
 
-/* One pass over the active list's CFGs. Keyed on the support object and the
-   item count, so it re-runs when the device changes and never otherwise --
-   the same self-healing shape the Library cache uses, for the same reason:
-   a hook is something that has to be remembered from every path. */
+/** Local time from the RTC. The clock runs on JST whatever the console's
+ *  region, and configGetTimezone() is the offset from GMT the owner already set
+ *  in the OSD -- so no new setting is needed, and a wrong clock is the console's
+ *  own to fix. Returns 0 if the RTC is unreadable. */
+static int homeLocalTime(int *hh, int *mm, int *days)
+{
+    sceCdCLOCK c;
+    int minutes;
+
+    if (!sceCdReadClock(&c))
+        return 0;
+    *days = homeDaysFromCivil(2000 + btoi(c.year), btoi(c.month & 0x7F), btoi(c.day));
+    minutes = btoi(c.hour) * 60 + btoi(c.minute) - 540 + configGetTimezone();
+    while (minutes < 0)     { minutes += 1440; (*days)--; }
+    while (minutes >= 1440) { minutes -= 1440; (*days)++; }
+    *hh = minutes / 60;
+    *mm = minutes % 60;
+    return 1;
+}
+
+/** "yesterday", "3d ago", "today" -- day granularity, which is all the stored
+ *  DD-MM-YYYY supports. Empty when the key is absent or unparseable. */
+static void homeWhen(char *out, size_t n, config_set_t *cfg, int todayDays)
+{
+    const char *v = NULL;
+    int d, m, y, ago;
+
+    out[0] = '\0';
+    if (!cfg || !configGetStr(cfg, "LastPlayed", &v) || !v)
+        return;
+    if (sscanf(v, "%d-%d-%d", &d, &m, &y) != 3 || m < 1 || m > 12 || d < 1 || d > 31)
+        return;
+    ago = todayDays - homeDaysFromCivil(y, m, d);
+    if (ago < 0)       snprintf(out, n, "today");
+    else if (ago == 0) snprintf(out, n, "today");
+    else if (ago == 1) snprintf(out, n, "yesterday");
+    else               snprintf(out, n, "%dd ago", ago);
+}
+
+static void homeFormatTime(char *out, size_t n, int minutes)
+{
+    if (minutes <= 0)        out[0] = '\0';
+    else if (minutes < 60)   snprintf(out, n, "%d m", minutes);
+    else                     snprintf(out, n, "%d h", minutes / 60);
+}
+
 static void homeScan(void)
 {
     item_list_t *list = menuGetActiveList();
     int count = (list && list->itemGetCount) ? list->itemGetCount(list) : 0;
-    int i;
+    int i, k;
 
     if (!list || (list == homeScanList && count == homeScanCount))
         return;
     homeScanList = list;
     homeScanCount = count;
     homeTotalMinutes = homeTotalTitles = homeTotalPlayed = 0;
-    if (!list->itemGetConfig)
+    for (k = 0; k < HOME_TOP_N; k++) { homeTopMins[k] = 0; homeTopName[k][0] = '\0'; }
+    if (!list->itemGetConfig || !list->itemGetName)
         return;
 
     for (i = 0; i < count; i++) {
@@ -1004,50 +1070,48 @@ static void homeScan(void)
         if (!cfg)
             continue;
         configGetInt(cfg, "Playtime", &mins);
-        if (mins > 0) {
-            homeTotalMinutes += mins;
-            homeTotalPlayed++;
+        if (mins <= 0)
+            continue;
+        homeTotalMinutes += mins;
+        homeTotalPlayed++;
+        /* Insertion into a four-deep ranking; nothing here needs a sort. */
+        for (k = 0; k < HOME_TOP_N; k++) {
+            if (mins > homeTopMins[k]) {
+                int j;
+                char *nm = list->itemGetName(list, i);
+                for (j = HOME_TOP_N - 1; j > k; j--) {
+                    homeTopMins[j] = homeTopMins[j - 1];
+                    strncpy(homeTopName[j], homeTopName[j - 1], sizeof(homeTopName[0]) - 1);
+                    homeTopName[j][sizeof(homeTopName[0]) - 1] = '\0';
+                }
+                homeTopMins[k] = mins;
+                snprintf(homeTopName[k], sizeof(homeTopName[0]), "%s", nm ? nm : "");
+                break;
+            }
         }
     }
 }
 
-/* Minutes for one recent entry. Read once per selection: itemGetConfig goes to
-   the device, and a figure that changes only after a session does not need
-   fetching every frame. */
-static void homeReadMeta(int idx)
+static int homeIndexOf(const char *startup)
 {
     item_list_t *list = menuGetActiveList();
-    const char *want = oplRecentStartup(idx);
     int i, count;
-
-    if (idx == homeMetaIdx)
-        return;
-    homeMetaIdx = idx;
-    homeMetaMinutes = 0;
-    if (!list || !want || !list->itemGetCount || !list->itemGetStartup || !list->itemGetConfig)
-        return;
-
+    if (!list || !startup || !list->itemGetCount || !list->itemGetStartup)
+        return -1;
     count = list->itemGetCount(list);
     for (i = 0; i < count; i++) {
         char *st = list->itemGetStartup(list, i);
-        if (st && !strcmp(st, want)) {
-            config_set_t *cfg = list->itemGetConfig(list, i);
-            if (cfg)
-                configGetInt(cfg, "Playtime", &homeMetaMinutes);
-            return;
-        }
+        if (st && !strcmp(st, startup))
+            return i;
     }
+    return -1;
 }
 
-/** "4 h 12 m", or "12 m", or nothing at all when there is nothing to say. */
-static void homeFormatTime(char *out, size_t n, int minutes)
+static config_set_t *homeCfgOf(int recentIdx)
 {
-    if (minutes <= 0)
-        out[0] = '\0';
-    else if (minutes < 60)
-        snprintf(out, n, "%d m", minutes);
-    else
-        snprintf(out, n, "%d h %d m", minutes / 60, minutes % 60);
+    item_list_t *list = menuGetActiveList();
+    int i = homeIndexOf(oplRecentStartup(recentIdx));
+    return (i >= 0 && list && list->itemGetConfig) ? list->itemGetConfig(list, i) : NULL;
 }
 
 static GSTEXTURE *homeArt(image_cache_t *cache, int *ids, int *uids, int idx)
@@ -1059,109 +1123,218 @@ static GSTEXTURE *homeArt(image_cache_t *cache, int *ids, int *uids, int idx)
     return cacheGetTexture(cache, list, &ids[idx], &uids[idx], (char *)st);
 }
 
+static void homeCard(int x, int y, int w, int h, const char *label)
+{
+    rmDrawRect(x, y, w, h, GS_SETREG_RGBA(0x16, 0x1A, 0x20, 0x80));
+    rmDrawRect(x, y, w, 1, GS_SETREG_RGBA(0x2A, 0x30, 0x38, 0x80));
+    if (label)
+        fntRenderString(appsFontSmall, x + 12, y + 10, ALIGN_NONE, 0, 0, label,
+                        GS_SETREG_RGBA(0x5C, 0x66, 0x74, 0x80));
+}
+
 void shelfRenderHome(void)
 {
     int total = oplRecentCount();
-    int pitchX = rmWideScale(LIB_CELL_W);
-    int drawnW = rmWideScale(LIB_ART_W);
-    int x0 = (640 - pitchX * HOME_TILES) / 2;
-    int i;
-    char buf[80], t[24];
+    int hh = 0, mm = 0, days = 0, haveClock;
+    int i, y;
+    char buf[96], t[24], when[24];
 
     homeScan();
     if (total > 0) {
         if (homeSel >= total) homeSel = total - 1;
         if (homeSel < 0)      homeSel = 0;
-        homeReadMeta(homeSel);
     }
-
-    if (!homeCover && total > 0) {
-        int k;
-        for (k = 0; k < OPL_RECENT_MAX; k++)
-            homeCovId[k] = homeCovUid[k] = homeHeroId[k] = homeHeroUid[k] = -1;
-        homeHero  = cacheInitCache(2, "ART", 1, "BG", 2);
-        homeCover = cacheInitCache(3, "ART", 1, "COV", HOME_TILES + 2);
+    if (!homeCover) {
+        for (i = 0; i < OPL_RECENT_MAX; i++)
+            homeCovId[i] = homeCovUid[i] = homeHeroId[i] = homeHeroUid[i] = -1;
+        homeHero  = cacheInitCache(2, "ART", 1, "COVHD", 2);
+        homeCover = cacheInitCache(3, "ART", 1, "BG", HOME_TILES + 2);
     }
+    haveClock = homeLocalTime(&hh, &mm, &days);
 
     rmDrawRect(0, 0, 640, 480, GS_SETREG_RGBA(0x0A, 0x0C, 0x0F, 0x80));
 
+    /* ---- header ---- */
+    fntRenderString(appsFontSmall, HOME_M, 14, ALIGN_NONE, 0, 0, "HOME",
+                    GS_SETREG_RGBA(0x88, 0x94, 0xA2, 0x80));
+    {
+        int rx = 640 - HOME_M, w;
+        if (haveClock) {
+            snprintf(buf, sizeof(buf), "%02d:%02d", hh, mm);
+            w = fntCalcDimensions(appsFontSmall, buf);
+            rmDrawRect(rx - w - 16, 8, w + 16, 20, GS_SETREG_RGBA(0x1C, 0x20, 0x27, 0x80));
+            fntRenderString(appsFontSmall, rx - w - 8, 12, ALIGN_NONE, 0, 0, buf,
+                            GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80));
+            rx -= w + 26;
+        }
+        {
+            const char *net = (gNetworkStartup == 0) ? "NET" : "OFFLINE";
+            u64 col = (gNetworkStartup == 0) ? GS_SETREG_RGBA(0x64, 0xC8, 0x78, 0x80)
+                                             : GS_SETREG_RGBA(0x6E, 0x76, 0x81, 0x80);
+            w = fntCalcDimensions(appsFontSmall, net);
+            rmDrawRect(rx - w - 26, 8, w + 26, 20, GS_SETREG_RGBA(0x1C, 0x20, 0x27, 0x80));
+            rmDrawRect(rx - w - 18, 16, 5, 5, col);
+            fntRenderString(appsFontSmall, rx - w - 8, 12, ALIGN_NONE, 0, 0, net, col);
+        }
+    }
+
+    /* ---- left column: clock, most played, system ---- */
+    homeCard(HOME_M, 40, HOME_COL_W, 108, "CLOCK");
+    if (haveClock) {
+        const char *greet = hh < 5 ? "Good night" : hh < 12 ? "Good morning"
+                          : hh < 18 ? "Good afternoon" : "Good evening";
+        fntRenderString(appsFontSmall, HOME_M + 12, 32 + 30, ALIGN_NONE, 0, 0, greet,
+                        GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80));
+        snprintf(buf, sizeof(buf), "%02d:%02d", hh, mm);
+        fntRenderString(FNT_DEFAULT, HOME_M + 12, 82, ALIGN_NONE, 0, 0, buf,
+                        GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80));
+    } else {
+        fntRenderString(appsFontSmall, HOME_M + 12, 70, ALIGN_NONE, 0, 0,
+                        "RTC unreadable", GS_SETREG_RGBA(0x5C, 0x66, 0x74, 0x80));
+    }
+
+    homeCard(HOME_M, 156, HOME_COL_W, 132, "MOST PLAYED");
+    y = 182;
+    for (i = 0; i < HOME_TOP_N; i++) {
+        int barW;
+        if (!homeTopMins[i])
+            break;
+        homeFormatTime(t, sizeof(t), homeTopMins[i]);
+        fntRenderString(appsFontSmall, HOME_M + 12, y, ALIGN_NONE, 0, 0, homeTopName[i],
+                        GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80));
+        {
+            int w = fntCalcDimensions(appsFontSmall, t);
+            fntRenderString(appsFontSmall, HOME_M + HOME_COL_W - 12 - w, y, ALIGN_NONE,
+                            0, 0, t, GS_SETREG_RGBA(0x5C, 0x66, 0x74, 0x80));
+        }
+        /* Bars are relative to the top entry, so the shape says "how it
+           compares", which is the only comparison a bar can honestly make. */
+        barW = homeTopMins[0] ? (HOME_COL_W - 24) * homeTopMins[i] / homeTopMins[0] : 0;
+        rmDrawRect(HOME_M + 12, y + 15, HOME_COL_W - 24, 2,
+                   GS_SETREG_RGBA(0x2A, 0x30, 0x38, 0x80));
+        rmDrawRect(HOME_M + 12, y + 15, barW, 2, GS_SETREG_RGBA(0x64, 0xC8, 0x78, 0x80));
+        y += 28;
+    }
+    if (!homeTopMins[0])
+        fntRenderString(appsFontSmall, HOME_M + 12, 186, ALIGN_NONE, 0, 0,
+                        "No sessions recorded yet.",
+                        GS_SETREG_RGBA(0x5C, 0x66, 0x74, 0x80));
+
+    homeCard(HOME_M, 296, HOME_COL_W, 118, "SYSTEM");
+    y = 322;
+    homeFormatTime(t, sizeof(t), homeTotalMinutes);
+    snprintf(buf, sizeof(buf), "%d of %d played", homeTotalPlayed, homeTotalTitles);
+    fntRenderString(appsFontSmall, HOME_M + 12, y, ALIGN_NONE, 0, 0, buf,
+                    GS_SETREG_RGBA(0x88, 0x94, 0xA2, 0x80));
+    y += 20;
+    if (t[0]) {
+        snprintf(buf, sizeof(buf), "%s total", t);
+        fntRenderString(appsFontSmall, HOME_M + 12, y, ALIGN_NONE, 0, 0, buf,
+                        GS_SETREG_RGBA(0x88, 0x94, 0xA2, 0x80));
+        y += 20;
+    }
+    fntRenderString(appsFontSmall, HOME_M + 12, y, ALIGN_NONE, 0, 0, OPL_VERSION,
+                    GS_SETREG_RGBA(0x5C, 0x66, 0x74, 0x80));
+
+    /* ---- right column: continue, recently played ---- */
     if (total <= 0) {
-        /* Nothing launched yet is a real state, not an error. Say what would
-           fill it rather than leaving a blank page. */
-        fntRenderString(FNT_DEFAULT, 32, 120, ALIGN_NONE, 0, 0,
+        homeCard(HOME_R_X, 40, HOME_R_W, 108, "CONTINUE PLAYING");
+        fntRenderString(FNT_DEFAULT, HOME_R_X + 14, 76, ALIGN_NONE, 0, 0,
                         "Nothing played yet.",
                         GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80));
-        fntRenderString(appsFontSmall, 32, 150, ALIGN_NONE, 0, 0,
-                        "Launch something and it appears here, most recent first.",
+        fntRenderString(appsFontSmall, HOME_R_X + 14, 106, ALIGN_NONE, 0, 0,
+                        "Launch something and it appears here.",
                         GS_SETREG_RGBA(0x5C, 0x66, 0x74, 0x80));
     } else {
-        GSTEXTURE *hero = homeArt(homeHero, homeHeroId, homeHeroUid, homeSel);
+        GSTEXTURE *cov = homeArt(homeHero, homeHeroId, homeHeroUid, homeSel);
+        config_set_t *cfg = homeCfgOf(homeSel);
         const char *title = oplRecentTitle(homeSel);
+        int mins = 0, plays = 0;
 
-        if (hero)
-            rmDrawPixmap(hero, 0, 0, ALIGN_NONE, 640, HOME_HERO_H, SCALING_NONE,
-                         gDefaultCol);
-        else
-            rmDrawRect(0, 0, 640, HOME_HERO_H, GS_SETREG_RGBA(0x14, 0x17, 0x1C, 0x80));
-        for (i = 0; i < 12; i++)
-            rmDrawRect(0, HOME_HERO_H - 132 + i * 11, 640, 11,
-                       GS_SETREG_RGBA(0x0A, 0x0C, 0x0F, 4 + i * 7));
+        if (cfg) {
+            configGetInt(cfg, "Playtime", &mins);
+            configGetInt(cfg, "PlayCount", &plays);
+        }
+        homeWhen(when, sizeof(when), cfg, days);
 
-        fntRenderString(appsFontSmall, 32, 78, ALIGN_NONE, 0, 0,
-                        homeSel == 0 ? "CONTINUE" : "RECENTLY PLAYED",
-                        GS_SETREG_RGBA(0x64, 0xC8, 0x78, 0x80));
+        homeCard(HOME_R_X, 40, HOME_R_W, 108, "CONTINUE PLAYING");
+        if (homeSel == 0) {
+            u64 e = GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80);
+            rmDrawRect(HOME_R_X, 40, HOME_R_W, 2, e);
+            rmDrawRect(HOME_R_X, 146, HOME_R_W, 2, e);
+            rmDrawRect(HOME_R_X, 40, 2, 108, e);
+            rmDrawRect(HOME_R_X + HOME_R_W - 2, 40, 2, 108, e);
+        }
+        if (cov)
+            rmDrawPixmap(cov, HOME_R_X + HOME_R_W - 66, 52, ALIGN_NONE, 56, 84,
+                         SCALING_RATIO, gDefaultCol);
+
         if (title)
-            fntRenderString(FNT_DEFAULT, 32, 100, ALIGN_NONE, 0, 0, title,
+            fntRenderString(FNT_DEFAULT, HOME_R_X + 14, 62, ALIGN_NONE,
+                            HOME_R_W - 90, 24, title,
                             GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80));
-        homeFormatTime(t, sizeof(t), homeMetaMinutes);
-        if (t[0]) {
-            snprintf(buf, sizeof(buf), "%s played", t);
-            fntRenderString(appsFontSmall, 32, 128, ALIGN_NONE, 0, 0, buf,
+        homeFormatTime(t, sizeof(t), mins);
+        buf[0] = '\0';
+        if (when[0] && t[0])      snprintf(buf, sizeof(buf), "Last played %s  \xc2\xb7  %s total", when, t);
+        else if (when[0])         snprintf(buf, sizeof(buf), "Last played %s", when);
+        else if (t[0])            snprintf(buf, sizeof(buf), "%s total", t);
+        if (buf[0])
+            fntRenderString(appsFontSmall, HOME_R_X + 14, 92, ALIGN_NONE, 0, 0, buf,
                             GS_SETREG_RGBA(0x88, 0x94, 0xA2, 0x80));
-        }
-
-        rmPrefetchTexture(hero);
-        for (i = 0; i < HOME_TILES && i < total; i++) {
-            int cx = x0 + i * pitchX;
-            int cy = HOME_GRID_Y;
-            GSTEXTURE *cov = homeArt(homeCover, homeCovId, homeCovUid, i);
-
-            if (cov)
-                rmDrawPixmap(cov, cx, cy, ALIGN_NONE, LIB_ART_W, LIB_ART_H,
-                             SCALING_RATIO, gDefaultCol);
-            else
-                rmDrawRect(cx, cy, drawnW, LIB_ART_H,
-                           GS_SETREG_RGBA(0x14, 0x17, 0x1C, 0x80));
-
-            if (i == homeSel) {
-                u64 e = GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80);
-                rmDrawRect(cx, cy, drawnW, LIB_FRAME, e);
-                rmDrawRect(cx, cy + LIB_ART_H - LIB_FRAME, drawnW, LIB_FRAME, e);
-                rmDrawRect(cx, cy, LIB_FRAME, LIB_ART_H, e);
-                rmDrawRect(cx + drawnW - LIB_FRAME, cy, LIB_FRAME, LIB_ART_H, e);
-            }
-            {
-                const char *nm = oplRecentTitle(i);
-                if (nm)
-                    fntRenderString(appsFontSmall, cx, cy + LIB_ART_H, ALIGN_NONE,
-                                    drawnW, LIB_LABEL_H, nm,
-                                    i == homeSel ? GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80)
-                                                 : GS_SETREG_RGBA(0x88, 0x94, 0xA2, 0x80));
-            }
-        }
-
-        /* The library-wide figures. Titles played is stated alongside the total
-           because "9 h across 4 of 28" says something "9 h" alone does not. */
-        homeFormatTime(t, sizeof(t), homeTotalMinutes);
-        if (homeTotalTitles > 0) {
-            if (t[0])
-                snprintf(buf, sizeof(buf), "%s across %d of %d titles",
-                         t, homeTotalPlayed, homeTotalTitles);
-            else
-                snprintf(buf, sizeof(buf), "%d titles, none played yet",
-                         homeTotalTitles);
-            fntRenderString(appsFontSmall, 32, 410, ALIGN_NONE, 0, 0, buf,
+        if (plays > 0) {
+            snprintf(buf, sizeof(buf), "%d launch%s", plays, plays == 1 ? "" : "es");
+            fntRenderString(appsFontSmall, HOME_R_X + 14, 110, ALIGN_NONE, 0, 0, buf,
                             GS_SETREG_RGBA(0x5C, 0x66, 0x74, 0x80));
+        }
+        {
+            const char *lbl = homeSel == 0 ? "Resume" : "Play";
+            int w = fntCalcDimensions(appsFontSmall, lbl);
+            rmDrawRect(HOME_R_X + 14, 126, w + 22, 18,
+                       GS_SETREG_RGBA(0x2E, 0x35, 0x3F, 0x80));
+            rmDrawRect(HOME_R_X + 20, 132, 6, 6, GS_SETREG_RGBA(0x64, 0xC8, 0x78, 0x80));
+            fntRenderString(appsFontSmall, HOME_R_X + 32, 128, ALIGN_NONE, 0, 0, lbl,
+                            GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80));
+        }
+
+        fntRenderString(appsFontSmall, HOME_R_X, 162, ALIGN_NONE, 0, 0,
+                        "RECENTLY PLAYED", GS_SETREG_RGBA(0x5C, 0x66, 0x74, 0x80));
+        {
+            int tw = (HOME_R_W - 3 * 10) / HOME_TILES;
+            int th = tw * 180 / 418;          /* the BG art's own proportions */
+            for (i = 0; i < HOME_TILES && i < total; i++) {
+                int cx = HOME_R_X + i * (tw + 10);
+                GSTEXTURE *bg = homeArt(homeCover, homeCovId, homeCovUid, i);
+                config_set_t *c2 = homeCfgOf(i);
+                int m2 = 0;
+
+                if (bg) rmDrawPixmap(bg, cx, 182, ALIGN_NONE, tw, th, SCALING_NONE, gDefaultCol);
+                else    rmDrawRect(cx, 182, tw, th, GS_SETREG_RGBA(0x16, 0x1A, 0x20, 0x80));
+                if (i == homeSel) {
+                    u64 e = GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80);
+                    rmDrawRect(cx, 182, tw, 2, e);
+                    rmDrawRect(cx, 182 + th - 2, tw, 2, e);
+                    rmDrawRect(cx, 182, 2, th, e);
+                    rmDrawRect(cx + tw - 2, 182, 2, th, e);
+                }
+                {
+                    const char *nm = oplRecentTitle(i);
+                    if (nm)
+                        fntRenderString(appsFontSmall, cx, 182 + th + 6, ALIGN_NONE,
+                                        tw, 12, nm,
+                                        i == homeSel ? GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80)
+                                                     : GS_SETREG_RGBA(0x88, 0x94, 0xA2, 0x80));
+                }
+                if (c2) configGetInt(c2, "Playtime", &m2);
+                homeWhen(when, sizeof(when), c2, days);
+                homeFormatTime(t, sizeof(t), m2);
+                buf[0] = '\0';
+                if (when[0] && t[0]) snprintf(buf, sizeof(buf), "%s \xc2\xb7 %s", when, t);
+                else if (when[0])    snprintf(buf, sizeof(buf), "%s", when);
+                else if (t[0])       snprintf(buf, sizeof(buf), "%s", t);
+                if (buf[0])
+                    fntRenderString(appsFontSmall, cx, 182 + th + 20, ALIGN_NONE,
+                                    tw, 12, buf, GS_SETREG_RGBA(0x5C, 0x66, 0x74, 0x80));
+            }
         }
     }
 
@@ -1169,31 +1342,11 @@ void shelfRenderHome(void)
     {
         int hx = 35;
         if (total > 0) {
-            hx += shelfHint(hx, LIB_FTR_TEXT, 0, homeSel == 0 ? "Continue" : "Play");
+            hx += shelfHint(hx, LIB_FTR_TEXT, 0, homeSel == 0 ? "Resume" : "Play");
             hx += shelfHint(hx, LIB_FTR_TEXT, 2, "Details");
         }
         shelfHint(hx, LIB_FTR_TEXT, 1, "Back");
     }
-}
-
-/* Find the active list's index for a startup, so Home can hand a recent entry
-   to code that works in list indices. Returns -1 when the game is not on the
-   device currently selected -- the recent list is global and outlives any one
-   device, so that is an ordinary outcome rather than a fault. */
-static int homeIndexOf(const char *startup)
-{
-    item_list_t *list = menuGetActiveList();
-    int i, count;
-
-    if (!list || !startup || !list->itemGetCount || !list->itemGetStartup)
-        return -1;
-    count = list->itemGetCount(list);
-    for (i = 0; i < count; i++) {
-        char *st = list->itemGetStartup(list, i);
-        if (st && !strcmp(st, startup))
-            return i;
-    }
-    return -1;
 }
 
 void shelfHandleInputHome(void)
