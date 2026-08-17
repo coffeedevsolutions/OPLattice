@@ -2280,7 +2280,7 @@ function homeFormatTimePv(mins) {
 
 function renderShelfHome() {
   const M = CONTENT_X, COLW = 184, RX = M + COLW + 12, RW = SCREEN_W - RX - 24;
-  const HERO_H = 132, TILES = 8, COLS = 4;
+  const HERO_H = 132, TILES = 4, COLS = 4;
   const games = gameList();
   const recent = games.slice(0, 8);
   const sel = Math.min(Math.max(S.gameIndex | 0, 0), Math.max(recent.length - 1, 0));
@@ -2289,9 +2289,11 @@ function renderShelfHome() {
       : `rgba(${(c>>16)&255},${(c>>8)&255},${c&255},${a/128})`;
     ctx.fillRect(x, y, w, h);
   };
-  const card = (x, y, w, h, label) => {
-    R(x, y, w, h, 0x161A20); R(x, y, w, 1, 0x2A3038);
-    if (label) shelfText(x + 12, y + 9, label, 0x5C6674, SHELF_FNT_LBL);
+  const card = (x, y, w, h, label, phase) => {
+    const dy = drift(phase, 2);
+    R(x, y + dy, w, h, 0x161A20); R(x, y + dy, w, 1, 0x2A3038);
+    if (label) shelfText(x + 12, y + dy + 9, label, 0x5C6674, SHELF_FNT_LBL);
+    return dy;
   };
   const gradV = (x, y, w, h, n, a0, a1, c) => {
     const st = Math.max(1, Math.floor(h / n));
@@ -2301,6 +2303,16 @@ function renderShelfHome() {
   // shelf.c animates off guiFrameId; the previewer has no frame loop, so the
   // pulse is frozen at its midpoint -- enough to judge the colour, not the motion.
   const pulse = 128;
+  /* shelf.c drifts each card on its own phase off guiFrameId. The previewer has
+     no frame loop, so every card is frozen at its own point in that cycle --
+     enough to check that they are staggered and that nothing collides at the
+     extremes, not enough to judge the motion. */
+  const drift = (phase, amp) => {
+    const t = ((phase) % (7 * 60)) / (7 * 60);
+    const lin = t < 0.5 ? t * 2 : 2 - t * 2;
+    const sm = lin * lin * (3 - 2 * lin);
+    return Math.round((sm - 0.5) * 2 * amp);
+  };
 
   ctx.save();
   R(0, 0, SCREEN_W, SCREEN_H, 0x0A0C0F);
@@ -2318,23 +2330,23 @@ function renderShelfHome() {
   shelfText(rx - w - 8, 12, "NET", 0x64C878, SHELF_FNT_SM);
 
   // clock card, with the evening tint and the display face
-  card(M, 40, COLW, 122, "CLOCK");
+  const dyA = card(M, 40, COLW, 122, "CLOCK", 0);
   gradV(M, 41, COLW, 120, 10, 0x48, 0x00, 0x3A2C52);
-  shelfText(M + 12, 66, "Good evening", 0xB4BEC8, SHELF_FNT_SM);
+  shelfText(M + 12, 66 + dyA, "Good evening", 0xB4BEC8, SHELF_FNT_SM);
   const BIG = { size: 46, family: SHELF_FNT.family };
-  shelfText(M + 10, 86, "21", 0xF2F5F8, BIG);
+  shelfText(M + 10, 86 + dyA, "21", 0xF2F5F8, BIG);
   const hw = textWidth("21", BIG);
   ctx.globalAlpha = (0x38 + pulse / 3) / 128;
-  shelfText(M + 12 + hw, 86, ":", 0xF2F5F8, BIG);
+  shelfText(M + 12 + hw, 86 + dyA, ":", 0xF2F5F8, BIG);
   ctx.globalAlpha = 1;
-  shelfText(M + 14 + hw + textWidth(":", BIG), 86, "01", 0xF2F5F8, BIG);
+  shelfText(M + 14 + hw + textWidth(":", BIG), 86 + dyA, "01", 0xF2F5F8, BIG);
 
-  card(M, 170, COLW, 128, "MOST PLAYED");
+  const dyB = card(M, 170, COLW, 128, "MOST PLAYED", 90);
   const ramp = [0xE8556B, 0xE89B45, 0x64C878, 0x6B99E8];
   const top = PLAYTIME_MOCK.map((m, i) => ({ m, t: (games[i] || {}).title || "" }))
                            .filter(x => x.m > 0).sort((a, b) => b.m - a.m).slice(0, 4);
   top.forEach((e, i) => {
-    const y = 200 + i * 26;
+    const y = 200 + dyB + i * 26;
     shelfText(M + 12, y, e.t, 0xF2F5F8, SHELF_FNT_SM, "left", COLW - 60);
     const tw = textWidth(fmt(e.m), SHELF_FNT_SM);
     shelfText(M + COLW - 12 - tw, y, fmt(e.m), 0x5C6674, SHELF_FNT_SM);
@@ -2342,53 +2354,56 @@ function renderShelfHome() {
     R(M + 12, y + 15, Math.round((COLW - 24) * e.m / top[0].m), 2, ramp[i]);
   });
 
-  card(M, 306, COLW, 108, "SYSTEM");
+  const dyC = card(M, 306, COLW, 108, "SYSTEM", 190);
   const totalM = PLAYTIME_MOCK.filter(m => m > 0).reduce((a, b) => a + b, 0);
-  shelfText(M + 12, 336, `${top.length} of ${games.length} played`, 0x8894A2, SHELF_FNT_SM);
-  shelfText(M + 12, 356, `${fmt(totalM)} total`, 0x8894A2, SHELF_FNT_SM);
-  shelfText(M + 12, 376, "v1.2.0-Beta-2216", 0x5C6674, SHELF_FNT_SM);
+  shelfText(M + 12, 336 + dyC, `${top.length} of ${games.length} played`, 0x8894A2, SHELF_FNT_SM);
+  shelfText(M + 12, 356 + dyC, `${fmt(totalM)} total`, 0x8894A2, SHELF_FNT_SM);
+  shelfText(M + 12, 376 + dyC, "v1.2.0-Beta-2216", 0x5C6674, SHELF_FNT_SM);
 
   // the continue card IS the artwork
-  R(RX, 40, RW, HERO_H, 0x14171C);
+  const focus = S.homeFocus | 0;                 // 0 = hero, 1 = strip
+  const lift = focus === 0 ? 3 : 0;
+  const hx0 = RX - lift, hy0 = 40 - lift + drift(45, lift ? 3 : 2);
+  const hw0 = RW + 2 * lift, hh0 = HERO_H + 2 * lift;
+  R(hx0, hy0, hw0, hh0, 0x14171C);
   const bg = recent[sel] && gameArt(recent[sel].serial, "BG");
-  if (bg) ctx.drawImage(bg, RX, 40, RW, HERO_H);
-  gradV(RX, 40 + HERO_H - 92, RW, 92, 11, 0x06, 0x6A, 0x0A0C0F);
+  if (bg) ctx.drawImage(bg, hx0, hy0, hw0, hh0);
+  gradV(hx0, hy0 + hh0 - 92, hw0, 92, 11, 0x06, 0x6A, 0x0A0C0F);
   const cov = recent[sel] && gameArt(recent[sel].serial, "COVHD");
-  if (cov) ctx.drawImage(cov, RX + RW - 62, 52, 42, 84);
-  if (sel === 0) {
+  if (cov) ctx.drawImage(cov, hx0 + hw0 - 62, hy0 + 12, 42, 84);
+  if (focus === 0) {
     const e = 0xF2F5F8, a = (0x40 + pulse / 4);
-    R(RX, 40, RW, 2, e, a); R(RX, 40 + HERO_H - 2, RW, 2, e, a);
-    R(RX, 40, 2, HERO_H, e, a); R(RX + RW - 2, 40, 2, HERO_H, e, a);
+    R(hx0, hy0, hw0, 2, e, a); R(hx0, hy0 + hh0 - 2, hw0, 2, e, a);
+    R(hx0, hy0, 2, hh0, e, a); R(hx0 + hw0 - 2, hy0, 2, hh0, e, a);
   }
-  shelfText(RX + 14, 40 + HERO_H - 84, sel === 0 ? "CONTINUE PLAYING" : "RECENTLY PLAYED",
+  shelfText(hx0 + 14, hy0 + hh0 - 84, sel === 0 ? "CONTINUE PLAYING" : "RECENTLY PLAYED",
             0xB4BEC8, SHELF_FNT_LBL);
-  shelfText(RX + 14, 40 + HERO_H - 68, (recent[sel] || {}).title || "—",
+  shelfText(hx0 + 14, hy0 + hh0 - 68, (recent[sel] || {}).title || "—",
             0xF2F5F8, SHELF_FNT, "left", RW - 84);
-  shelfText(RX + 14, 40 + HERO_H - 38,
+  shelfText(hx0 + 14, hy0 + hh0 - 38,
             `Last played yesterday  ·  ${fmt(PLAYTIME_MOCK[sel] || 0)} total  ·  14 launches`,
             0xB4BEC8, SHELF_FNT_SM, "left", RW - 28);
-  const lbl = sel === 0 ? "Resume" : "Play";
-  const lw = textWidth(lbl, SHELF_FNT_SM), by = 40 + HERO_H - 18;
-  R(RX + 14, by, lw + 24, 16, 0x64C878, 0x60);
-  R(RX + 21, by + 5, 5, 5, 0x0A0C0F);
-  shelfText(RX + 32, by + 2, lbl, 0x0A0C0F, SHELF_FNT_SM);
 
   shelfText(RX, 188, "RECENTLY PLAYED", 0x5C6674, SHELF_FNT_LBL);
-  const tw2 = (RW - (COLS - 1) * 10) / COLS, th2 = Math.round(tw2 * 180 / 418);
+  const tw2 = (RW - (COLS - 1) * 12) / COLS, dw2 = Math.round(tw2 * 3 / 4), th2 = dw2 * 2;
   for (let i = 0; i < TILES && i < recent.length; i++) {
-    const cx = RX + (i % COLS) * (tw2 + 10);
-    const ty = 206 + Math.floor(i / COLS) * (th2 + 46);
-    const b2 = gameArt(recent[i].serial, "BG");
-    if (b2) ctx.drawImage(b2, cx, ty, tw2, th2); else R(cx, ty, tw2, th2, 0x161A20);
+    const on = focus === 1 && i === sel;
+    const lf = on ? 3 : 0;
+    const cx = RX + (i % COLS) * (dw2 + 12) - lf;
+    const ty = 202 + drift(i * 37, on ? 3 : 2) - lf;
+    const tww = dw2 + 2 * lf, thh = th2 + 2 * lf;
+    const b2 = gameArt(recent[i].serial, "COVHD");
+    if (b2) ctx.drawImage(b2, cx, ty, tww, thh); else R(cx, ty, tww, thh, 0x161A20);
     if (i === sel) {
-      R(cx, ty, tw2, 2, 0xF2F5F8); R(cx, ty + th2 - 2, tw2, 2, 0xF2F5F8);
-      R(cx, ty, 2, th2, 0xF2F5F8); R(cx + tw2 - 2, ty, 2, th2, 0xF2F5F8);
+      const a = on ? 0x40 + pulse / 4 : 0x50;
+      R(cx, ty, tww, 2, 0xF2F5F8, a); R(cx, ty + thh - 2, tww, 2, 0xF2F5F8, a);
+      R(cx, ty, 2, thh, 0xF2F5F8, a); R(cx + tww - 2, ty, 2, thh, 0xF2F5F8, a);
     }
-    shelfText(cx, ty + th2 + 6, recent[i].title, i === sel ? 0xF2F5F8 : 0x8894A2,
-              SHELF_FNT_SM, "left", tw2);
+    shelfText(cx + lf, ty + thh + 6, recent[i].title, i === sel ? 0xF2F5F8 : 0x8894A2,
+              SHELF_FNT_SM, "left", dw2);
     const m = PLAYTIME_MOCK[i] || 0;
-    shelfText(cx, ty + th2 + 20, m ? `${i + 1}d ago · ${fmt(m)}` : `${i + 1}d ago`,
-              0x5C6674, SHELF_FNT_SM, "left", tw2);
+    shelfText(cx + lf, ty + thh + 20, m ? `${i + 1}d ago · ${fmt(m)}` : `${i + 1}d ago`,
+              0x5C6674, SHELF_FNT_SM, "left", dw2);
   }
 
   R(RAIL_W, LIBP.FTR_Y, SCREEN_W - RAIL_W, SCREEN_H - LIBP.FTR_Y, 0x14171C);

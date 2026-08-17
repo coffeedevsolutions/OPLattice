@@ -117,6 +117,28 @@ static int shelfPulse(int period)
     return (t < half) ? (t * 255 / half) : (255 - (t - half) * 255 / half);
 }
 
+/** Smooth 0..255 across `period`, offset by `phase` frames.
+ *
+ *  A raw triangle reverses instantly at each end and reads as a bounce. Putting
+ *  it through a smoothstep softens both turns, which is the difference between
+ *  something ticking and something drifting. */
+static int shelfWave(int period, int phase)
+{
+    int t = (guiFrameId + phase) % period, half = period / 2;
+    int lin = (t < half) ? t * 255 / half : (255 - (t - half) * 255 / half);
+    return (int)((long)lin * lin * (765 - 2 * lin) / 65025);
+}
+
+/** Vertical drift in pixels for a card, -amp..+amp.
+ *
+ *  Each card is given its own phase so they do not move as one slab. A shared
+ *  phase looks like the screen is bobbing; staggered phases look like separate
+ *  things suspended in the same medium, which is the intent. */
+static int shelfFloat(int phase, int amp)
+{
+    return (shelfWave(7 * FPS, phase) - 128) * amp / 128;
+}
+
 /** A vertical ramp between two alphas, for scrims and glows. */
 static void shelfGradV(int x, int y, int w, int h, int n, int a0, int a1, u64 rgb)
 {
@@ -339,20 +361,6 @@ void shelfDraw(void)
 
 /* ------------------------------------------------------------ page stubs */
 
-/* Placeholders so routing can be exercised before any page exists. Phases 5-7
- * replace these bodies; the ids and the handler table entries stay. */
-
-static void shelfRenderStub(const char *title, const char *note)
-{
-    rmDrawRect(0, 0, 640, 480, GS_SETREG_RGBA(0x0A, 0x0C, 0x0F, 0x80));
-    fntRenderString(FNT_DEFAULT, 48, 60, ALIGN_NONE, 0, 0, title,
-                    GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80));
-    fntRenderString(FNT_DEFAULT, 48, 104, ALIGN_NONE, 0, 0, note,
-                    GS_SETREG_RGBA(0x88, 0x94, 0xA2, 0x80));
-    fntRenderString(FNT_DEFAULT, 48, 430, ALIGN_NONE, 0, 0,
-                    "L3 or hold LEFT for the sidebar",
-                    GS_SETREG_RGBA(0x5C, 0x66, 0x74, 0x80));
-}
 
 
 /** Input for any SHELF page while the sidebar is closed.
@@ -1094,7 +1102,7 @@ void shelfHandleInputLibrary(void)
    not a layout one, and none is fixed by drawing a box for it.
 */
 
-#define HOME_TILES   8
+#define HOME_TILES   4
 #define HOME_COLS    4
 #define HOME_HERO_H  132
 #define HOME_M       CONTENT_X
@@ -1106,6 +1114,10 @@ static image_cache_t *homeCover, *homeHero;
 static int homeCovId[OPL_RECENT_MAX], homeCovUid[OPL_RECENT_MAX];
 static int homeHeroId[OPL_RECENT_MAX], homeHeroUid[OPL_RECENT_MAX];
 static int homeSel;
+/* 0 = the Continue card, 1 = the recent strip. Which section the cursor is
+   on, as distinct from which game is selected -- both sections show the
+   same game, so selection alone could not say where the cursor was. */
+static int homeFocus;
 
 /* Library-wide figures, scanned once per list. This is the index pass Phase 0
    anticipated and Phase 8 reuses for Group=/Label=. Keyed on the support object
@@ -1248,20 +1260,25 @@ static GSTEXTURE *homeArt(image_cache_t *cache, int *ids, int *uids, int idx)
     return cacheGetTexture(cache, list, &ids[idx], &uids[idx], (char *)st);
 }
 
-static void homeCard(int x, int y, int w, int h, const char *label)
+/** A panel, drifting on its own phase. Returns the drift so the caller can
+ *  offset its contents by the same amount -- a card that moves while its text
+ *  stays put is worse than one that does not move at all. */
+static int homeCard(int x, int y, int w, int h, const char *label, int phase)
 {
-    rmDrawRect(x, y, w, h, GS_SETREG_RGBA(0x16, 0x1A, 0x20, 0x80));
-    rmDrawRect(x, y, w, 1, GS_SETREG_RGBA(0x2A, 0x30, 0x38, 0x80));
+    int dy = shelfFloat(phase, 2);
+    rmDrawRect(x, y + dy, w, h, GS_SETREG_RGBA(0x16, 0x1A, 0x20, 0x80));
+    rmDrawRect(x, y + dy, w, 1, GS_SETREG_RGBA(0x2A, 0x30, 0x38, 0x80));
     if (label)
-        fntRenderString(appsFontLabel, x + 12, y + 9, ALIGN_NONE, 0, 0, label,
+        fntRenderString(appsFontLabel, x + 12, y + dy + 9, ALIGN_NONE, 0, 0, label,
                         GS_SETREG_RGBA(0x5C, 0x66, 0x74, 0x80));
+    return dy;
 }
 
 void shelfRenderHome(void)
 {
     int total = oplRecentCount();
     int hh = 0, mm = 0, days = 0, haveClock;
-    int i, y;
+    int i, y, dyA = 0, dyB = 0, dyC = 0, dyH;
     char buf[96], t[24], when[24];
 
     homeScan();
@@ -1272,9 +1289,10 @@ void shelfRenderHome(void)
     if (!homeCover) {
         for (i = 0; i < OPL_RECENT_MAX; i++)
             homeCovId[i] = homeCovUid[i] = homeHeroId[i] = homeHeroUid[i] = -1;
-        /* BG for the hero and the strip; COVHD only for the inset on the card. */
-        homeHero  = cacheInitCache(2, "ART", 1, "BG", HOME_TILES + 2);
-        homeCover = cacheInitCache(3, "ART", 1, "COVHD", 2);
+        /* BG is the hero card's own background; COVHD serves both the inset on
+           that card and the strip beneath it, so one cache covers both. */
+        homeHero  = cacheInitCache(2, "ART", 1, "BG", 2);
+        homeCover = cacheInitCache(3, "ART", 1, "COVHD", HOME_TILES + 2);
     }
     haveClock = homeLocalTime(&hh, &mm, &days);
 
@@ -1305,7 +1323,7 @@ void shelfRenderHome(void)
     }
 
     /* ---- left column: clock, most played, system ---- */
-    homeCard(HOME_M, 40, HOME_COL_W, 122, "CLOCK");
+    dyA = homeCard(HOME_M, 40, HOME_COL_W, 122, "CLOCK", 0);
     if (haveClock) {
         const char *greet = hh < 5 ? "Good night" : hh < 12 ? "Good morning"
                           : hh < 18 ? "Good afternoon" : "Good evening";
@@ -1317,27 +1335,27 @@ void shelfRenderHome(void)
                            : GS_SETREG_RGBA(0x3A, 0x2C, 0x52, 0);
         int hw;
         shelfGradV(HOME_M, 41, HOME_COL_W, 120, 10, 0x48, 0x00, tint);
-        fntRenderString(appsFontSmall, HOME_M + 12, 66, ALIGN_NONE, 0, 0, greet,
+        fntRenderString(appsFontSmall, HOME_M + 12, 66 + dyA, ALIGN_NONE, 0, 0, greet,
                         GS_SETREG_RGBA(0xB4, 0xBE, 0xC8, 0x80));
         /* Hours, colon and minutes drawn separately so the colon can breathe
            without the digits moving. A blink that shifts the time is worse than
            no blink. */
         snprintf(buf, sizeof(buf), "%02d", hh);
-        fntRenderString(appsFontBig, HOME_M + 10, 86, ALIGN_NONE, 0, 0, buf,
+        fntRenderString(appsFontBig, HOME_M + 10, 86 + dyA, ALIGN_NONE, 0, 0, buf,
                         GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80));
         hw = fntCalcDimensions(appsFontBig, buf);
-        fntRenderString(appsFontBig, HOME_M + 12 + hw, 86, ALIGN_NONE, 0, 0, ":",
+        fntRenderString(appsFontBig, HOME_M + 12 + hw, 86 + dyA, ALIGN_NONE, 0, 0, ":",
                         GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x38 + shelfPulse(2 * FPS) / 3));
         snprintf(buf, sizeof(buf), "%02d", mm);
         fntRenderString(appsFontBig, HOME_M + 14 + hw + fntCalcDimensions(appsFontBig, ":"),
-                        86, ALIGN_NONE, 0, 0, buf, GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80));
+                        86 + dyA, ALIGN_NONE, 0, 0, buf, GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80));
     } else {
-        fntRenderString(appsFontSmall, HOME_M + 12, 90, ALIGN_NONE, 0, 0,
+        fntRenderString(appsFontSmall, HOME_M + 12, 90 + dyA, ALIGN_NONE, 0, 0,
                         "RTC unreadable", GS_SETREG_RGBA(0x5C, 0x66, 0x74, 0x80));
     }
 
-    homeCard(HOME_M, 170, HOME_COL_W, 128, "MOST PLAYED");
-    y = 200;
+    dyB = homeCard(HOME_M, 170, HOME_COL_W, 128, "MOST PLAYED", 90);
+    y = 200 + dyB;
     for (i = 0; i < HOME_TOP_N; i++) {
         int barW;
         if (!homeTopMins[i])
@@ -1366,12 +1384,12 @@ void shelfRenderHome(void)
         y += 26;
     }
     if (!homeTopMins[0])
-        fntRenderString(appsFontSmall, HOME_M + 12, 204, ALIGN_NONE, 0, 0,
+        fntRenderString(appsFontSmall, HOME_M + 12, 204 + dyB, ALIGN_NONE, 0, 0,
                         "No sessions recorded yet.",
                         GS_SETREG_RGBA(0x5C, 0x66, 0x74, 0x80));
 
-    homeCard(HOME_M, 306, HOME_COL_W, 108, "SYSTEM");
-    y = 336;
+    dyC = homeCard(HOME_M, 306, HOME_COL_W, 108, "SYSTEM", 190);
+    y = 336 + dyC;
     homeFormatTime(t, sizeof(t), homeTotalMinutes);
     snprintf(buf, sizeof(buf), "%d of %d played", homeTotalPlayed, homeTotalTitles);
     fntRenderString(appsFontSmall, HOME_M + 12, y, ALIGN_NONE, 0, 0, buf,
@@ -1388,7 +1406,7 @@ void shelfRenderHome(void)
 
     /* ---- right column: continue, recently played ---- */
     if (total <= 0) {
-        homeCard(HOME_R_X, 40, HOME_R_W, 108, "CONTINUE PLAYING");
+        homeCard(HOME_R_X, 40, HOME_R_W, 108, "CONTINUE PLAYING", 45);
         fntRenderString(FNT_DEFAULT, HOME_R_X + 14, 76, ALIGN_NONE, 0, 0,
                         "Nothing played yet.",
                         GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80));
@@ -1408,39 +1426,42 @@ void shelfRenderHome(void)
         }
         homeWhen(when, sizeof(when), cfg, days);
 
+        /* Focus lifts: the card grows a few pixels on every side and drifts a
+           little more, which reads as coming forward rather than as changing
+           size. Anything larger and the layout appears to reflow. */
+        int lift = (homeFocus == 0) ? 3 : 0;
+        int hx0 = HOME_R_X - lift, hy0, hw0 = HOME_R_W + 2 * lift, hh0 = HOME_HERO_H + 2 * lift;
+        dyH = shelfFloat(45, lift ? 3 : 2);
+        hy0 = 40 - lift + dyH;
+
         /* The card *is* the artwork. A cover thumbnail on a flat panel was a list row
            wearing a hero's label; the BG is what the game looks like. */
-        rmDrawRect(HOME_R_X, 40, HOME_R_W, HOME_HERO_H,
-                   GS_SETREG_RGBA(0x14, 0x17, 0x1C, 0x80));
+        rmDrawRect(hx0, hy0, hw0, hh0, GS_SETREG_RGBA(0x14, 0x17, 0x1C, 0x80));
         if (bg)
-            rmDrawPixmap(bg, HOME_R_X, 40, ALIGN_NONE, HOME_R_W, HOME_HERO_H,
-                         SCALING_NONE, gDefaultCol);
+            rmDrawPixmap(bg, hx0, hy0, ALIGN_NONE, hw0, hh0, SCALING_NONE, gDefaultCol);
         /* Scrim from the bottom, so the type sits on something whatever the art
            does. Everything above it has to stay readable over a white sky. */
-        shelfGradV(HOME_R_X, 40 + HOME_HERO_H - 92, HOME_R_W, 92, 11,
+        shelfGradV(hx0, hy0 + hh0 - 92, hw0, 92, 11,
                    0x06, 0x6A, GS_SETREG_RGBA(0x0A, 0x0C, 0x0F, 0));
 
         if (cov)
-            rmDrawPixmap(cov, HOME_R_X + HOME_R_W - 62, 52, ALIGN_NONE, 56, 84,
+            rmDrawPixmap(cov, hx0 + hw0 - 62, hy0 + 12, ALIGN_NONE, 56, 84,
                          SCALING_RATIO, gDefaultCol);
 
-        if (homeSel == 0) {
-            /* The selection breathes rather than sitting still, which is the
-               one place on this page the eye should return to. */
-            int a = 0x40 + shelfPulse(3 * FPS) / 4;
-            u64 e = GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, a);
-            rmDrawRect(HOME_R_X, 40, HOME_R_W, 2, e);
-            rmDrawRect(HOME_R_X, 40 + HOME_HERO_H - 2, HOME_R_W, 2, e);
-            rmDrawRect(HOME_R_X, 40, 2, HOME_HERO_H, e);
-            rmDrawRect(HOME_R_X + HOME_R_W - 2, 40, 2, HOME_HERO_H, e);
+        if (homeFocus == 0) {
+            u64 e = GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x40 + shelfPulse(3 * FPS) / 4);
+            rmDrawRect(hx0, hy0, hw0, 2, e);
+            rmDrawRect(hx0, hy0 + hh0 - 2, hw0, 2, e);
+            rmDrawRect(hx0, hy0, 2, hh0, e);
+            rmDrawRect(hx0 + hw0 - 2, hy0, 2, hh0, e);
         }
 
-        fntRenderString(appsFontLabel, HOME_R_X + 14, 40 + HOME_HERO_H - 84,
+        fntRenderString(appsFontLabel, hx0 + 14, hy0 + hh0 - 84,
                         ALIGN_NONE, 0, 0,
                         homeSel == 0 ? "CONTINUE PLAYING" : "RECENTLY PLAYED",
                         GS_SETREG_RGBA(0xB4, 0xBE, 0xC8, 0x80));
         if (title)
-            fntRenderString(FNT_DEFAULT, HOME_R_X + 14, 40 + HOME_HERO_H - 68,
+            fntRenderString(FNT_DEFAULT, hx0 + 14, hy0 + hh0 - 68,
                             ALIGN_NONE, HOME_R_W - 84, 24, title,
                             GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80));
         homeFormatTime(t, sizeof(t), mins);
@@ -1455,46 +1476,44 @@ void shelfRenderHome(void)
             strncat(buf, pl, sizeof(buf) - strlen(buf) - 1);
         }
         if (buf[0])
-            fntRenderString(appsFontSmall, HOME_R_X + 14, 40 + HOME_HERO_H - 38,
+            fntRenderString(appsFontSmall, hx0 + 14, hy0 + hh0 - 38,
                             ALIGN_NONE, HOME_R_W - 28, 14, buf,
                             GS_SETREG_RGBA(0xB4, 0xBE, 0xC8, 0x80));
-        {
-            const char *lbl = homeSel == 0 ? "Resume" : "Play";
-            int w = fntCalcDimensions(appsFontSmall, lbl);
-            int by = 40 + HOME_HERO_H - 18;
-            rmDrawRect(HOME_R_X + 14, by, w + 24, 16,
-                       GS_SETREG_RGBA(0x64, 0xC8, 0x78, 0x60));
-            rmDrawRect(HOME_R_X + 21, by + 5, 5, 5, GS_SETREG_RGBA(0x0A, 0x0C, 0x0F, 0x80));
-            fntRenderString(appsFontSmall, HOME_R_X + 32, by + 2, ALIGN_NONE, 0, 0, lbl,
-                            GS_SETREG_RGBA(0x0A, 0x0C, 0x0F, 0x80));
-        }
-
-        fntRenderString(appsFontLabel, HOME_R_X, 188, ALIGN_NONE, 0, 0,
+                fntRenderString(appsFontLabel, HOME_R_X, 188, ALIGN_NONE, 0, 0,
                         "RECENTLY PLAYED", GS_SETREG_RGBA(0x5C, 0x66, 0x74, 0x80));
         {
-            int tw = (HOME_R_W - (HOME_COLS - 1) * 10) / HOME_COLS;
-            int th = tw * 180 / 418;          /* the BG art's own proportions */
+            /* Declared width; SCALING_RATIO draws three quarters of it, and a
+               cover has to end up 1:2 in texels to display as 2:3. */
+            int tw = (HOME_R_W - (HOME_COLS - 1) * 12) / HOME_COLS;
+            int dw = rmWideScale(tw);
+            int th = dw * 2;                  /* 1:2 in texels = 2:3 displayed */
             for (i = 0; i < HOME_TILES && i < total; i++) {
-                int cx = HOME_R_X + (i % HOME_COLS) * (tw + 10);
-                int ty = 206 + (i / HOME_COLS) * (th + 46);
-                GSTEXTURE *bg2 = homeArt(homeHero, homeHeroId, homeHeroUid, i);
+                /* Each tile drifts on its own phase -- staggered by index so a
+                   row does not move as one bar -- and the focused one lifts. */
+                int on = (homeFocus == 1 && i == homeSel);
+                int lift = on ? 3 : 0;
+                int cx = HOME_R_X + (i % HOME_COLS) * (dw + 12) - lift;
+                int ty = 202 + shelfFloat(i * 37, on ? 3 : 2) - lift;
+                int tww = dw + 2 * lift, thh = th + 2 * lift;
+                GSTEXTURE *bg2 = homeArt(homeCover, homeCovId, homeCovUid, i);
                 config_set_t *c2 = homeCfgOf(i);
                 int m2 = 0;
 
-                if (bg2) rmDrawPixmap(bg2, cx, ty, ALIGN_NONE, tw, th, SCALING_NONE, gDefaultCol);
-                else    rmDrawRect(cx, ty, tw, th, GS_SETREG_RGBA(0x16, 0x1A, 0x20, 0x80));
+                if (bg2) rmDrawPixmap(bg2, cx, ty, ALIGN_NONE, tww, thh, SCALING_NONE, gDefaultCol);
+                else    rmDrawRect(cx, ty, tww, thh, GS_SETREG_RGBA(0x16, 0x1A, 0x20, 0x80));
                 if (i == homeSel) {
-                    u64 e = GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80);
-                    rmDrawRect(cx, ty, tw, 2, e);
-                    rmDrawRect(cx, ty + th - 2, tw, 2, e);
-                    rmDrawRect(cx, ty, 2, th, e);
-                    rmDrawRect(cx + tw - 2, ty, 2, th, e);
+                    u64 e = GS_SETREG_RGBA(0xF2, 0xF5, 0xF8,
+                                           on ? 0x40 + shelfPulse(3 * FPS) / 4 : 0x50);
+                    rmDrawRect(cx, ty, tww, 2, e);
+                    rmDrawRect(cx, ty + thh - 2, tww, 2, e);
+                    rmDrawRect(cx, ty, 2, thh, e);
+                    rmDrawRect(cx + tww - 2, ty, 2, thh, e);
                 }
                 {
                     const char *nm = oplRecentTitle(i);
                     if (nm)
-                        fntRenderString(appsFontSmall, cx, ty + th + 6, ALIGN_NONE,
-                                        tw, 12, nm,
+                        fntRenderString(appsFontSmall, cx + lift, ty + thh + 6, ALIGN_NONE,
+                                        dw, 12, nm,
                                         i == homeSel ? GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80)
                                                      : GS_SETREG_RGBA(0x88, 0x94, 0xA2, 0x80));
                 }
@@ -1506,8 +1525,8 @@ void shelfRenderHome(void)
                 else if (when[0])    snprintf(buf, sizeof(buf), "%s", when);
                 else if (t[0])       snprintf(buf, sizeof(buf), "%s", t);
                 if (buf[0])
-                    fntRenderString(appsFontSmall, cx, ty + th + 20, ALIGN_NONE,
-                                    tw, 12, buf, GS_SETREG_RGBA(0x5C, 0x66, 0x74, 0x80));
+                    fntRenderString(appsFontSmall, cx + lift, ty + thh + 20, ALIGN_NONE,
+                                    dw, 12, buf, GS_SETREG_RGBA(0x5C, 0x66, 0x74, 0x80));
             }
         }
     }
@@ -1546,9 +1565,14 @@ void shelfHandleInputHome(void)
     if (total <= 0)
         return;
 
-    if (getKeyOn(KEY_LEFT) && homeSel > 0)
+    if (getKeyOn(KEY_UP))
+        homeFocus = 0;
+    else if (getKeyOn(KEY_DOWN))
+        homeFocus = 1;
+    else if (homeFocus == 1 && getKeyOn(KEY_LEFT) && homeSel > 0)
         homeSel--;
-    else if (getKeyOn(KEY_RIGHT) && homeSel < total - 1 && homeSel < HOME_TILES - 1)
+    else if (homeFocus == 1 && getKeyOn(KEY_RIGHT)
+             && homeSel < total - 1 && homeSel < HOME_TILES - 1)
         homeSel++;
     else if (getKeyOn(KEY_SQUARE)) {
         idx = homeIndexOf(oplRecentStartup(homeSel));
