@@ -865,6 +865,21 @@ void shelfHandleInputApps(void)
    y=-26 in font2 (12px) #8894A2. Matched rather than invented, so the shelf and
    the screen the console boots into agree about where the bottom of the page is. */
 #define LIB_FTR_Y     450
+/* The alphabet index down the left of the grid. Y span is chosen so 26 letters
+   at 9px clear each other: 234 pixels over 25 gaps is 9.36 apiece, which is the
+   tightest this can be without the caps touching. It starts above the grid
+   because the space beside the hero is empty anyway and the extra height is
+   what buys that clearance. */
+#define LIB_ALPHA_Y0  206
+#define LIB_ALPHA_Y1  440
+#define LIB_ALPHA_DX  22            /* left of the grid, which moves with aspect */
+#define LIB_ALPHA_N   26
+/* Only every fifth letter is named; the rest are dots. Five divides 25, so the
+   named ones are A F K P U Z -- both ends of the alphabet land on a label, which
+   they would not at every sixth. Twenty-six letters at this pitch read as a
+   texture rather than as a scale; six read as a scale, and the dots keep the
+   spacing honest about what sits between them. */
+#define LIB_ALPHA_STEP 5
 #define LIB_FTR_TEXT  454
 
 static image_cache_t *libCache;
@@ -1029,6 +1044,81 @@ static GSTEXTURE *libCover(int idx)
     return cacheGetTexture(libCache, libList, &libCacheId[idx], &libCacheUid[idx], startup);
 }
 
+/* The alphabet index, and the marker that rides it.
+ *
+ * Fixed, by construction: it is drawn from constants and the grid's own left
+ * edge, so paging the tiles moves nothing here. Only the marker moves.
+ *
+ * The marker is proportional -- row over rows, mapped onto the A..Z span --
+ * rather than a lookup of the selected title's initial. That is what was asked
+ * for, and it has the advantage of being true whatever order the list is in.
+ * The letters are therefore a ruler rather than a promise: they say how far
+ * through you are, and they only line up with actual initials when the active
+ * sort is A-Z. Worth knowing before trusting them to jump to a letter.
+ *
+ * Eased rather than snapped, because the thing it is reporting -- which row of
+ * six you are on -- moves in jumps, and a marker that jumps with it reads as a
+ * redraw rather than as movement. libAlphaPos is 1/16px so the ease has
+ * somewhere to go between whole pixels. */
+static int libAlphaPos = -1;
+
+static int libAlphaY(int i)
+{
+    return LIB_ALPHA_Y0 + i * (LIB_ALPHA_Y1 - LIB_ALPHA_Y0) / (LIB_ALPHA_N - 1);
+}
+
+static void libDrawAlphabet(int gridX, int total)
+{
+    int ax = gridX - LIB_ALPHA_DX;      /* letters */
+    int lx = ax - 9;                    /* the line, and the marker on it */
+    int rows = (total + LIB_COLS - 1) / LIB_COLS;
+    int row = (total > 0) ? libSel / LIB_COLS : 0;
+    int tgt, d, my, near, i;
+
+    if (total <= 0)
+        return;                         /* nothing to be an index of */
+
+    tgt = (rows > 1) ? LIB_ALPHA_Y0 + row * (LIB_ALPHA_Y1 - LIB_ALPHA_Y0) / (rows - 1)
+                     : LIB_ALPHA_Y0;
+    tgt <<= 4;
+    if (libAlphaPos < 0)
+        libAlphaPos = tgt;              /* first frame: place it, do not fly it in */
+    d = tgt - libAlphaPos;
+    /* Integer ease. Snapping inside a pixel stops the quarter-step stalling out
+       short of the target, which would leave the marker permanently a hair off. */
+    if (d > -16 && d < 16)
+        libAlphaPos = tgt;
+    else
+        libAlphaPos += d / 4;
+    my = libAlphaPos >> 4;
+
+    rmDrawRect(lx + 3, LIB_ALPHA_Y0, 1, LIB_ALPHA_Y1 - LIB_ALPHA_Y0 + 8, LAND_RULE);
+
+    /* Whichever letter the marker is nearest reads as ink; the rest are a scale.
+       Computed from the marker rather than from the row so it tracks the ease. */
+    near = (my - LIB_ALPHA_Y0) * (LIB_ALPHA_N - 1) * 2 + (LIB_ALPHA_Y1 - LIB_ALPHA_Y0);
+    near /= (LIB_ALPHA_Y1 - LIB_ALPHA_Y0) * 2;
+    if (near < 0) near = 0;
+    if (near > LIB_ALPHA_N - 1) near = LIB_ALPHA_N - 1;
+
+    for (i = 0; i < LIB_ALPHA_N; i++) {
+        u64 col = (i == near) ? LAND_TEXT : LAND_DIM;
+        int y = libAlphaY(i);
+        if (i % LIB_ALPHA_STEP == 0) {
+            char c[2];
+            c[0] = (char)('A' + i);
+            c[1] = '\0';
+            fntRenderString(appsFontLabel, ax, y, ALIGN_NONE, 0, 0, c, col);
+        } else {
+            /* Centred on where the cap would be, not on the glyph box: the box
+               top is y and a 9px cap sits about four pixels down it. */
+            rmDrawRect(ax + 2, y + 3, 2, 2, col);
+        }
+    }
+
+    rmDrawRect(lx, my + 3, 9, 2, LAND_INK);
+}
+
 void shelfRenderLibrary(void)
 {
     int total = libSync();
@@ -1133,6 +1223,8 @@ void shelfRenderLibrary(void)
                                 idx == libSel ? LAND_TEXT : LAND_MUTE);
         }
     }
+
+    libDrawAlphabet(x0, total);
 
     /* Drawn last, so the bottom row of tiles runs under it. */
     rmDrawRect(SHELF_RAIL_W, LIB_FTR_Y, 640 - SHELF_RAIL_W, 480 - LIB_FTR_Y, LAND_BG);

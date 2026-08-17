@@ -2305,7 +2305,43 @@ function shelfText(x, y, str, colorHex, spec = SHELF_FNT, align = "left", maxW =
    theme's answer and the difference becomes visible instead of silent.
 */
 const RAIL_W = 34, CONTENT_X = RAIL_W + 14;
-const LIBP = { HERO_H: 196, GRID_Y: 240, FTR_Y: 450, FTR_TEXT: 454 };
+const LIBP = { HERO_H: 196, GRID_Y: 240, FTR_Y: 450, FTR_TEXT: 454,
+               ALPHA_Y0: 206, ALPHA_Y1: 440, ALPHA_DX: 22, ALPHA_N: 26 };
+
+/* The alphabet index down the left of the Library grid -- shelf.c's
+   libDrawAlphabet. Fixed by construction: drawn from constants and the grid's
+   own left edge, so paging the tiles moves nothing here, only the marker.
+   The marker is proportional (row over rows) rather than a lookup of the
+   selected title's initial, so the letters are a ruler rather than a promise --
+   they line up with real initials only when the active sort is A-Z. */
+const libAlphaY = i =>
+  LIBP.ALPHA_Y0 + Math.floor(i * (LIBP.ALPHA_Y1 - LIBP.ALPHA_Y0) / (LIBP.ALPHA_N - 1));
+
+function libDrawAlphabetPv(gridX, total, sel, cols) {
+  if (total <= 0) return;
+  const ax = gridX - LIBP.ALPHA_DX, lx = ax - 9;
+  const rows = Math.ceil(total / cols), row = Math.floor(sel / cols);
+  const span = LIBP.ALPHA_Y1 - LIBP.ALPHA_Y0;
+  // Deliberately snapped, where shelf.c eases. This previewer has no frame loop
+  // -- it renders on demand -- so running one step of the ease per render would
+  // leave the marker parked a quarter of the way to where it belongs and call
+  // that the layout. Showing the settled position is the honest still frame.
+  const my = rows > 1 ? LIBP.ALPHA_Y0 + Math.floor(row * span / (rows - 1))
+                      : LIBP.ALPHA_Y0;
+
+  const R = (x, y, w, h, c) => { ctx.fillStyle = rgbHex(c); ctx.fillRect(x, y, w, h); };
+  R(lx + 3, LIBP.ALPHA_Y0, 1, span + 8, 0x726756);
+  let near = Math.round((my - LIBP.ALPHA_Y0) * (LIBP.ALPHA_N - 1) / span);
+  near = Math.max(0, Math.min(LIBP.ALPHA_N - 1, near));
+  // Every fifth letter named -- five divides 25, so A and Z both land on a label
+  // -- and a dot for the rest. See LIB_ALPHA_STEP in shelf.c.
+  for (let i = 0; i < LIBP.ALPHA_N; i++) {
+    const col = i === near ? 0x3A2E22 : 0x8A806C, y = libAlphaY(i);
+    if (i % 5 === 0) shelfText(ax, y, String.fromCharCode(65 + i), col, SHELF_FNT_LBL);
+    else R(ax + 2, y + 3, 2, 2, col);
+  }
+  R(lx, my + 3, 9, 2, 0x3A2E22);
+}
 
 /* shelf.c's collapsed rail: brand mark, four destinations, link state. Drawn
    from rectangles in both places, because the shelf pages load no art. */
@@ -2711,6 +2747,8 @@ function renderShelfLibrary() {
   }
 
   /* Drawn last, so the bottom row runs under it rather than being squashed. */
+  libDrawAlphabetPv(x0, games.length, sel, g.cols);
+
   ctx.fillStyle = rgbHex(0xC9BFA6);
   ctx.fillRect(RAIL_W, LIBP.FTR_Y, SCREEN_W - RAIL_W, SCREEN_H - LIBP.FTR_Y);
   ctx.fillStyle = rgbHex(0x726756);
