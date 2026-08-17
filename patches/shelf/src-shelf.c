@@ -1165,6 +1165,89 @@ static int homeSel = 1;
    same game, so selection alone could not say where the cursor was. */
 static int homeFocus;
 
+/* Home is two panels stacked, and the page scrolls between them. 0 is the
+   landing, 1 is the dashboard; homeScrollT counts frames through the move.
+   rmSetScrollY does the work, so neither panel's coordinates know the other
+   exists. */
+#define HOME_SCROLL_FRAMES 22
+static void homeDrawDash(void);
+static int homeView;
+static int homeScrollT;
+
+/* Deterministic 32-bit mix. The drift below has to be the same on every frame
+   for a given particle, and there is no seeded RNG here worth the name. */
+static unsigned int shelfHash(unsigned int x)
+{
+    x ^= x >> 16; x *= 0x7feb352dU;
+    x ^= x >> 15; x *= 0x846ca68bU;
+    x ^= x >> 16;
+    return x;
+}
+
+/** The landing: mostly empty, deliberately. Ambient rather than informational --
+ *  the dashboard below carries everything you can act on.
+ *
+ *  Motes rise at three speeds, and speed sets both size and brightness, so the
+ *  field reads as having depth rather than as noise on one plane. Positions come
+ *  from a hash of the index and the frame count, which costs nothing to store
+ *  and never drifts out of sync. */
+static void homeDrawLanding(int hh, int mm, int haveClock)
+{
+    static const char *DOW[7] = {"Thursday", "Friday", "Saturday", "Sunday",
+                                 "Monday", "Tuesday", "Wednesday"};
+    int i;
+    char buf[64];
+
+    rmDrawRect(0, 0, 640, 480, GS_SETREG_RGBA(0x05, 0x07, 0x0C, 0x80));
+    /* A cold ground warming toward the horizon, which is the whole of the
+       PlayStation boot look: near-black above, a lit band low down. */
+    shelfGradV(0, 200, 640, 280, 0x00, 0x2E, GS_SETREG_RGBA(0x14, 0x2E, 0x5A, 0));
+    shelfGradV(0, 380, 640, 100, 0x00, 0x22, GS_SETREG_RGBA(0x2E, 0x5A, 0x8C, 0));
+
+    for (i = 0; i < 56; i++) {
+        unsigned int h1 = shelfHash(i), h2 = shelfHash(i * 2654435761U + 7);
+        int speed = 1 + (h2 % 3);
+        int px = h1 % 640;
+        int sz = speed >= 3 ? 2 : 1;
+        int py = 500 - (int)((h2 % 520 + (unsigned int)(guiFrameId * speed) / 5) % 520);
+        rmDrawRect(px, py, sz, sz,
+                   GS_SETREG_RGBA(0xC8, 0xDC, 0xFF, 0x10 + speed * 0x0E));
+    }
+
+    /* A slow sweep, so the field is not the only thing moving. */
+    {
+        int sx = (guiFrameId / 3) % 900 - 130;
+        shelfGradV(sx, 150, 130, 260, 0x00, 0x0A, GS_SETREG_RGBA(0x8C, 0xB4, 0xFF, 0));
+    }
+
+    if (haveClock) {
+        snprintf(buf, sizeof(buf), "%02d", hh);
+        fntRenderString(appsFontBig, 44, 176, ALIGN_NONE, 0, 0, buf,
+                        GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80));
+        {
+            int hw = fntCalcDimensions(appsFontBig, buf);
+            fntRenderString(appsFontBig, 46 + hw, 176, ALIGN_NONE, 0, 0, ":",
+                            GS_SETREG_RGBA(0xF2, 0xF5, 0xF8,
+                                           0x38 + shelfPulse(2 * FPS) / 3));
+            snprintf(buf, sizeof(buf), "%02d", mm);
+            fntRenderString(appsFontBig, 48 + hw + fntCalcDimensions(appsFontBig, ":"),
+                            176, ALIGN_NONE, 0, 0, buf,
+                            GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80));
+        }
+        fntRenderString(appsFontSmall, 46, 238, ALIGN_NONE, 0, 0,
+                        hh < 5 ? "Good night" : hh < 12 ? "Good morning"
+                        : hh < 18 ? "Good afternoon" : "Good evening",
+                        GS_SETREG_RGBA(0x8C, 0x9C, 0xB4, 0x80));
+    }
+
+    /* The only instruction on the page, breathing so it is findable without
+       being loud. */
+    fntRenderString(appsFontLabel, 46, 402, ALIGN_NONE, 0, 0, "DOWN FOR HOME",
+                    GS_SETREG_RGBA(0x8C, 0x9C, 0xB4,
+                                   0x24 + shelfPulse(3 * FPS) / 3));
+    (void)DOW;
+}
+
 /* Library-wide figures, scanned once per list. This is the index pass Phase 0
    anticipated and Phase 8 reuses for Group=/Label=. Keyed on the support object
    and the item count, so it re-runs on a device change and never otherwise. */
@@ -1275,6 +1358,51 @@ static void homeScan(void)
     }
 }
 
+/** Ease 0..1 across the scroll, as a 0..480 offset. Smoothstep, so the page
+ *  settles rather than stops. */
+static int homeScrollOffset(void)
+{
+    int t = homeScrollT * 255 / HOME_SCROLL_FRAMES;
+    int sm = (int)((long)t * t * (765 - 2 * t) / 65025);
+    return sm * 480 / 255;
+}
+
+void shelfRenderHome(void)
+{
+    int hh = 0, mm = 0, days = 0, haveClock = homeLocalTime(&hh, &mm, &days);
+    int total = oplRecentCount();
+    int off = homeScrollOffset();
+
+    /* Advance the scroll here rather than in the input handler: the handler
+       does not run during a screen transition, and a page caught mid-scroll
+       would sit frozen halfway. */
+    if (homeView == 1 && homeScrollT < HOME_SCROLL_FRAMES) homeScrollT++;
+    if (homeView == 0 && homeScrollT > 0)                 homeScrollT--;
+
+    /* Two panels, one above the other. rmSetScrollY moves everything a panel
+       draws, so neither knows the other is there. */
+    rmSetScrollY(-off);
+    homeDrawLanding(hh, mm, haveClock);
+    rmSetScrollY(480 - off);
+    homeDrawDash();
+    rmSetScrollY(0);
+
+    /* Chrome does not scroll. */
+    rmDrawRect(SHELF_RAIL_W, LIB_FTR_Y, 640 - SHELF_RAIL_W, 480 - LIB_FTR_Y,
+               GS_SETREG_RGBA(0x14, 0x17, 0x1C, 0x80));
+    {
+        int hx = CONTENT_X;
+        if (homeView == 0) {
+            hx += shelfHint(hx, LIB_FTR_TEXT, 0, "Home");
+        } else if (total > 0) {
+            hx += shelfHint(hx, LIB_FTR_TEXT, 0, homeFocus == 0 ? "Resume" : "Play");
+            hx += shelfHint(hx, LIB_FTR_TEXT, 2, "Details");
+        }
+        shelfHint(hx, LIB_FTR_TEXT, 1, "Back");
+    }
+    shelfDrawRail(guiShelfPageIndex());
+}
+
 static int homeIndexOf(const char *startup)
 {
     item_list_t *list = menuGetActiveList();
@@ -1320,7 +1448,7 @@ static int homeCard(int x, int y, int w, int h, const char *label, int phase)
     return dy;
 }
 
-void shelfRenderHome(void)
+static void homeDrawDash(void)
 {
     int total = oplRecentCount();
     int hh = 0, mm = 0, days = 0, haveClock;
@@ -1328,6 +1456,7 @@ void shelfRenderHome(void)
     char buf[96], t[24], when[24];
 
     homeScan();
+    haveClock = homeLocalTime(&hh, &mm, &days);
     if (homeSel >= total) homeSel = total - 1;
     if (homeSel < 1)      homeSel = 1;
     if (!homeCover) {
@@ -1338,7 +1467,6 @@ void shelfRenderHome(void)
         homeHero  = cacheInitCache(2, "ART", 1, "BG", 2);
         homeCover = cacheInitCache(3, "ART", 1, "COVHD", HOME_TILES + 2);
     }
-    haveClock = homeLocalTime(&hh, &mm, &days);
 
     rmDrawRect(0, 0, 640, 480, GS_SETREG_RGBA(0x0A, 0x0C, 0x0F, 0x80));
 
@@ -1587,15 +1715,7 @@ void shelfRenderHome(void)
         }
     }
 
-    rmDrawRect(SHELF_RAIL_W, LIB_FTR_Y, 640 - SHELF_RAIL_W, 480 - LIB_FTR_Y, GS_SETREG_RGBA(0x14, 0x17, 0x1C, 0x80));
-    {
-        int hx = CONTENT_X;
-        if (total > 0) {
-            hx += shelfHint(hx, LIB_FTR_TEXT, 0, homeFocus == 0 ? "Resume" : "Play");
-            hx += shelfHint(hx, LIB_FTR_TEXT, 2, "Details");
-        }
-        shelfHint(hx, LIB_FTR_TEXT, 1, "Back");
-    }
+
 
     shelfDrawRail(guiShelfPageIndex());
 }
@@ -1621,9 +1741,21 @@ void shelfHandleInputHome(void)
     if (total <= 0)
         return;
 
-    if (getKeyOn(KEY_UP))
-        homeFocus = 0;
-    else if (getKeyOn(KEY_DOWN) && total > 1)
+    if (homeView == 0) {
+        /* The landing has one control. Cross is the same as Down here, because
+           a page that says DOWN FOR HOME should not also refuse the button
+           everything else on this console uses to go forward. */
+        if (getKeyOn(KEY_DOWN) || getKeyOn(KEY_CROSS))
+            homeView = 1;
+        return;
+    }
+
+    if (getKeyOn(KEY_UP)) {
+        if (homeFocus == 0)
+            homeView = 0;          /* already at the top: go up a panel */
+        else
+            homeFocus = 0;
+    } else if (getKeyOn(KEY_DOWN) && total > 1)
         homeFocus = 1;
     else if (homeFocus == 1 && getKeyOn(KEY_LEFT) && homeSel > 1)
         homeSel--;

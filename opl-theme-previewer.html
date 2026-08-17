@@ -2278,6 +2278,63 @@ function homeFormatTimePv(mins) {
   return Math.floor(mins / 60) + " h " + (mins % 60) + " m";
 }
 
+/* The landing panel that sits above Home. shelf.c stacks the two and scrolls
+   between them with rmSetScrollY, so neither panel's coordinates know the other
+   exists; here they are separate tabs, since there is no scroll to drive.
+
+   The motes are the same deterministic hash of index and frame count, so the
+   field matches the console's -- frozen at whatever guiFrameId the preview
+   picks, which shows the distribution but not the drift. */
+function shelfHashPv(x) {
+  x = (x ^ (x >>> 16)) >>> 0; x = Math.imul(x, 0x7feb352d) >>> 0;
+  x = (x ^ (x >>> 15)) >>> 0; x = Math.imul(x, 0x846ca68b) >>> 0;
+  return (x ^ (x >>> 16)) >>> 0;
+}
+
+function renderShelfLanding() {
+  const R = (x, y, w, h, c, a) => {
+    ctx.fillStyle = a === undefined ? rgbHex(c)
+      : `rgba(${(c>>16)&255},${(c>>8)&255},${c&255},${a/128})`;
+    ctx.fillRect(x, y, w, h);
+  };
+  const gradV = (x, y, w, h, a0, a1, c) => {
+    const n = Math.max(2, Math.floor(h / 2));
+    for (let i = 0; i < n; i++) R(x, y + i * 2, w, 2, c, a0 + (a1 - a0) * i / (n - 1));
+  };
+  const frame = 0;          // the console animates; the preview holds one frame
+
+  ctx.save();
+  R(0, 0, SCREEN_W, SCREEN_H, 0x05070C);
+  gradV(0, 200, SCREEN_W, 280, 0x00, 0x2E, 0x142E5A);
+  gradV(0, 380, SCREEN_W, 100, 0x00, 0x22, 0x2E5A8C);
+
+  for (let i = 0; i < 56; i++) {
+    const h1 = shelfHashPv(i), h2 = shelfHashPv((Math.imul(i, 2654435761) + 7) >>> 0);
+    const speed = 1 + (h2 % 3);
+    const sz = speed >= 3 ? 2 : 1;
+    const py = 500 - ((h2 % 520 + Math.floor(frame * speed / 5)) % 520);
+    R(h1 % 640, py, sz, sz, 0xC8DCFF, 0x10 + speed * 0x0E);
+  }
+  gradV((Math.floor(frame / 3) % 900) - 130, 150, 130, 260, 0x00, 0x0A, 0x8CB4FF);
+
+  const BIG = { size: 46, family: SHELF_FNT.family };
+  shelfText(44, 176, "21", 0xF2F5F8, BIG);
+  const hw = textWidth("21", BIG);
+  shelfText(46 + hw, 176, ":", 0xF2F5F8, BIG);
+  shelfText(48 + hw + textWidth(":", BIG), 176, "01", 0xF2F5F8, BIG);
+  shelfText(46, 238, "Good evening", 0x8C9CB4, SHELF_FNT_SM);
+  shelfText(46, 402, "DOWN FOR HOME", 0x8C9CB4, SHELF_FNT_LBL);
+
+  R(RAIL_W, LIBP.FTR_Y, SCREEN_W - RAIL_W, SCREEN_H - LIBP.FTR_Y, 0x14171C);
+  let hx = CONTENT_X;
+  hx += shelfHintPv(hx, LIBP.FTR_TEXT, "cross", "Home");
+  shelfHintPv(hx, LIBP.FTR_TEXT, "circle", "Back");
+  shelfRailPv(0);
+  ctx.restore();
+  octx.clearRect(0, 0, SCREEN_W, SCREEN_H);
+  applyViewport();
+}
+
 function renderShelfHome() {
   const M = CONTENT_X, COLW = 184, RX = M + COLW + 12, RW = SCREEN_W - RX - 24;
   const HERO_H = 132, TILES = 5, COLS = 5;
@@ -2577,6 +2634,7 @@ function render() {
   if (S.chain === "shelfApps") return renderShelfApps();
   if (S.chain === "shelfLibrary") return renderShelfLibrary();
   if (S.chain === "shelfHome") return renderShelfHome();
+  if (S.chain === "shelfLanding") return renderShelfLanding();
   if (!S.theme) { ctx.clearRect(0, 0, SCREEN_W, SCREEN_H); octx.clearRect(0, 0, SCREEN_W, SCREEN_H); return; }
   ctx.save();
   ctx.clearRect(0, 0, SCREEN_W, SCREEN_H);
@@ -2933,8 +2991,8 @@ function renderTabs() {
   host.innerHTML = "";
   const labels = { main:"Main", info:"Info", appsMain:"Apps main", appsInfo:"Apps info",
                    shelfApps:"SHELF Apps", shelfLibrary:"SHELF Library",
-                   shelfHome:"SHELF Home" };
-  for (const key of ["main","info","appsMain","appsInfo","shelfHome","shelfLibrary","shelfApps"]) {
+                   shelfHome:"SHELF Home", shelfLanding:"SHELF Landing" };
+  for (const key of ["main","info","appsMain","appsInfo","shelfLanding","shelfHome","shelfLibrary","shelfApps"]) {
     const mock = key.startsWith("shelf");   // hardcoded C pages
     const n = S.theme ? (S.theme.chains[key] || []).length : 0;
     const b = document.createElement("button");
