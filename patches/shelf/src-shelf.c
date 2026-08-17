@@ -200,6 +200,12 @@ static void shelfGradV(int x, int y, int w, int h, int a0, int a1, u64 rgb)
 static void shelfDrawRail(int active)
 {
     static const int iconY[4] = {66, 102, 138, 174};
+    /* The pages call this as part of their own draw, but while the panel is out
+       the panel IS the rail -- expanded. Drawing both would put the icon strip
+       next to the item list it turns into. */
+    if (state != SHELF_CLOSED)
+        return;
+    {
     u64 on  = LAND_INK;
     u64 off = LAND_MUTE;
     int i;
@@ -234,6 +240,7 @@ static void shelfDrawRail(int active)
     rmDrawRect(15, 440, 5, 5,
                (gNetworkStartup == 0) ? GS_SETREG_RGBA(0x64, 0xC8, 0x78, 0x80)
                                       : LAND_DIM);
+    }
 }
 
 static int frame;          /* 0..SHELF_FRAMES, position within the slide */
@@ -356,6 +363,21 @@ void shelfHandleInput(void)
     }
 }
 
+/* How far the page is pushed aside, in virtual pixels.
+ *
+ * The panel's right edge is at x + SHELF_WIDTH, and SHELF_PEEK of it was always
+ * on screen as the rail -- so what the page has to yield is the difference, and
+ * the page's left edge tracks the panel's right edge exactly through the slide.
+ * Nothing here reads a clock: it is the same eased frame counter the panel
+ * itself uses, so the two cannot drift apart. */
+int shelfPushX(void)
+{
+    if (state == SHELF_CLOSED)
+        return 0;
+    return (int)(shelfEase((float)frame / (float)SHELF_FRAMES) *
+                 (float)(SHELF_WIDTH - SHELF_PEEK));
+}
+
 void shelfDraw(void)
 {
     float t;
@@ -376,9 +398,6 @@ void shelfDraw(void)
 
     t = shelfEase((float)frame / (float)SHELF_FRAMES);
     x = (int)(-(SHELF_WIDTH - SHELF_PEEK) + t * (SHELF_WIDTH - SHELF_PEEK));
-
-    /* Dim what is behind, in step with the slide. */
-    rmDrawRect(0, 0, 640, 480, GS_SETREG_RGBA(0x00, 0x00, 0x00, (int)(t * 0x50)));
 
     rmDrawRect(x, 0, SHELF_WIDTH, 480, LAND_BG);
     /* A 1px sprite, not a line. rmDrawLine is the only LINE primitive the panel
@@ -476,9 +495,13 @@ void shelfHandleInputPage(void)
 static int shelfHint(int x, int y, int kind, const char *label)
 {
     int cy = y + 8, w;
-    u64 col = (kind == 0) ? GS_SETREG_RGBA(0x6B, 0x99, 0xE8, 0x80)   /* cross  */
-            : (kind == 2) ? GS_SETREG_RGBA(0xD9, 0x6F, 0xBF, 0x80)   /* square */
-                          : GS_SETREG_RGBA(0xE8, 0x55, 0x6B, 0x80);  /* circle */
+    /* The buttons keep their identities but not their brightness. These are the
+       pastel versions Sony puts on black; on tan they wash out to about the same
+       value as the ground and the row stops reading as controls. Same hues,
+       taken down to something that has contrast against a light sheet. */
+    u64 col = (kind == 0) ? GS_SETREG_RGBA(0x2F, 0x5A, 0xA8, 0x80)   /* cross  */
+            : (kind == 2) ? GS_SETREG_RGBA(0x9B, 0x3B, 0x85, 0x80)   /* square */
+                          : GS_SETREG_RGBA(0xB0, 0x2A, 0x40, 0x80);  /* circle */
     if (kind == 2) {
         rmDrawRect(x, cy - 5, 11, 2, col);
         rmDrawRect(x, cy + 4, 11, 2, col);
@@ -501,8 +524,7 @@ static int shelfHint(int x, int y, int kind, const char *label)
         rmDrawRect(x + 3, cy - 6, 6, 2, col);
         rmDrawRect(x + 3, cy + 4, 6, 2, col);
     }
-    fntRenderString(FNT_DEFAULT, x + 18, y, ALIGN_NONE, 0, 0, label,
-                    GS_SETREG_RGBA(0x5C, 0x66, 0x74, 0x80));
+    fntRenderString(appsFontSmall, x + 18, y, ALIGN_NONE, 0, 0, label, LAND_TEXT);
     w = 18 + fntCalcDimensions(FNT_DEFAULT, label);
     return w + 22;
 }
@@ -608,17 +630,15 @@ static void appsStatusBar(void)
 {
     int rx = 608, w;
 
-    rmDrawRect(SHELF_RAIL_W, 0, 640 - SHELF_RAIL_W, 40, GS_SETREG_RGBA(0x18, 0x1C, 0x22, 0x80));
-    rmDrawRect(SHELF_RAIL_W, 40, 640 - SHELF_RAIL_W, 1, GS_SETREG_RGBA(0x2A, 0x30, 0x38, 0x80));
-    fntRenderString(FNT_DEFAULT, CONTENT_X, HDR_TEXT_Y, ALIGN_NONE, 0, 0, "Apps",
-                    GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80));
+    rmDrawRect(SHELF_RAIL_W, 0, 640 - SHELF_RAIL_W, 40, LAND_BG);
+    rmDrawRect(SHELF_RAIL_W, 40, 640 - SHELF_RAIL_W, 1, LAND_RULE);
+    fntRenderString(appsFontHead, CONTENT_X, HDR_TEXT_Y, ALIGN_NONE, 0, 0, "APPS", LAND_INK);
 
     /* Placeholder until Phase 8 binds it. sceCdReadClock is available and
        already used at OSDHistory.c:122, but its fields are BCD and its RTC runs
        on JST, so an honest clock needs an offset this phase cannot configure. */
     w = fntCalcDimensions(FNT_DEFAULT, "--:--");
-    fntRenderString(FNT_DEFAULT, rx - w, HDR_TEXT_Y, ALIGN_NONE, 0, 0, "--:--",
-                    GS_SETREG_RGBA(0x5C, 0x66, 0x74, 0x80));
+    fntRenderString(FNT_DEFAULT, rx - w, HDR_TEXT_Y, ALIGN_NONE, 0, 0, "--:--", LAND_MUTE);
     rx -= w + 22;
 
     /* Free space has no query for this device class. Nothing in bdmsupport,
@@ -626,14 +646,13 @@ static void appsStatusBar(void)
        tree is HDIOC_TOTALSECTOR for the internal HDD, which is total and not
        free. The slot is real, the value is not, and inventing one is worse. */
     w = fntCalcDimensions(FNT_DEFAULT, "\xe2\x80\x94 free");
-    fntRenderString(FNT_DEFAULT, rx - w, HDR_TEXT_Y, ALIGN_NONE, 0, 0, "\xe2\x80\x94 free",
-                    GS_SETREG_RGBA(0x5C, 0x66, 0x74, 0x80));
+    fntRenderString(FNT_DEFAULT, rx - w, HDR_TEXT_Y, ALIGN_NONE, 0, 0, "\xe2\x80\x94 free", LAND_MUTE);
     rx -= w + 22;
 
     {
         const char *net = (gNetworkStartup == 0) ? "NET" : "OFF";
-        u64 col = (gNetworkStartup == 0) ? GS_SETREG_RGBA(0x64, 0xC8, 0x78, 0x80)
-                                         : GS_SETREG_RGBA(0x6E, 0x76, 0x81, 0x80);
+        u64 col = (gNetworkStartup == 0) ? GS_SETREG_RGBA(0x2E, 0x6E, 0x3C, 0x80)
+                                         : LAND_MUTE;
         w = fntCalcDimensions(FNT_DEFAULT, net);
         fntRenderString(FNT_DEFAULT, rx - w, HDR_TEXT_Y, ALIGN_NONE, 0, 0, net, col);
         rmDrawRect(rx - w - 14, 17, 8, 8, col);
@@ -654,18 +673,17 @@ void shelfRenderApps(void)
     page = (total > 0) ? appsSel / APPS_PER : 0;
     first = page * APPS_PER;
 
-    rmDrawRect(0, 0, 640, 480, GS_SETREG_RGBA(0x0F, 0x12, 0x16, 0x80));
+    rmDrawRect(0, 0, 640, 480, LAND_BG);
     appsStatusBar();
 
     if (total <= 0) {
         /* An empty state, not a grid of nothing with a selection index pointing
            at an item that does not exist. */
         fntRenderString(FNT_DEFAULT, CONTENT_X, 120, ALIGN_NONE, 0, 0,
-                        "No applications found.",
-                        GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80));
+                        "No applications found.", LAND_TEXT);
         fntRenderString(appsFontSmall, CONTENT_X, 148, ALIGN_NONE, 0, 0,
                         "Put an ELF and a title.cfg under APPS/ on a device OPL can see.",
-                        GS_SETREG_RGBA(0x5C, 0x66, 0x74, 0x80));
+                        LAND_MUTE);
     }
 
     for (i = 0; i < APPS_PER && first + i < total; i++) {
@@ -676,45 +694,43 @@ void shelfRenderApps(void)
         int ix = cx + (APPS_CW - 88) / 2;
         char initial[2];
 
-        rmDrawRect(cx, cy, APPS_CW, APPS_CH,
-                   on ? GS_SETREG_RGBA(0x26, 0x2C, 0x35, 0x80)
-                      : GS_SETREG_RGBA(0x1C, 0x20, 0x27, 0x80));
+        /* Outlined, not filled. A selected slab on tan comes out darker than the
+           ink it carries and the row reads as inverted, which is the same trap the
+           drawer's selection fell into. */
+        rmDrawRect(cx, cy, APPS_CW, APPS_CH, on ? LAND_FAINT : LAND_BG);
         if (on) {
-            u64 e = GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80);
+            u64 e = LAND_INK;
             rmDrawRect(cx, cy, APPS_CW, 2, e);
             rmDrawRect(cx, cy + APPS_CH - 2, APPS_CW, 2, e);
             rmDrawRect(cx, cy, 2, APPS_CH, e);
             rmDrawRect(cx + APPS_CW - 2, cy, 2, APPS_CH, e);
         } else {
-            u64 e = GS_SETREG_RGBA(0x2A, 0x30, 0x38, 0x80);
-            rmDrawRect(cx, cy, APPS_CW, 1, e);
-            rmDrawRect(cx, cy + APPS_CH - 1, APPS_CW, 1, e);
+            rmDrawRect(cx, cy, APPS_CW, 1, LAND_RULE);
+            rmDrawRect(cx, cy + APPS_CH - 1, APPS_CW, 1, LAND_RULE);
         }
 
         /* Icon placeholder. Real icons are Phase 6's business: six textures is a
            new simultaneous working set on a page that currently costs nothing in
            VRAM, and the prefetch wrapper and VRAM debug line that would let
            anyone size that budget honestly do not exist yet. */
-        rmDrawRect(ix, cy + 20, 88, 88, GS_SETREG_RGBA(0x2E, 0x35, 0x3F, 0x80));
+        rmDrawRect(ix, cy + 20, 88, 88, LAND_FAINT);
         if (!apps)
             continue;
 
         initial[0] = apps[idx].title[0];
         initial[1] = '\0';
         appsCentred(FNT_DEFAULT, cx + APPS_CW / 2, cy + 73, initial,
-                    APPS_CW - 16, GS_SETREG_RGBA(0x5C, 0x66, 0x74, 0x80));
+                    APPS_CW - 16, LAND_MUTE);
         appsCentred(FNT_DEFAULT, cx + APPS_CW / 2, cy + 134, apps[idx].title,
-                    APPS_CW - 16, GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80));
+                    APPS_CW - 16, LAND_TEXT);
         /* Legacy entries have no sidecar and so get no line at all rather than
            an invented one: conf_apps.cfg is Name=path, with no third field. */
         if (apps[idx].subtitle[0])
             appsCentred(appsFontSmall, cx + APPS_CW / 2, cy + 154,
-                        apps[idx].subtitle, APPS_CW - 16,
-                        GS_SETREG_RGBA(0x5C, 0x66, 0x74, 0x80));
+                        apps[idx].subtitle, APPS_CW - 16, LAND_MUTE);
     }
 
-    rmDrawRect(APPS_MARGIN, 438, 640 - 2 * APPS_MARGIN, 1,
-               GS_SETREG_RGBA(0x2A, 0x30, 0x38, 0x80));
+    rmDrawRect(APPS_MARGIN, 438, 640 - 2 * APPS_MARGIN, 1, LAND_RULE);
     {
         int hx = APPS_MARGIN;
         hx += shelfHint(hx, FTR_TEXT_Y, 0, "Launch");
@@ -734,14 +750,12 @@ void shelfRenderApps(void)
             int pages = (total + APPS_PER - 1) / APPS_PER;
             snprintf(v, sizeof(v), "%d / %d", page + 1, pages);
             w = fntCalcDimensions(FNT_DEFAULT, v);
-            fntRenderString(FNT_DEFAULT, rx - w, FTR_TEXT_Y, ALIGN_NONE, 0, 0, v,
-                            GS_SETREG_RGBA(0x5C, 0x66, 0x74, 0x80));
+            fntRenderString(FNT_DEFAULT, rx - w, FTR_TEXT_Y, ALIGN_NONE, 0, 0, v, LAND_MUTE);
         }
         snprintf(v, sizeof(v), "~%u KB / %d binds", rmVramBoundBytes() >> 10,
                  rmVramBoundCount());
         w = fntCalcDimensions(appsFontSmall, v);
-        fntRenderString(appsFontSmall, rx - w, 424, ALIGN_NONE, 0, 0, v,
-                        GS_SETREG_RGBA(0x3C, 0x44, 0x4E, 0x80));
+        fntRenderString(appsFontSmall, rx - w, 424, ALIGN_NONE, 0, 0, v, LAND_DIM);
     }
 
     shelfDrawRail(guiShelfPageIndex());
@@ -1015,7 +1029,7 @@ void shelfRenderLibrary(void)
        next one along -- the peek shows where you are going, not where you were. */
     first = (total > 0) ? (libSel / LIB_COLS) * LIB_COLS : 0;
 
-    rmDrawRect(0, 0, 640, 480, GS_SETREG_RGBA(0x0A, 0x0C, 0x0F, 0x80));
+    rmDrawRect(0, 0, 640, 480, LAND_BG);
 
     /* Hero: the highlighted game, not the last played. */
     if (total > 0) {
@@ -1024,11 +1038,12 @@ void shelfRenderLibrary(void)
             rmDrawPixmap(hero, SHELF_RAIL_W, 0, ALIGN_NONE, 640 - SHELF_RAIL_W,
                          LIB_HERO_H, SCALING_NONE, gDefaultCol);
         else
-            rmDrawRect(SHELF_RAIL_W, 0, 640 - SHELF_RAIL_W, LIB_HERO_H,
-                       GS_SETREG_RGBA(0x14, 0x17, 0x1C, 0x80));
+            /* Ink, not tan. This stands in for artwork, and the title drawn on
+               it is light because normally it sits on a photograph. */
+            rmDrawRect(SHELF_RAIL_W, 0, 640 - SHELF_RAIL_W, LIB_HERO_H, LAND_INK);
         for (i = 0; i < 12; i++)
             rmDrawRect(SHELF_RAIL_W, LIB_HERO_H - 132 + i * 11, 640 - SHELF_RAIL_W, 11,
-                       GS_SETREG_RGBA(0x0A, 0x0C, 0x0F, 4 + i * 7));
+                       GS_SETREG_RGBA(0x1E, 0x18, 0x12, 4 + i * 7));
     }
 
     /* The theme's own detail fields, in the theme's order: name, the two
@@ -1049,11 +1064,10 @@ void shelfRenderLibrary(void)
 
     if (total <= 0) {
         fntRenderString(FNT_DEFAULT, CONTENT_X, 120, ALIGN_NONE, 0, 0,
-                        "Nothing to show yet.",
-                        GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80));
+                        "Nothing to show yet.", LAND_TEXT);
         fntRenderString(appsFontSmall, CONTENT_X, 148, ALIGN_NONE, 0, 0,
                         "This page follows the device the main list is on. Pick one there first.",
-                        GS_SETREG_RGBA(0x5C, 0x66, 0x74, 0x80));
+                        LAND_MUTE);
     }
 
     /* Hero first: one request against a row of covers, and asking last put it
@@ -1081,11 +1095,10 @@ void shelfRenderLibrary(void)
             rmDrawPixmap(cov, cx, cy, ALIGN_NONE, LIB_ART_W, LIB_ART_H,
                          SCALING_RATIO, gDefaultCol);
         else
-            rmDrawRect(cx, cy, drawnW, LIB_ART_H,
-                       GS_SETREG_RGBA(0x14, 0x17, 0x1C, 0x80));
+            rmDrawRect(cx, cy, drawnW, LIB_ART_H, LAND_FAINT);
 
         if (idx == libSel) {
-            u64 e = GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80);
+            u64 e = LAND_INK;
             rmDrawRect(cx, cy, drawnW, LIB_FRAME, e);
             rmDrawRect(cx, cy + LIB_ART_H - LIB_FRAME, drawnW, LIB_FRAME, e);
             rmDrawRect(cx, cy, LIB_FRAME, LIB_ART_H, e);
@@ -1097,13 +1110,13 @@ void shelfRenderLibrary(void)
             if (t)
                 fntRenderString(appsFontSmall, cx, cy + LIB_ART_H, ALIGN_NONE,
                                 drawnW, LIB_LABEL_H, t,
-                                idx == libSel ? GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80)
-                                              : GS_SETREG_RGBA(0x88, 0x94, 0xA2, 0x80));
+                                idx == libSel ? LAND_TEXT : LAND_MUTE);
         }
     }
 
     /* Drawn last, so the bottom row of tiles runs under it. */
-    rmDrawRect(SHELF_RAIL_W, LIB_FTR_Y, 640 - SHELF_RAIL_W, 480 - LIB_FTR_Y, GS_SETREG_RGBA(0x14, 0x17, 0x1C, 0x80));
+    rmDrawRect(SHELF_RAIL_W, LIB_FTR_Y, 640 - SHELF_RAIL_W, 480 - LIB_FTR_Y, LAND_BG);
+    rmDrawRect(SHELF_RAIL_W, LIB_FTR_Y, 640 - SHELF_RAIL_W, 1, LAND_RULE);
     {
         int hx = CONTENT_X, w, rx = 605;
         hx += shelfHint(hx, LIB_FTR_TEXT, 0, "Play");
@@ -1116,7 +1129,7 @@ void shelfRenderLibrary(void)
                overlapping is worse than omitting a count you can infer. */
             if (rx - w > hx + 8)
                 fntRenderString(appsFontSmall, rx - w, LIB_FTR_TEXT, ALIGN_NONE, 0, 0,
-                                buf, GS_SETREG_RGBA(0x88, 0x94, 0xA2, 0x80));
+                                buf, LAND_MUTE);
         }
     }
 
@@ -1659,17 +1672,11 @@ static void homeDrawDash(void)
             /* The rail's own glyph, so the button and the destination it leads
                to are recognisably the same thing. */
             if (k == 0)
-                railGrid(bx + bw / 2 - 6, by + dyB + 10,
-                         on ? GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80)
-                            : LAND_MUTE);
+                railGrid(bx + bw / 2 - 6, by + dyB + 10, on ? LAND_INK : LAND_MUTE);
             else
-                railPanel(bx + bw / 2 - 6, by + dyB + 10,
-                          on ? GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80)
-                             : LAND_MUTE);
+                railPanel(bx + bw / 2 - 6, by + dyB + 10, on ? LAND_INK : LAND_MUTE);
             fntRenderString(appsFontSmall, bx + (bw - tw2) / 2, by + dyB + 28,
-                            ALIGN_NONE, 0, 0, lbl[k],
-                            on ? GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80)
-                               : LAND_MUTE);
+                            ALIGN_NONE, 0, 0, lbl[k], on ? LAND_INK : LAND_MUTE);
         }
     }
 
@@ -1811,8 +1818,7 @@ static void homeDrawDash(void)
                     if (nm)
                         fntRenderString(appsFontSmall, cx + lift, ty + thh + 6, ALIGN_NONE,
                                         dw, 12, nm,
-                                        i == homeSel ? GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80)
-                                                     : LAND_MUTE);
+                                        i == homeSel ? LAND_TEXT : LAND_MUTE);
                 }
                 if (c2) configGetInt(c2, "Playtime", &m2);
                 homeWhen(when, sizeof(when), c2, days);

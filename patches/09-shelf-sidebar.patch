@@ -172,7 +172,7 @@ index dccdc44..70d12dc 100644
  int oplRecentCount(void);
  const char *oplRecentStartup(int index);
 diff --git a/include/renderman.h b/include/renderman.h
-index 6b1f380..4262cd8 100644
+index 6b1f380..dfc094f 100644
 --- a/include/renderman.h
 +++ b/include/renderman.h
 @@ -102,6 +102,15 @@ void rmDrawRect(int x, int y, int w, int h, u64 color);
@@ -191,18 +191,19 @@ index 6b1f380..4262cd8 100644
  /** Starts the frame - first to call every frame */
  void rmStartFrame(void);
  
-@@ -111,6 +120,10 @@ void rmEndFrame(void);
+@@ -111,6 +120,11 @@ void rmEndFrame(void);
  /** Sets the display offset in units of pixels */
  void rmSetDisplayOffset(int x, int y);
  
 +/** Translate everything drawn afterwards by `dy` virtual pixels. Reset to 0
 + *  before anything that must not move. */
 +void rmSetScrollY(int dy);
++void rmSetPanX(int dx);
 +
  /** Set overscan in percentage/10 */
  void rmSetOverscan(int overscan);
  
-@@ -118,6 +131,12 @@ void rmSetOverscan(int overscan);
+@@ -118,6 +132,12 @@ void rmSetOverscan(int overscan);
   * When set, it will treat all pixmap widths/heights (not positions) as scaled with the ratios provided */
  void rmSetAspectRatio(enum rm_aratio dar);
  
@@ -330,7 +331,7 @@ index 4330f1e..88a442e 100644
      compatmask = sbPrepare(game, configSet, size_smb_cdvdman_irx, smb_cdvdman_irx, &i);
  
 diff --git a/src/gui.c b/src/gui.c
-index 5393a55..0a4f89b 100644
+index 5393a55..5640df3 100644
 --- a/src/gui.c
 +++ b/src/gui.c
 @@ -16,6 +16,7 @@
@@ -425,18 +426,39 @@ index 5393a55..0a4f89b 100644
          diaGetInt(diaConfig, CFG_HDDSPINDOWN, &gHDDSpindown);
          diaGetString(diaConfig, CFG_BDMPREFIX, gBDMPrefix, sizeof(gBDMPrefix));
          diaGetString(diaConfig, CFG_ETHPREFIX, gETHPrefix, sizeof(gETHPrefix));
-@@ -1566,6 +1615,14 @@ static void guiShow()
+@@ -1535,6 +1584,18 @@ static void guiReadPads()
+ // screen handlers. Fade transition code written by Maximus32
+ static void guiShow()
+ {
++    /* State first, then draw. The sidebar has to advance before the page is
++       rendered now, because the page is rendered at an offset the sidebar
++       computes -- with the old order the push would trail the panel by a frame,
++       which at 12 frames of slide is visible as a seam. */
++    if (gEnableShelfUI)
++        shelfUpdate();
++
++    /* The page moves aside rather than being covered. Every primitive adds
++       fRenderXOff, so one value shifts a whole screen -- including the classic
++       list, which knows nothing about any of this. */
++    rmSetPanX(gEnableShelfUI ? shelfPushX() : 0);
++
+     // is there a transmission effect going on or are
+     // we in a normal rendering state?
+     if (screenHandlerTarget) {
+@@ -1566,6 +1627,16 @@ static void guiShow()
      } else
          // render with the set screen handler
          screenHandler->renderScreen();
 +
-+    /* Drawn last so it composites over whatever page is beneath, which does not
-+     * need to know it exists. Gated here rather than inside shelfDraw so that
-+     * with the toggle off no state advances and no draw is issued. */
-+    if (gEnableShelfUI) {
-+        shelfUpdate();
++    /* Back to absolute coordinates: the panel is the thing doing the pushing and
++     * must not be pushed by itself. */
++    rmSetPanX(0);
++
++    /* Drawn last so it sits beside whatever page is beneath, which does not need
++     * to know it exists. Gated here rather than inside shelfDraw so that with
++     * the toggle off no state advances and no draw is issued. */
++    if (gEnableShelfUI)
 +        shelfDraw();
-+    }
  }
  
  void guiIntroLoop(void)
@@ -816,7 +838,7 @@ index 4389c39..65c029d 100644
      thmInit();
      guiInit();
 diff --git a/src/renderman.c b/src/renderman.c
-index 4d90251..3c49934 100644
+index 4d90251..f2c3ff4 100644
 --- a/src/renderman.c
 +++ b/src/renderman.c
 @@ -10,6 +10,7 @@
@@ -827,17 +849,18 @@ index 4d90251..3c49934 100644
  
  // Allocateable space in vram, as indicated in GsKit's code
  #define __VRAM_SIZE 4194304
-@@ -78,6 +79,9 @@ static int iDisplayYOff;
+@@ -78,6 +79,10 @@ static int iDisplayYOff;
  // Transposition values including overscan compensation
  static float fRenderXOff = 0.0f;
  static float fRenderYOff = 0.0f;
 +/* The overscan inset, kept separate so a scroll can be added on top of it
 +   without losing it. */
 +static float fRenderYBase = 0.0f;
++static float fRenderXBase = 0.0f;
  
  const u64 gColWhite = GS_SETREG_RGBA(0xFF, 0xFF, 0xFF, 0x80);  // Alpha 0x80 -> solid white
  const u64 gColBlack = GS_SETREG_RGBA(0x00, 0x00, 0x00, 0x80);  // Alpha 0x80 -> solid black
-@@ -97,11 +101,58 @@ void rmUnloadTexture(GSTEXTURE *txt)
+@@ -97,11 +102,58 @@ void rmUnloadTexture(GSTEXTURE *txt)
      gsKit_TexManager_free(gsGlobal, txt);
  }
  
@@ -896,7 +919,7 @@ index 4d90251..3c49934 100644
      order = 0;
  }
  
-@@ -135,7 +186,7 @@ void rmEndFrame(void)
+@@ -135,7 +187,7 @@ void rmEndFrame(void)
      gsKit_TexManager_nextFrame(gsGlobal);
  }
  
@@ -905,7 +928,7 @@ index 4d90251..3c49934 100644
  {
      if (guiWakeupCount == 0) {
          guiWakeupCount = 1;
-@@ -229,6 +280,11 @@ int rmSetMode(int force)
+@@ -229,6 +281,11 @@ int rmSetMode(int force)
          gsKit_set_test(gsGlobal, GS_ZTEST_OFF);
          gsKit_set_primalpha(gsGlobal, gDefaultAlpha, 0);
  
@@ -917,7 +940,7 @@ index 4d90251..3c49934 100644
          // reset the contents of the screen to avoid garbage being displayed
          if (hires) {
              gsKit_hires_sync(gsGlobal);
-@@ -331,6 +387,7 @@ void rmDrawQuad(rm_quad_t *q)
+@@ -331,6 +388,7 @@ void rmDrawQuad(rm_quad_t *q)
      }
  
      gsKit_TexManager_bind(gsGlobal, q->txt);
@@ -925,7 +948,7 @@ index 4d90251..3c49934 100644
      gsKit_prim_sprite_texture(gsGlobal, q->txt,
                                q->ul.x + fRenderXOff, q->ul.y + fRenderYOff,
                                q->ul.u, q->ul.v,
-@@ -366,6 +423,7 @@ void rmDrawOverlayPixmap(GSTEXTURE *overlay, int x, int y, short aligned, int w,
+@@ -366,6 +424,7 @@ void rmDrawOverlayPixmap(GSTEXTURE *overlay, int x, int y, short aligned, int w,
          gsGlobal->PrimAlphaEnable = GS_SETTING_OFF;
  
      gsKit_TexManager_bind(gsGlobal, inlay);
@@ -933,7 +956,7 @@ index 4d90251..3c49934 100644
      gsKit_prim_quad_texture(gsGlobal, inlay,
                              quad.ul.x + ulx + fRenderXOff, quad.ul.y + uly + fRenderYOff,
                              0.0f, 0.0f,
-@@ -380,6 +438,28 @@ void rmDrawOverlayPixmap(GSTEXTURE *overlay, int x, int y, short aligned, int w,
+@@ -380,6 +439,28 @@ void rmDrawOverlayPixmap(GSTEXTURE *overlay, int x, int y, short aligned, int w,
      rmDrawQuad(&quad);
  }
  
@@ -962,7 +985,7 @@ index 4d90251..3c49934 100644
  void rmDrawRect(int x, int y, int w, int h, u64 color)
  {
      float fx = X_SCALE(x) + fRenderXOff;
-@@ -404,6 +484,20 @@ void rmDrawLine(int x1, int y1, int x2, int y2, u64 color)
+@@ -404,6 +485,31 @@ void rmDrawLine(int x1, int y1, int x2, int y2, u64 color)
      order++;
  }
  
@@ -980,14 +1003,26 @@ index 4d90251..3c49934 100644
 +    fRenderYOff = fRenderYBase + (float)Y_SCALE(dy);
 +}
 +
++/* The same trick on the other axis, for the sidebar.
++ *
++ * X_SCALE, not the aspect squeeze: this is a position, and positions narrow with
++ * the display while element widths narrow by iAspectWidth. Using rmWidthScaled
++ * here would push the page by three quarters of what the panel actually covers,
++ * and the seam would drift with the aspect. */
++void rmSetPanX(int dx)
++{
++    fRenderXOff = fRenderXBase + (float)X_SCALE(dx);
++}
++
  void rmSetDisplayOffset(int x, int y)
  {
      gsKit_set_display_offset(gsGlobal, x * rm_mode_table[vmode].VCK, y);
-@@ -482,6 +576,7 @@ void rmSetOverscan(int overscan)
+@@ -482,6 +588,8 @@ void rmSetOverscan(int overscan)
  
      fRenderXOff = (float)iDisplayXOff - 0.5f;
      fRenderYOff = (float)iDisplayYOff - 0.5f;
 +    fRenderYBase = fRenderYOff;
++    fRenderXBase = fRenderXOff;
  
      if (rmGetInterlacedFrameMode() == 1)
          fRenderYOff += 0.25f;

@@ -123,6 +123,7 @@ body.fullscreen #stage{background:#000}
     <button id="btnGrid" title="8px grid">Grid</button>
     <button id="btnSnap" title="Snap drags to 8px">Snap</button>
     <button id="btnFull" title="Screen only — hide every panel (F, or Esc to leave)">Full screen</button>
+    <button id="btnDrawer" title="Expand the SHELF sidebar and push the page (B)">Sidebar</button>
     <button id="btnPlasma" class="on" title="Plasma vs flat bg_color fill">Plasma</button>
     <button id="btnLoad" title="Show the LoadingIcon overlay">Busy icon</button>
     <span class="sep"></span>
@@ -2193,11 +2194,15 @@ function drawHints(el, hints) {
    Colours are shelf.c's palette verbatim, so the page reads as part of the
    panel it is reached from rather than as a separate screen.
 */
+/* The sheet, as the GS composites it. LAND_* are drawn at GS alpha over
+   LAND_BG, so these are ink 0x3A2E22 blended at 0x54, 0x4E, 0x38 and 0x1C --
+   computed, because picking them by eye is how this tool starts lying about
+   contrast. */
 const SHELF_PAL = {
-  pageBg:  0x0F1216, barBg:   0x181C22, rule:    0x2A3038,
-  card:    0x1C2027, cardSel: 0x262C35, cardEdge:0x2A3038,
-  icon:    0x2E353F, text:    0xF2F5F8, muted:   0x5C6674, dim: 0x3C444E,
-  sel:     0xF2F5F8, net:     0x64C878, netOff:  0x6E7681,
+  pageBg:  0xC9BFA6, barBg:   0xC9BFA6, rule:    0x726756,
+  card:    0xC9BFA6, cardSel: 0xAA9F89, cardEdge:0x726756,
+  icon:    0xAA9F89, text:    0x3A2E22, muted:   0x6B604F, dim: 0x8A806C,
+  sel:     0x3A2E22, net:     0x2E6E3C, netOff:  0x6B604F,
 };
 const rgbHex = (h) => `rgb(${(h>>16)&255},${(h>>8)&255},${h&255})`;
 
@@ -2305,6 +2310,10 @@ const LIBP = { HERO_H: 196, GRID_Y: 240, FTR_Y: 450, FTR_TEXT: 454 };
 /* shelf.c's collapsed rail: brand mark, four destinations, link state. Drawn
    from rectangles in both places, because the shelf pages load no art. */
 function shelfRailPv(active) {
+  // While the panel is out, the panel IS the rail -- expanded. Drawing both puts
+  // the icon strip next to the item list it turns into; shelf.c guards the same
+  // way, at the top of shelfDrawRail.
+  if (S.shelfOpen) return;
   // Same tan as the rest of the sheet, and one rule at the right edge. See the
   // note in shelf.c's shelfDrawRail.
   // LAND_MUTE and LAND_RULE composited over LAND_BG: the console blends these at
@@ -2343,7 +2352,8 @@ function libGridConst() {
 
 /** shelf.c's shelfHint: a drawn face button and a label. Returns width used. */
 function shelfHintPv(x, y, kind, label) {
-  const col = { cross: 0x6B99E8, square: 0xD96FBF, circle: 0xE8556B }[kind];
+  // Same hues, taken down for a light ground -- see shelfHint in shelf.c.
+  const col = { cross: 0x2F5AA8, square: 0x9B3B85, circle: 0xB02A40 }[kind];
   const cy = y + 8;
   ctx.fillStyle = rgbHex(col);
   if (kind === "square") {
@@ -2358,7 +2368,7 @@ function shelfHintPv(x, y, kind, label) {
     ctx.beginPath(); ctx.lineWidth = 2; ctx.strokeStyle = rgbHex(col);
     ctx.arc(x + 5.5, cy, 5, 0, Math.PI * 2); ctx.stroke();
   }
-  shelfText(x + 18, y, label, 0x8894A2, SHELF_FNT);
+  shelfText(x + 18, y, label, 0x3A2E22, SHELF_FNT_SM);
   return 18 + textWidth(label, SHELF_FNT) + 22;
 }
 
@@ -2659,13 +2669,13 @@ function renderShelfLibrary() {
   const first = Math.floor(sel / g.cols) * g.cols;
 
   ctx.save();
-  ctx.fillStyle = rgbHex(0x0A0C0F); ctx.fillRect(0, 0, SCREEN_W, SCREEN_H);
+  ctx.fillStyle = rgbHex(0xC9BFA6); ctx.fillRect(0, 0, SCREEN_W, SCREEN_H);
 
   const bg = game.serial ? gameArt(game.serial, "BG") : null;
   if (bg) ctx.drawImage(bg, RAIL_W, 0, SCREEN_W - RAIL_W, LIBP.HERO_H);
-  else { ctx.fillStyle = rgbHex(0x14171C); ctx.fillRect(RAIL_W, 0, SCREEN_W - RAIL_W, LIBP.HERO_H); }
+  else { ctx.fillStyle = rgbHex(0x3A2E22); ctx.fillRect(RAIL_W, 0, SCREEN_W - RAIL_W, LIBP.HERO_H); }
   for (let i = 0; i < 12; i++) {
-    ctx.fillStyle = "rgba(10,12,15," + ((4 + i * 7) / 128) + ")";
+    ctx.fillStyle = "rgba(30,24,18," + ((4 + i * 7) / 128) + ")";
     ctx.fillRect(RAIL_W, LIBP.HERO_H - 132 + i * 11, SCREEN_W - RAIL_W, 11);
   }
 
@@ -2682,22 +2692,24 @@ function renderShelfLibrary() {
     const cx = x0 + (n % g.cols) * pitchX;
     const cov = gameArt(games[idx].serial, "COV");
     if (cov) ctx.drawImage(cov, cx, cy, drawnW, artH);
-    else { ctx.fillStyle = rgbHex(0x14171C); ctx.fillRect(cx, cy, drawnW, artH); }
+    else { ctx.fillStyle = rgbHex(0xAA9F89); ctx.fillRect(cx, cy, drawnW, artH); }
     if (idx === sel) {
-      ctx.fillStyle = rgbHex(0xF2F5F8);
+      ctx.fillStyle = rgbHex(0x3A2E22);
       ctx.fillRect(cx, cy, drawnW, g.frame);
       ctx.fillRect(cx, cy + artH - g.frame, drawnW, g.frame);
       ctx.fillRect(cx, cy, g.frame, artH);
       ctx.fillRect(cx + drawnW - g.frame, cy, g.frame, artH);
     }
     if (cy + artH + g.lh <= LIBP.FTR_Y)
-      shelfText(cx, cy + artH, games[idx].title, idx === sel ? 0xF2F5F8 : 0x8894A2,
+      shelfText(cx, cy + artH, games[idx].title, idx === sel ? 0x3A2E22 : 0x6B604F,
                 SHELF_FNT_SM, "left", drawnW);
   }
 
   /* Drawn last, so the bottom row runs under it rather than being squashed. */
-  ctx.fillStyle = rgbHex(0x14171C);
+  ctx.fillStyle = rgbHex(0xC9BFA6);
   ctx.fillRect(RAIL_W, LIBP.FTR_Y, SCREEN_W - RAIL_W, SCREEN_H - LIBP.FTR_Y);
+  ctx.fillStyle = rgbHex(0x726756);
+  ctx.fillRect(RAIL_W, LIBP.FTR_Y, SCREEN_W - RAIL_W, 1);
   let hx = CONTENT_X;
   hx += shelfHintPv(hx, LIBP.FTR_TEXT, "cross", "Play");
   hx += shelfHintPv(hx, LIBP.FTR_TEXT, "square", "Details");
@@ -2705,7 +2717,7 @@ function renderShelfLibrary() {
   const count = (sel + 1) + " of " + games.length;
   const cw = textWidth(count, SHELF_FNT_SM);
   if (605 - cw > hx + 8)
-    shelfText(605 - cw, LIBP.FTR_TEXT, count, 0x8894A2, SHELF_FNT_SM);
+    shelfText(605 - cw, LIBP.FTR_TEXT, count, 0x6B604F, SHELF_FNT_SM);
 
   shelfRailPv(1);
   ctx.restore();
@@ -2721,7 +2733,7 @@ function renderShelfApps() {
   /* top status bar */
   ctx.fillStyle = rgbHex(SHELF_PAL.barBg); ctx.fillRect(0, 0, SCREEN_W, 40);
   ctx.fillStyle = rgbHex(SHELF_PAL.rule);  ctx.fillRect(0, 40, SCREEN_W, 1);
-  shelfText(32, 27, "Apps", SHELF_PAL.text);
+  shelfText(32, 27, "APPS", SHELF_PAL.text, SHELF_FNT_HD);
 
   // Right cluster, laid out right-to-left so nothing needs measuring twice.
   let rx = 608;
@@ -2772,11 +2784,51 @@ function renderShelfApps() {
   applyViewport();
 }
 
+/* The expanded sidebar, and the push that goes with it.
+ *
+ * shelf.c does this with rmSetPanX: every primitive adds fRenderXOff, so one
+ * value slides a whole page sideways and the page's own coordinates never learn
+ * about it. A canvas translate is the same idea, which is why the mock can be
+ * this short.
+ *
+ * The number that matters is the seam. The panel's right edge sits at
+ * x + SHELF_WIDTH and SHELF_PEEK of it was always on screen as the rail, so the
+ * page yields the difference and its left edge should land exactly on the
+ * panel's right edge for every value of t -- not just fully open. That is the
+ * thing worth being able to look at. */
+const SHELF_WIDTH_PV = 218, SHELF_PEEK_PV = RAIL_W;
+const shelfPushPv = () => S.shelfOpen ? Math.round(SHELF_WIDTH_PV - SHELF_PEEK_PV) : 0;
+
+function renderShelfDrawerPv() {
+  if (!S.shelfOpen) return;
+  const R = (x, y, w, h, c) => { ctx.fillStyle = rgbHex(c); ctx.fillRect(x, y, w, h); };
+  R(0, 0, SHELF_WIDTH_PV, SCREEN_H, 0xC9BFA6);
+  R(SHELF_WIDTH_PV, 0, 1, SCREEN_H, 0x726756);
+  shelfText(24, 28, "SHELF", 0x3A2E22, SHELF_FNT_HD);
+  ["Home", "Library", "Apps", "Settings"].forEach((it, i) => {
+    const iy = 84 + i * 34, on = i === 0;
+    if (on) { R(0, iy - 8, SHELF_WIDTH_PV, 30, 0xAA9F89); R(0, iy - 8, 3, 30, 0x3A2E22); }
+    shelfText(34, iy, it, on ? 0x3A2E22 : 0x6B604F, SHELF_FNT_SM);
+  });
+  R(16, 438, SHELF_WIDTH_PV - 32, 1, 0x726756);
+  shelfText(24, 450, "Online", 0x6B604F, SHELF_FNT_SM);
+}
+
+function renderShelfPagePv(fn) {
+  const push = shelfPushPv();
+  ctx.save();
+  ctx.translate(push, 0);
+  fn();
+  ctx.restore();
+  renderShelfDrawerPv();
+  applyViewport();
+}
+
 function render() {
-  if (S.chain === "shelfApps") return renderShelfApps();
-  if (S.chain === "shelfLibrary") return renderShelfLibrary();
-  if (S.chain === "shelfHome") return renderShelfHome();
-  if (S.chain === "shelfLanding") return renderShelfLanding();
+  if (S.chain === "shelfApps") return renderShelfPagePv(renderShelfApps);
+  if (S.chain === "shelfLibrary") return renderShelfPagePv(renderShelfLibrary);
+  if (S.chain === "shelfHome") return renderShelfPagePv(renderShelfHome);
+  if (S.chain === "shelfLanding") return renderShelfPagePv(renderShelfLanding);
   if (!S.theme) { ctx.clearRect(0, 0, SCREEN_W, SCREEN_H); octx.clearRect(0, 0, SCREEN_W, SCREEN_H); return; }
   ctx.save();
   ctx.clearRect(0, 0, SCREEN_W, SCREEN_H);
@@ -3545,9 +3597,15 @@ function setFullscreen(on) {
 }
 document.getElementById("btnFull").onclick =
   () => setFullscreen(!document.body.classList.contains("fullscreen"));
+document.getElementById("btnDrawer").onclick = () => {
+  S.shelfOpen = !S.shelfOpen;
+  document.getElementById("btnDrawer").classList.toggle("on", !!S.shelfOpen);
+  render();
+};
 addEventListener("keydown", e => {
   if (e.target.matches("input,textarea,select")) return;
-  if (e.key === "f" || e.key === "F") setFullscreen(!document.body.classList.contains("fullscreen"));
+  if (e.key === "b" || e.key === "B") document.getElementById("btnDrawer").click();
+  else if (e.key === "f" || e.key === "F") setFullscreen(!document.body.classList.contains("fullscreen"));
   else if (e.key === "Escape" && document.body.classList.contains("fullscreen")) setFullscreen(false);
 });
 
