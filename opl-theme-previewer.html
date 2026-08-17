@@ -2292,44 +2292,61 @@ function shelfHashPv(x) {
 }
 
 function renderShelfLanding() {
-  const R = (x, y, w, h, c, a) => {
-    ctx.fillStyle = a === undefined ? rgbHex(c)
-      : `rgba(${(c>>16)&255},${(c>>8)&255},${c&255},${a/128})`;
+  const INK = 0x3A2E22, BG = 0xC9BFA6;
+  const R = (x, y, w, h, c, al) => {
+    ctx.fillStyle = al === undefined ? rgbHex(c)
+      : `rgba(${(c>>16)&255},${(c>>8)&255},${c&255},${al/128})`;
     ctx.fillRect(x, y, w, h);
   };
-  const gradV = (x, y, w, h, a0, a1, c) => {
-    const n = Math.max(2, Math.floor(h / 2));
-    for (let i = 0; i < n; i++) R(x, y + i * 2, w, 2, c, a0 + (a1 - a0) * i / (n - 1));
+  const diag = (x, y, len, dx, dy, al) => {
+    for (let i = 0; i < len; i++) R(x + i * dx, y + i * dy, 1, 1, INK, al);
   };
-  const frame = 0;          // the console animates; the preview holds one frame
+  const frame = 0;   // the console animates; the preview holds one frame
 
   ctx.save();
-  R(0, 0, SCREEN_W, SCREEN_H, 0x05070C);
-  gradV(0, 200, SCREEN_W, 280, 0x00, 0x2E, 0x142E5A);
-  gradV(0, 380, SCREEN_W, 100, 0x00, 0x22, 0x2E5A8C);
+  R(0, 0, SCREEN_W, SCREEN_H, BG);
 
-  for (let i = 0; i < 56; i++) {
-    const h1 = shelfHashPv(i), h2 = shelfHashPv((Math.imul(i, 2654435761) + 7) >>> 0);
-    const speed = 1 + (h2 % 3);
-    const sz = speed >= 3 ? 2 : 1;
-    const py = 500 - ((h2 % 520 + Math.floor(frame * speed / 5)) % 520);
-    R(h1 % 640, py, sz, sz, 0xC8DCFF, 0x10 + speed * 0x0E);
+  for (let i = 0; i < 4; i++) {
+    const bx = (i & 1) ? 596 : 30, by = (i & 2) ? 432 : 26;
+    const sx = (i & 1) ? -1 : 1, sy = (i & 2) ? -1 : 1;
+    R(bx - (sx < 0 ? 26 : 0), by, 26, 1, INK, 0x80);
+    R(bx, by - (sy < 0 ? 20 : 0), 1, 20, INK, 0x80);
+    diag(bx + sx * 6, by + sy * 6, 10, sx, sy, 0x38);
   }
-  gradV((Math.floor(frame / 3) % 900) - 130, 150, 130, 260, 0x00, 0x0A, 0x8CB4FF);
+  R(30, 240, 566, 1, INK, 0x1C);
+
+  const p = frame % 640;
+  R(p - 60, 26, 60, 1, INK, 0x80);
+  R(580 - p, 458, 60, 1, INK, 0x80);
+  R(30, (frame * 2 / 3) % 480, 1, 40, INK, 0x38);
+  R(596, 440 - ((frame * 2 / 3) % 480), 1, 40, INK, 0x38);
+  diag(30 + (frame / 4) % 90, 26 + (frame / 4) % 90, 24, 1, 1, 0x38);
+  diag(596 - (frame / 5) % 90, 458 - (frame / 5) % 90, 24, -1, -1, 0x38);
 
   const BIG = { size: 46, family: SHELF_FNT.family };
-  shelfText(44, 176, "21", 0xF2F5F8, BIG);
+  shelfText(44, 150, "21", INK, BIG);
   const hw = textWidth("21", BIG);
-  shelfText(46 + hw, 176, ":", 0xF2F5F8, BIG);
-  shelfText(48 + hw + textWidth(":", BIG), 176, "01", 0xF2F5F8, BIG);
-  shelfText(46, 238, "Good evening", 0x8C9CB4, SHELF_FNT_SM);
-  shelfText(46, 402, "DOWN FOR HOME", 0x8C9CB4, SHELF_FNT_LBL);
+  shelfText(46 + hw, 150, ":", INK, BIG);
+  shelfText(48 + hw + textWidth(":", BIG), 150, "01", INK, BIG);
+  shelfText(46, 212, "EVENING", INK, SHELF_FNT_LBL);
 
-  R(RAIL_W, LIBP.FTR_Y, SCREEN_W - RAIL_W, SCREEN_H - LIBP.FTR_Y, 0x14171C);
-  let hx = CONTENT_X;
-  hx += shelfHintPv(hx, LIBP.FTR_TEXT, "cross", "Home");
-  shelfHintPv(hx, LIBP.FTR_TEXT, "circle", "Back");
-  shelfRailPv(0);
+  /* Real values in shelf.c; representative ones here, in the same shapes so the
+     column width can be judged. */
+  const LINES = ["BUILD  v1.2.0-Beta-2216", "VMODE  DTV480P 16:9", "LINK   UP",
+                 "DEV    mmce0:", "TITLES 28", "PLAYED 4", "MINS   2177",
+                 "VRAM   860160", "BINDS  14"];
+  LINES.forEach((ln, i) => {
+    const age = LINES.length - 1 - i;
+    const y = 148 + i * 16;
+    const al = Math.max(0x10, 0x60 - age * 0x0A);
+    const w = textWidth(ln, SHELF_FNT_LBL);
+    ctx.globalAlpha = al / 128;
+    shelfText(596 - w, y, ln, INK, SHELF_FNT_LBL);
+    ctx.globalAlpha = 1;
+    if (age === 0) R(599, y + 1, 4, 8, INK, 0x60);
+  });
+
+  shelfText(46, 400, "DOWN FOR HOME", INK, SHELF_FNT_LBL);
   ctx.restore();
   octx.clearRect(0, 0, SCREEN_W, SCREEN_H);
   applyViewport();
@@ -2419,24 +2436,35 @@ function renderShelfHome() {
   ctx.globalAlpha = 1;
   shelfText(M + 14 + hw + textWidth(":", BIG), 86 + dyA, "01", 0xF2F5F8, BIG);
 
-  const dyB = card(M, 170, COLW, 128, "MOST PLAYED", 90);
-  const ramp = [0xE8556B, 0xE89B45, 0x64C878, 0x6B99E8];
-  const top = PLAYTIME_MOCK.map((m, i) => ({ m, t: (games[i] || {}).title || "" }))
-                           .filter(x => x.m > 0).sort((a, b) => b.m - a.m).slice(0, 4);
-  top.forEach((e, i) => {
-    const y = 200 + dyB + i * 26;
-    shelfText(M + 12, y, e.t, 0xF2F5F8, SHELF_FNT_SM, "left", COLW - 60);
-    const tw = textWidth(fmt(e.m), SHELF_FNT_SM);
-    shelfText(M + COLW - 12 - tw, y, fmt(e.m), 0x5C6674, SHELF_FNT_SM);
-    R(M + 12, y + 15, COLW - 24, 2, 0x2A3038);
-    R(M + 12, y + 15, Math.round((COLW - 24) * e.m / top[0].m), 2, ramp[i]);
+  // Two destinations rather than a ranking: this column had the only room for
+  // something you can press.
+  const dyB = drift(90, 2);
+  const BW = Math.floor((COLW - 10) / 2), BH = 46, BY = 172;
+  ["Library", "Apps"].forEach((lb, k) => {
+    const bx = M + k * (BW + 10);
+    const on = (S.homeFocus | 0) === 2 + k;
+    const lf = on ? 2 : 0;
+    RR(bx - lf, BY + dyB - lf, BW + 2 * lf, BH + 2 * lf, on ? 0x262C35 : 0x161A20);
+    if (on) {
+      const e = 0xF2F5F8, a = 0x40 + pulse / 4;
+      R(bx - lf + 3, BY + dyB - lf, BW + 2 * lf - 6, 2, e, a);
+      R(bx - lf + 3, BY + dyB - lf + BH + 2 * lf - 2, BW + 2 * lf - 6, 2, e, a);
+      R(bx - lf, BY + dyB - lf + 3, 2, BH + 2 * lf - 6, e, a);
+      R(bx - lf + BW + 2 * lf - 2, BY + dyB - lf + 3, 2, BH + 2 * lf - 6, e, a);
+    }
+    const ic = on ? 0xF2F5F8 : 0x8894A2;
+    const gx = bx + BW / 2 - 6, gy = BY + dyB + 10;
+    if (k === 0) { for (let j = 0; j < 3; j++) for (let i2 = 0; i2 < 3; i2++) R(gx + i2 * 5, gy + j * 5, 3, 3, ic); }
+    else { R(gx, gy, 13, 2, ic); R(gx, gy + 11, 13, 2, ic); R(gx, gy, 2, 13, ic); R(gx + 11, gy, 2, 13, ic); R(gx + 5, gy + 2, 2, 9, ic); }
+    const lw = textWidth(lb, SHELF_FNT_SM);
+    shelfText(bx + (BW - lw) / 2, BY + dyB + 28, lb, ic, SHELF_FNT_SM);
   });
 
-  const dyC = card(M, 306, COLW, 108, "SYSTEM", 190);
+  const dyC = card(M, 236, COLW, 178, "SYSTEM", 190);
   const totalM = PLAYTIME_MOCK.filter(m => m > 0).reduce((a, b) => a + b, 0);
-  shelfText(M + 12, 336 + dyC, `${top.length} of ${games.length} played`, 0x8894A2, SHELF_FNT_SM);
-  shelfText(M + 12, 356 + dyC, `${fmt(totalM)} total`, 0x8894A2, SHELF_FNT_SM);
-  shelfText(M + 12, 376 + dyC, "v1.2.0-Beta-2216", 0x5C6674, SHELF_FNT_SM);
+  shelfText(M + 12, 266 + dyC, `${top.length} of ${games.length} played`, 0x8894A2, SHELF_FNT_SM);
+  shelfText(M + 12, 286 + dyC, `${fmt(totalM)} total`, 0x8894A2, SHELF_FNT_SM);
+  shelfText(M + 12, 306 + dyC, "v1.2.0-Beta-2216", 0x5C6674, SHELF_FNT_SM);
 
   // the continue card IS the artwork
   const focus = S.homeFocus | 0;                 // 0 = hero, 1 = strip

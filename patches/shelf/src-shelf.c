@@ -1171,89 +1171,140 @@ static int homeFocus;
    exists. */
 #define HOME_SCROLL_FRAMES 22
 static void homeDrawDash(void);
+
+/* Library-wide figures, scanned once per list; the landing's stream reads them
+   too, so they are declared before either user. */
+static item_list_t *homeScanList;
+static int homeScanCount, homeTotalMinutes, homeTotalTitles, homeTotalPlayed;
 static int homeView;
 static int homeScrollT;
 
-/* Deterministic 32-bit mix. The drift below has to be the same on every frame
-   for a given particle, and there is no seeded RNG here worth the name. */
-static unsigned int shelfHash(unsigned int x)
+
+/* The landing: a schematic, not a photograph.
+ *
+ * Tan ground, dark brown ink, flat rules and corner brackets -- the look of a
+ * drawing rather than a screen. Everything on it is real: the clock is the RTC,
+ * and the stream on the right is this build's actual configuration rather than
+ * invented telemetry, which is the whole reason it is worth showing.
+ */
+#define LAND_BG    GS_SETREG_RGBA(0xC9, 0xBF, 0xA6, 0x80)
+#define LAND_INK   GS_SETREG_RGBA(0x3A, 0x2E, 0x22, 0x80)
+#define LAND_DIM   GS_SETREG_RGBA(0x3A, 0x2E, 0x22, 0x38)
+#define LAND_FAINT GS_SETREG_RGBA(0x3A, 0x2E, 0x22, 0x1C)
+
+/** A 45-degree run, as a staircase. There is no diagonal primitive; at one pixel
+ *  per step the stair is the line. `dir` picks the quadrant. */
+static void shelfDiag(int x, int y, int len, int dx, int dy, u64 col)
 {
-    x ^= x >> 16; x *= 0x7feb352dU;
-    x ^= x >> 15; x *= 0x846ca68bU;
-    x ^= x >> 16;
-    return x;
+    int i;
+    for (i = 0; i < len; i++)
+        rmDrawRect(x + i * dx, y + i * dy, 1, 1, col);
 }
 
-/** The landing: mostly empty, deliberately. Ambient rather than informational --
- *  the dashboard below carries everything you can act on.
- *
- *  Motes rise at three speeds, and speed sets both size and brightness, so the
- *  field reads as having depth rather than as noise on one plane. Positions come
- *  from a hash of the index and the frame count, which costs nothing to store
- *  and never drifts out of sync. */
+/** One line of the stream. Real values, read at draw time. */
+static void landLine(int slot, char *out, size_t n)
+{
+    item_list_t *list = menuGetActiveList();
+    switch (slot % 10) {
+        case 0: snprintf(out, n, "BUILD  %s", OPL_VERSION); break;
+        case 1: snprintf(out, n, "VMODE  %s", gWideScreen ? "DTV480P 16:9"
+                                                          : "DTV480P 4:3"); break;
+        case 2: snprintf(out, n, "LINK   %s", gNetworkStartup == 0 ? "UP" : "DOWN"); break;
+        case 3: snprintf(out, n, "DEV    %s",
+                         (list && list->itemGetPrefix) ? list->itemGetPrefix(list) : "-"); break;
+        case 4: snprintf(out, n, "TITLES %d", homeTotalTitles); break;
+        case 5: snprintf(out, n, "PLAYED %d", homeTotalPlayed); break;
+        case 6: snprintf(out, n, "MINS   %d", homeTotalMinutes); break;
+        case 7: snprintf(out, n, "VRAM   %u", rmVramBoundBytes()); break;
+        case 8: snprintf(out, n, "BINDS  %d", rmVramBoundCount()); break;
+        default: snprintf(out, n, "TZ     %+d", configGetTimezone()); break;
+    }
+}
+
 static void homeDrawLanding(int hh, int mm, int haveClock)
 {
-    static const char *DOW[7] = {"Thursday", "Friday", "Saturday", "Sunday",
-                                 "Monday", "Tuesday", "Wednesday"};
-    int i;
+    const int RIGHT = 596, ROWS = 9, PITCH = 16;
+    const int STEP = 26;                  /* frames per new line */
+    int i, head = guiFrameId / STEP, typed = (guiFrameId % STEP) * 20 / STEP;
     char buf[64];
 
-    rmDrawRect(0, 0, 640, 480, GS_SETREG_RGBA(0x05, 0x07, 0x0C, 0x80));
-    /* A cold ground warming toward the horizon, which is the whole of the
-       PlayStation boot look: near-black above, a lit band low down. */
-    shelfGradV(0, 200, 640, 280, 0x00, 0x2E, GS_SETREG_RGBA(0x14, 0x2E, 0x5A, 0));
-    shelfGradV(0, 380, 640, 100, 0x00, 0x22, GS_SETREG_RGBA(0x2E, 0x5A, 0x8C, 0));
+    rmDrawRect(0, 0, 640, 480, LAND_BG);
 
-    for (i = 0; i < 56; i++) {
-        unsigned int h1 = shelfHash(i), h2 = shelfHash(i * 2654435761U + 7);
-        int speed = 1 + (h2 % 3);
-        int px = h1 % 640;
-        int sz = speed >= 3 ? 2 : 1;
-        int py = 500 - (int)((h2 % 520 + (unsigned int)(guiFrameId * speed) / 5) % 520);
-        rmDrawRect(px, py, sz, sz,
-                   GS_SETREG_RGBA(0xC8, 0xDC, 0xFF, 0x10 + speed * 0x0E));
+    /* Frame: corner brackets and a hairline inset, which is what makes a flat
+       fill read as a drawing rather than as an empty screen. */
+    for (i = 0; i < 4; i++) {
+        int bx = (i & 1) ? 596 : 30, by = (i & 2) ? 432 : 26;
+        int sx = (i & 1) ? -1 : 1, sy = (i & 2) ? -1 : 1;
+        rmDrawRect(bx - (sx < 0 ? 26 : 0), by, 26, 1, LAND_INK);
+        rmDrawRect(bx, by - (sy < 0 ? 20 : 0), 1, 20, LAND_INK);
+        shelfDiag(bx + sx * 6, by + sy * 6, 10, sx, sy, LAND_DIM);
     }
+    rmDrawRect(30, 240, 566, 1, LAND_FAINT);
 
-    /* A slow sweep, so the field is not the only thing moving. */
+    /* Edge runners: a lit segment travelling each side, and diagonals cutting
+       the corners. Ninety and forty-five degrees only -- anything else would
+       stop it looking drafted. */
     {
-        int sx = (guiFrameId / 3) % 900 - 130;
-        shelfGradV(sx, 150, 130, 260, 0x00, 0x0A, GS_SETREG_RGBA(0x8C, 0xB4, 0xFF, 0));
+        int p = guiFrameId % 640;
+        rmDrawRect(p - 60, 26, 60, 1, LAND_INK);
+        rmDrawRect(580 - p, 458, 60, 1, LAND_INK);
+        rmDrawRect(30, (guiFrameId * 2 / 3) % 480, 1, 40, LAND_DIM);
+        rmDrawRect(596, 440 - ((guiFrameId * 2 / 3) % 480), 1, 40, LAND_DIM);
+        shelfDiag(30 + (guiFrameId / 4) % 90, 26 + (guiFrameId / 4) % 90, 24, 1, 1, LAND_DIM);
+        shelfDiag(596 - (guiFrameId / 5) % 90, 458 - (guiFrameId / 5) % 90, 24, -1, -1, LAND_DIM);
     }
 
     if (haveClock) {
         snprintf(buf, sizeof(buf), "%02d", hh);
-        fntRenderString(appsFontBig, 44, 176, ALIGN_NONE, 0, 0, buf,
-                        GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80));
+        fntRenderString(appsFontBig, 44, 150, ALIGN_NONE, 0, 0, buf, LAND_INK);
         {
             int hw = fntCalcDimensions(appsFontBig, buf);
-            fntRenderString(appsFontBig, 46 + hw, 176, ALIGN_NONE, 0, 0, ":",
-                            GS_SETREG_RGBA(0xF2, 0xF5, 0xF8,
+            fntRenderString(appsFontBig, 46 + hw, 150, ALIGN_NONE, 0, 0, ":",
+                            GS_SETREG_RGBA(0x3A, 0x2E, 0x22,
                                            0x38 + shelfPulse(2 * FPS) / 3));
             snprintf(buf, sizeof(buf), "%02d", mm);
             fntRenderString(appsFontBig, 48 + hw + fntCalcDimensions(appsFontBig, ":"),
-                            176, ALIGN_NONE, 0, 0, buf,
-                            GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80));
+                            150, ALIGN_NONE, 0, 0, buf, LAND_INK);
         }
-        fntRenderString(appsFontSmall, 46, 238, ALIGN_NONE, 0, 0,
-                        hh < 5 ? "Good night" : hh < 12 ? "Good morning"
-                        : hh < 18 ? "Good afternoon" : "Good evening",
-                        GS_SETREG_RGBA(0x8C, 0x9C, 0xB4, 0x80));
+        fntRenderString(appsFontLabel, 46, 212, ALIGN_NONE, 0, 0,
+                        hh < 5 ? "NIGHT" : hh < 12 ? "MORNING"
+                        : hh < 18 ? "AFTERNOON" : "EVENING", LAND_DIM);
     }
 
-    /* The only instruction on the page, breathing so it is findable without
-       being loud. */
-    fntRenderString(appsFontLabel, 46, 402, ALIGN_NONE, 0, 0, "DOWN FOR HOME",
-                    GS_SETREG_RGBA(0x8C, 0x9C, 0xB4,
+    /* The stream. Right-aligned and stacked, newest at the bottom and revealed a
+       character at a time; older lines fade as they rise. Right-aligned because
+       a ragged left edge is what makes a column of values read as output rather
+       than as a paragraph. */
+    for (i = 0; i < ROWS; i++) {
+        int age = ROWS - 1 - i;                    /* 0 = newest */
+        int y = 148 + i * PITCH;
+        int alpha;
+        landLine(head - age, buf, sizeof(buf));
+        if (age == 0 && typed < (int)strlen(buf))
+            buf[typed] = '\0';
+        alpha = 0x60 - age * 0x0A;
+        if (alpha < 0x10)
+            alpha = 0x10;
+        {
+            int w = fntCalcDimensions(appsFontLabel, buf);
+            fntRenderString(appsFontLabel, RIGHT - w, y, ALIGN_NONE, 0, 0, buf,
+                            GS_SETREG_RGBA(0x3A, 0x2E, 0x22, alpha));
+            if (age == 0)
+                rmDrawRect(RIGHT + 3, y + 1, 4, 8,
+                           GS_SETREG_RGBA(0x3A, 0x2E, 0x22,
+                                          (guiFrameId / 15) & 1 ? 0x60 : 0x10));
+        }
+    }
+
+    fntRenderString(appsFontLabel, 46, 400, ALIGN_NONE, 0, 0, "DOWN FOR HOME",
+                    GS_SETREG_RGBA(0x3A, 0x2E, 0x22,
                                    0x24 + shelfPulse(3 * FPS) / 3));
-    (void)DOW;
 }
 
 /* Library-wide figures, scanned once per list. This is the index pass Phase 0
    anticipated and Phase 8 reuses for Group=/Label=. Keyed on the support object
    and the item count, so it re-runs on a device change and never otherwise. */
 #define HOME_TOP_N 4
-static item_list_t *homeScanList;
-static int homeScanCount, homeTotalMinutes, homeTotalTitles, homeTotalPlayed;
 static char homeTopName[HOME_TOP_N][40];
 static int  homeTopMins[HOME_TOP_N];
 
@@ -1395,7 +1446,8 @@ void shelfRenderHome(void)
         if (homeView == 0) {
             hx += shelfHint(hx, LIB_FTR_TEXT, 0, "Home");
         } else if (total > 0) {
-            hx += shelfHint(hx, LIB_FTR_TEXT, 0, homeFocus == 0 ? "Resume" : "Play");
+            hx += shelfHint(hx, LIB_FTR_TEXT, 0,
+                            homeFocus >= 2 ? "Open" : homeFocus == 0 ? "Resume" : "Play");
             hx += shelfHint(hx, LIB_FTR_TEXT, 2, "Details");
         }
         shelfHint(hx, LIB_FTR_TEXT, 1, "Back");
@@ -1526,42 +1578,52 @@ static void homeDrawDash(void)
                         "RTC unreadable", GS_SETREG_RGBA(0x5C, 0x66, 0x74, 0x80));
     }
 
-    dyB = homeCard(HOME_M, 170, HOME_COL_W, 128, "MOST PLAYED", 90);
-    y = 200 + dyB;
-    for (i = 0; i < HOME_TOP_N; i++) {
-        int barW;
-        if (!homeTopMins[i])
-            break;
-        homeFormatTime(t, sizeof(t), homeTopMins[i]);
-        fntRenderString(appsFontSmall, HOME_M + 12, y, ALIGN_NONE, 0, 0, homeTopName[i],
-                        GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80));
-        {
-            int w = fntCalcDimensions(appsFontSmall, t);
-            fntRenderString(appsFontSmall, HOME_M + HOME_COL_W - 12 - w, y, ALIGN_NONE,
-                            0, 0, t, GS_SETREG_RGBA(0x5C, 0x66, 0x74, 0x80));
-        }
-        /* Bars are relative to the top entry, so the shape says "how it
-           compares", which is the only comparison a bar can honestly make. */
-        barW = homeTopMins[0] ? (HOME_COL_W - 24) * homeTopMins[i] / homeTopMins[0] : 0;
-        rmDrawRect(HOME_M + 12, y + 15, HOME_COL_W - 24, 2,
-                   GS_SETREG_RGBA(0x2A, 0x30, 0x38, 0x80));
-        {
-            /* Warm at the top of the ranking, cool below, so the order reads
-               before the numbers do. */
-            static const u64 ramp[HOME_TOP_N] = {
-                GS_SETREG_RGBA(0xE8, 0x55, 0x6B, 0x80), GS_SETREG_RGBA(0xE8, 0x9B, 0x45, 0x80),
-                GS_SETREG_RGBA(0x64, 0xC8, 0x78, 0x80), GS_SETREG_RGBA(0x6B, 0x99, 0xE8, 0x80)};
-            rmDrawRect(HOME_M + 12, y + 15, barW, 2, ramp[i]);
-        }
-        y += 26;
-    }
-    if (!homeTopMins[0])
-        fntRenderString(appsFontSmall, HOME_M + 12, 204 + dyB, ALIGN_NONE, 0, 0,
-                        "No sessions recorded yet.",
-                        GS_SETREG_RGBA(0x5C, 0x66, 0x74, 0x80));
+    /* Two destinations rather than a ranking. This column had the only space on
+       the page for something actionable, and a most-played list is something to
+       read at rather than something to press. */
+    {
+        static const char *lbl[2] = {"Library", "Apps"};
+        int bw = (HOME_COL_W - 10) / 2, bh = 46, by = 172;
+        int k;
+        dyB = shelfFloat(90, 2);
+        for (k = 0; k < 2; k++) {
+            int bx = HOME_M + k * (bw + 10);
+            int on = (homeFocus == 2 + k);
+            int lf = on ? 2 : 0;
+            u64 face = on ? GS_SETREG_RGBA(0x26, 0x2C, 0x35, 0x80)
+                          : GS_SETREG_RGBA(0x16, 0x1A, 0x20, 0x80);
+            int tw2 = fntCalcDimensions(appsFontSmall, lbl[k]);
 
-    dyC = homeCard(HOME_M, 306, HOME_COL_W, 108, "SYSTEM", 190);
-    y = 336 + dyC;
+            shelfRound(bx - lf, by + dyB - lf, bw + 2 * lf, bh + 2 * lf, 4, face);
+            if (on) {
+                u64 e = GS_SETREG_RGBA(0xF2, 0xF5, 0xF8,
+                                       0x40 + shelfPulse(3 * FPS) / 4);
+                rmDrawRect(bx - lf + 3, by + dyB - lf, bw + 2 * lf - 6, 2, e);
+                rmDrawRect(bx - lf + 3, by + dyB - lf + bh + 2 * lf - 2,
+                           bw + 2 * lf - 6, 2, e);
+                rmDrawRect(bx - lf, by + dyB - lf + 3, 2, bh + 2 * lf - 6, e);
+                rmDrawRect(bx - lf + bw + 2 * lf - 2, by + dyB - lf + 3, 2,
+                           bh + 2 * lf - 6, e);
+            }
+            /* The rail's own glyph, so the button and the destination it leads
+               to are recognisably the same thing. */
+            if (k == 0)
+                railGrid(bx + bw / 2 - 6, by + dyB + 10,
+                         on ? GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80)
+                            : GS_SETREG_RGBA(0x88, 0x94, 0xA2, 0x80));
+            else
+                railPanel(bx + bw / 2 - 6, by + dyB + 10,
+                          on ? GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80)
+                             : GS_SETREG_RGBA(0x88, 0x94, 0xA2, 0x80));
+            fntRenderString(appsFontSmall, bx + (bw - tw2) / 2, by + dyB + 28,
+                            ALIGN_NONE, 0, 0, lbl[k],
+                            on ? GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80)
+                               : GS_SETREG_RGBA(0x88, 0x94, 0xA2, 0x80));
+        }
+    }
+
+    dyC = homeCard(HOME_M, 236, HOME_COL_W, 178, "SYSTEM", 190);
+    y = 266 + dyC;
     homeFormatTime(t, sizeof(t), homeTotalMinutes);
     snprintf(buf, sizeof(buf), "%d of %d played", homeTotalPlayed, homeTotalTitles);
     fntRenderString(appsFontSmall, HOME_M + 12, y, ALIGN_NONE, 0, 0, buf,
@@ -1751,17 +1813,29 @@ void shelfHandleInputHome(void)
     }
 
     if (getKeyOn(KEY_UP)) {
-        if (homeFocus == 0)
-            homeView = 0;          /* already at the top: go up a panel */
+        if (homeFocus >= 2 || homeFocus == 0)
+            homeView = 0;          /* already at the top of a column */
         else
             homeFocus = 0;
-    } else if (getKeyOn(KEY_DOWN) && total > 1)
+    } else if (getKeyOn(KEY_DOWN) && homeFocus < 2 && total > 1) {
         homeFocus = 1;
-    else if (homeFocus == 1 && getKeyOn(KEY_LEFT) && homeSel > 1)
-        homeSel--;
-    else if (homeFocus == 1 && getKeyOn(KEY_RIGHT)
-             && homeSel < total - 1 && homeSel < HOME_TILES)
-        homeSel++;
+    } else if (getKeyOn(KEY_LEFT)) {
+        /* Left crosses into the button column, then walks it. */
+        if (homeFocus < 2)          homeFocus = 3;
+        else if (homeFocus == 3)    homeFocus = 2;
+        else if (homeFocus == 1 && homeSel > 1) homeSel--;
+    } else if (getKeyOn(KEY_RIGHT)) {
+        if (homeFocus == 2)         homeFocus = 3;
+        else if (homeFocus == 3)    homeFocus = 0;
+        else if (homeFocus == 1 && homeSel < total - 1 && homeSel < HOME_TILES)
+            homeSel++;
+    }
+    else if (homeFocus >= 2 && getKeyOn(KEY_CROSS)) {
+        /* Straight to the page. guiSwitchScreen sets the screen the rail reads
+           for its own marker, so the sidebar follows without being told. */
+        guiSwitchScreen(homeFocus == 2 ? GUI_SCREEN_SHELF_LIBRARY
+                                       : GUI_SCREEN_SHELF_APPS);
+    }
     else if (getKeyOn(KEY_SQUARE)) {
         idx = homeIndexOf(oplRecentStartup(homeFocus == 0 ? 0 : homeSel));
         if (idx >= 0 && menuSelectIndex(idx))
