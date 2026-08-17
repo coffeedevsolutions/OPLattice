@@ -2428,14 +2428,14 @@ function renderShelfHome() {
   R(rx - w - 18, 16, 5, 5, 0x64C878);
   shelfText(rx - w - 8, 12, "NET", 0x64C878, SHELF_FNT_SM);
 
-  // clock card, with the evening tint and the display face
+  // clock card. No tint wash: it was a holdover from the dark dashboard, and on
+  // the schematic sheet it read as a smudge.
   const dyA = card(M, 40, COLW, 122, "CLOCK", 0);
-  gradV(M, 41 + dyA, COLW, 120, 0x48, 0x00, 0x3A2C52);
   shelfText(M + 12, 66 + dyA, "Good evening", 0x6B5A46, SHELF_FNT_SM);
   const BIG = { size: 46, family: SHELF_FNT.family };
   shelfText(M + 10, 86 + dyA, "21", 0x3A2E22, BIG);
   const hw = textWidth("21", BIG);
-  ctx.globalAlpha = (0x38 + pulse / 3) / 128;
+  ctx.globalAlpha = (0x30 + pulse / 4) / 128;
   shelfText(M + 12 + hw, 86 + dyA, ":", 0x3A2E22, BIG);
   ctx.globalAlpha = 1;
   shelfText(M + 14 + hw + textWidth(":", BIG), 86 + dyA, "01", 0x3A2E22, BIG);

@@ -1532,14 +1532,11 @@ static void homeDrawDash(void)
     if (haveClock) {
         const char *greet = hh < 5 ? "Good night" : hh < 12 ? "Good morning"
                           : hh < 18 ? "Good afternoon" : "Good evening";
-        /* A wash tinted by the hour. PSBBN changed character through the day,
-           and it is the cheapest way to stop a static panel reading as dead. */
-        u64 tint = hh < 5  ? GS_SETREG_RGBA(0x2A, 0x2E, 0x5A, 0)
-                 : hh < 12 ? GS_SETREG_RGBA(0x2E, 0x4A, 0x5A, 0)
-                 : hh < 18 ? GS_SETREG_RGBA(0x1E, 0x44, 0x50, 0)
-                           : GS_SETREG_RGBA(0x3A, 0x2C, 0x52, 0);
+        /* No wash. The hour-tinted gradient here was a holdover from the dark
+           dashboard, where it kept a static panel from reading as dead. On the
+           schematic sheet it reads as a smudge instead -- a drawing does not
+           shade its boxes, and the greeting already carries the time of day. */
         int hw;
-        shelfGradV(HOME_M, 41 + dyA, HOME_COL_W, 120, 0x48, 0x00, tint);
         fntRenderString(appsFontSmall, HOME_M + 12, 66 + dyA, ALIGN_NONE, 0, 0, greet,
                         LAND_MUTE);
         /* Hours, colon and minutes drawn separately so the colon can breathe
@@ -1550,7 +1547,7 @@ static void homeDrawDash(void)
                         LAND_TEXT);
         hw = fntCalcDimensions(appsFontBig, buf);
         fntRenderString(appsFontBig, HOME_M + 12 + hw, 86 + dyA, ALIGN_NONE, 0, 0, ":",
-                        GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x38 + shelfPulse(2 * FPS) / 3));
+                        GS_SETREG_RGBA(0x3A, 0x2E, 0x22, 0x30 + shelfPulse(2 * FPS) / 4));
         snprintf(buf, sizeof(buf), "%02d", mm);
         fntRenderString(appsFontBig, HOME_M + 14 + hw + fntCalcDimensions(appsFontBig, ":"),
                         86 + dyA, ALIGN_NONE, 0, 0, buf, LAND_TEXT);
