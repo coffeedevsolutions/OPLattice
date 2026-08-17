@@ -2321,7 +2321,7 @@ const RAIL_W = 28, CONTENT_X = RAIL_W + 14, RAIL_ICON_W = 12;
 // derives LIB_FTR_TEXT -- a 26px bar with a 9px hint row centres at +((26-9)/2).
 const LIBP = { HERO_H: 244, GRID_Y: 256, FTR_H: 26, FTR_Y: 480 - 26,
                FTR_TEXT: (480 - 26) + ((26 - 9) >> 1),
-               ALPHA_Y0: 222, ALPHA_Y1: 428, ALPHA_DX: 22, ALPHA_N: 26 };
+               ALPHA_Y0: 256, ALPHA_Y1: 428, ALPHA_DX: 22, ALPHA_LABELS: 9, ALPHA_N: 9 * 2 - 1 };
 
 /* The alphabet index down the left of the Library grid -- shelf.c's
    libDrawAlphabet. Fixed by construction: drawn from constants and the grid's
@@ -2350,13 +2350,15 @@ function libDrawAlphabetPv(gridX, total, sel, cols) {
   near = Math.max(0, Math.min(LIBP.ALPHA_N - 1, near));
   // A D G J M P S V Z -- every third, with the count spread across the span so
   // both ends land on a label. See LIB_ALPHA_LABELS in shelf.c.
-  const LABELS = 9;
-  const named = new Set(Array.from({ length: LABELS },
-    (_, k) => Math.floor(k * (LIBP.ALPHA_N - 1) / (LABELS - 1))));
+  // Even marks are letters, odd marks are dots -- 17 marks, not 26. At 26 the
+  // pitch came out 6.9 against 9px letters and every label overlapped the dot
+  // below it. See LIB_ALPHA_N in shelf.c.
   for (let i = 0; i < LIBP.ALPHA_N; i++) {
     const col = i === near ? 0x3A2E22 : 0x8A806C, y = libAlphaY(i);
-    if (named.has(i)) shelfText(ax, y, String.fromCharCode(65 + i), col, SHELF_FNT_LBL);
-    else R(ax, y + 3, 2, 3, col);   // flush left with the caps; 2 by 3 is square on screen
+    if (i % 2 === 0) {
+      const c = String.fromCharCode(65 + Math.floor((i / 2) * 25 / (LIBP.ALPHA_LABELS - 1)));
+      shelfText(ax, y, c, col, SHELF_FNT_LBL);
+    } else R(ax, y + 3, 2, 3, col);   // flush left with the caps
   }
   R(lx, my + 3, 9, 2, 0x3A2E22);
 }
@@ -2769,8 +2771,15 @@ function renderShelfLibrary() {
   ctx.save();
   ctx.fillStyle = rgbHex(0xC9BFA6); ctx.fillRect(0, 0, SCREEN_W, SCREEN_H);
 
-  // HERO, not BG: 612 texels for a 612-wide rect, so nothing is stretched.
-  const bg = game.serial ? (gameArt(game.serial, "HERO") || gameArt(game.serial, "BG")) : null;
+  // HERO, not BG: 612 texels for a 612-wide rect, so nothing is stretched. The
+  // fallback has to test the real art map, because gameArt() manufactures a
+  // placeholder when a pattern is missing and a placeholder is always truthy --
+  // so `HERO || BG` could never reach BG. shelf.c falls back the same way.
+  const realArt = (sn, p) => S.art.get(lower(sn + "_" + p));
+  const bg = game.serial
+    ? (realArt(game.serial, "HERO") || realArt(game.serial, "BG")
+       || gameArt(game.serial, "HERO"))
+    : null;
   if (bg) ctx.drawImage(bg, RAIL_W, 0, SCREEN_W - RAIL_W, LIBP.HERO_H);
   else { ctx.fillStyle = rgbHex(0x3A2E22); ctx.fillRect(RAIL_W, 0, SCREEN_W - RAIL_W, LIBP.HERO_H); }
   for (let i = 0; i < 66; i++) {
@@ -2783,6 +2792,11 @@ function renderShelfLibrary() {
   // Bottom-aligned with the same inset it has from the left: CONTENT_X - RAIL_W.
   const heroPad = CONTENT_X - RAIL_W;
   const heroMetaY = LIBP.HERO_H - heroPad - 12, heroNameY = heroMetaY - 11 - 17;
+  // 100x60 declared against a 150x120 canvas -- one rect for every game, so they
+  // are all the same size, and make-logos.py already fitted each source inside
+  // that canvas so none is stretched to reach it.
+  const lgo = game.serial ? realArt(game.serial, "LGO") : null;
+  if (lgo) ctx.drawImage(lgo, CONTENT_X, heroNameY - 68, 75, 60);
   shelfText(CONTENT_X, heroNameY, game.title || "—", 0xF2F5F8, SHELF_FNT);
   const meta = [gameAttr(game, "genre"), gameAttr(game, "release"),
                 gameAttr(game, "developer")].filter(Boolean).join("  ·  ");

@@ -1048,18 +1048,28 @@ void shelfHandleInputApps(void)
 #define LIB_ALPHA_Y0  LIB_GRID_Y    /* top of the scale == top of the first cover */
 #define LIB_ALPHA_Y1  428
 #define LIB_ALPHA_DX  22            /* left of the grid, which moves with aspect */
-#define LIB_ALPHA_N   26
-/* Nine letters named, the rest dots: A D G J M P S V Z. That is every third,
-   except that three does not divide twenty-five, so a plain step lands on Y and
-   never reaches the letter the scale is supposed to run to. Spreading a fixed
-   count across the span instead puts a label on both ends and pays for it with
-   one gap of four at the bottom rather than a missing Z. */
+/* Seventeen marks: nine letters with a single dot between each pair.
+ *
+ * It used to be twenty-six, one slot per letter, with two dots between labels.
+ * That fitted while the scale was 234 tall. The hero grew to 244 and pushed the
+ * grid down, which took the span to 172 -- and 26 marks over 172 is a pitch of
+ * 6.9 against letters that are 9 tall, so every label overlapped the dot below
+ * it. Halving the dots takes the pitch to 10.75, which clears.
+ *
+ * Even marks are labels, odd marks are dots, so the arithmetic stays trivial:
+ * mark m is label m/2 when m is even, and label j is letter j*25/8 -- the same
+ * A D G J M P S V Z as before, since the letters were never the crowded part. */
 #define LIB_ALPHA_LABELS 9
+#define LIB_ALPHA_N   (LIB_ALPHA_LABELS * 2 - 1)
 #define LIB_FTR_TEXT  (LIB_FTR_Y + (LIB_FTR_H - 9) / 2)
 
 static image_cache_t *libCache;
 static image_cache_t *libHeroCache;
 static int *libHeroId, *libHeroUid;
+static image_cache_t *libBgCache;      /* the fallback when HERO is absent */
+static int *libBgId, *libBgUid;
+static image_cache_t *libLogoCache;
+static int *libLogoId, *libLogoUid;
 static int libHeroLast = -1;
 static int *libCacheId, *libCacheUid;
 static item_list_t *libList;          /* what the arrays were sized against */
@@ -1196,24 +1206,41 @@ static int libSync(void)
         free(libCacheUid);
         free(libHeroId);
         free(libHeroUid);
+        free(libLogoId);
+        free(libLogoUid);
+        free(libBgId);
+        free(libBgUid);
         free(libOrder);
-        libCacheId = libCacheUid = libHeroId = libHeroUid = libOrder = NULL;
+        libCacheId = libCacheUid = libHeroId = libHeroUid = NULL;
+        libLogoId = libLogoUid = libBgId = libBgUid = libOrder = NULL;
         if (count > 0) {
             libCacheId = malloc(count * sizeof(int));
             libCacheUid = malloc(count * sizeof(int));
             libHeroId = malloc(count * sizeof(int));
             libHeroUid = malloc(count * sizeof(int));
+            libLogoId = malloc(count * sizeof(int));
+            libLogoUid = malloc(count * sizeof(int));
+            libBgId = malloc(count * sizeof(int));
+            libBgUid = malloc(count * sizeof(int));
             libOrder = malloc(count * sizeof(int));
-            if (libCacheId && libCacheUid && libHeroId && libHeroUid) {
+            if (libCacheId && libCacheUid && libHeroId && libHeroUid &&
+                libLogoId && libLogoUid && libBgId && libBgUid && libOrder) {
                 memset(libCacheId, -1, count * sizeof(int));
                 memset(libCacheUid, -1, count * sizeof(int));
                 memset(libHeroId, -1, count * sizeof(int));
+                memset(libLogoId, -1, count * sizeof(int));
+                memset(libLogoUid, -1, count * sizeof(int));
+                memset(libBgId, -1, count * sizeof(int));
+                memset(libBgUid, -1, count * sizeof(int));
                 memset(libHeroUid, -1, count * sizeof(int));
                 libSortOrder(list, count);
             } else {
                 free(libCacheId); free(libCacheUid);
                 free(libHeroId); free(libHeroUid);
-                free(libOrder); libOrder = NULL;
+                free(libLogoId); free(libLogoUid);
+                free(libBgId); free(libBgUid);
+                free(libOrder);
+                libLogoId = libLogoUid = libBgId = libBgUid = libOrder = NULL;
                 libCacheId = libCacheUid = libHeroId = libHeroUid = NULL;
                 count = 0;
             }
@@ -1227,7 +1254,7 @@ static int libSync(void)
 
     /* One hero at a time, so a cache of two: the selected game's, and room for
        the one being moved to before the old one is dropped. */
-    if (!libHeroCache && count > 0)
+    if (!libHeroCache && count > 0) {
         /* HERO, not BG. BG is 418 texels wide and this rect is 612, so the GS
            was filling the difference with a bilinear stretch -- which is the
            whole of why the heroes looked soft while the covers looked sharp.
@@ -1235,6 +1262,13 @@ static int libSync(void)
            drawn, so it is one resample instead of two plus a hardware stretch.
            Costs 172,032 against BG's 122,880, for one resident hero. */
         libHeroCache = cacheInitCache(1, "ART", 1, "HERO", 2);
+        /* Braces, because this `if` had none and the logo cache was being built
+           unconditionally -- including on the frames where count is 0 and there
+           is nothing to cache for. The compiler caught it; it would have been a
+           leak per call otherwise. */
+        libLogoCache = cacheInitCache(4, "ART", 1, "LGO", 2);
+        libBgCache = cacheInitCache(5, "ART", 1, "BG", 2);
+    }
 
     /* Allocated on first use, so with SHELF UI off nothing is ever built. */
     if (!libCache && count > 0)
@@ -1258,6 +1292,7 @@ static int libSync(void)
  */
 static GSTEXTURE *libHero(int idx)
 {
+    GSTEXTURE *tex;
     char *startup;
     if (!libHeroCache || !libHeroId || !libList || !libList->itemGetStartup)
         return NULL;
@@ -1271,7 +1306,37 @@ static GSTEXTURE *libHero(int idx)
     startup = libList->itemGetStartup(libList, idx);
     if (!startup)
         return NULL;
-    return cacheGetTexture(libHeroCache, libList, &libHeroId[idx], &libHeroUid[idx], startup);
+    tex = cacheGetTexture(libHeroCache, libList, &libHeroId[idx], &libHeroUid[idx], startup);
+    if (tex)
+        return tex;
+
+    /* HERO is the right art for this rect and it is not the art every library
+       has. Part-way through an art pass a game will have BG and not yet HERO,
+       and a blank banner is a worse answer than a soft one: BG is 418 wide
+       against 612 so the GS will stretch it, which is the very thing HERO exists
+       to avoid -- but it is still the picture. Only one of the two is ever
+       resident for a given game, because the first that answers wins and -2 is
+       cacheGetTexture's "there is no such file". */
+    if (libHeroId[idx] != -2 || !libBgCache || !libBgId)
+        return NULL;
+    return cacheGetTexture(libBgCache, libList, &libBgId[idx], &libBgUid[idx], startup);
+}
+
+/* The game's own wordmark. make-logos.py fits every source inside one 150x120
+   canvas and pads the rest with transparency, so a single fixed rect is the
+   right size for all of them and none is stretched to reach it -- which is the
+   whole reason that canvas exists. */
+static GSTEXTURE *libLogo(int idx)
+{
+    char *startup;
+    if (!libLogoCache || !libLogoId || !libList || !libList->itemGetStartup)
+        return NULL;
+    if (libLogoId[idx] == -2 && idx != libHeroLast)
+        libLogoId[idx] = -1;
+    startup = libList->itemGetStartup(libList, idx);
+    if (!startup)
+        return NULL;
+    return cacheGetTexture(libLogoCache, libList, &libLogoId[idx], &libLogoUid[idx], startup);
 }
 
 static GSTEXTURE *libCover(int idx)
@@ -1308,16 +1373,16 @@ static int libAlphaY(int i)
     return LIB_ALPHA_Y0 + i * (LIB_ALPHA_Y1 - LIB_ALPHA_Y0) / (LIB_ALPHA_N - 1);
 }
 
-/* Whether mark i carries its letter. Integer division lands k=0 on A and
-   k=LABELS-1 exactly on Z, which is the whole reason for counting labels rather
-   than stepping letters. */
-static int libAlphaLabelled(int i)
+/* The letter mark i carries, or 0 for a dot. Integer division lands label 0 on
+   A and the last exactly on Z, which is the whole reason for spreading a count
+   across the alphabet rather than stepping through it: three does not divide
+   twenty-five, so a plain step would end on Y and never reach the letter the
+   scale exists to run to. */
+static char libAlphaLetter(int i)
 {
-    int k;
-    for (k = 0; k < LIB_ALPHA_LABELS; k++)
-        if (k * (LIB_ALPHA_N - 1) / (LIB_ALPHA_LABELS - 1) == i)
-            return 1;
-    return 0;
+    if (i & 1)
+        return 0;                       /* odd marks are the dots */
+    return (char)('A' + (i / 2) * 25 / (LIB_ALPHA_LABELS - 1));
 }
 
 static void libDrawAlphabet(int gridX, int total)
@@ -1357,9 +1422,10 @@ static void libDrawAlphabet(int gridX, int total)
     for (i = 0; i < LIB_ALPHA_N; i++) {
         u64 col = (i == near) ? LAND_TEXT : LAND_DIM;
         int y = libAlphaY(i);
-        if (libAlphaLabelled(i)) {
+        char letter = libAlphaLetter(i);
+        if (letter) {
             char c[2];
-            c[0] = (char)('A' + i);
+            c[0] = letter;
             c[1] = '\0';
             fntRenderString(appsFontLabel, ax, y, ALIGN_NONE, 0, 0, c, col);
         } else {
@@ -1425,6 +1491,17 @@ void shelfRenderLibrary(void)
         /* Bottom-aligned, with the same 14 the text is inset from the container's
            left edge (CONTENT_X - SHELF_RAIL_W). The metadata line is the one that
            has to land on it, so it is placed first and the title hangs above. */
+        /* Declared 100x60 against a 150x120 canvas: SCALING_RATIO draws three
+           quarters of the declared width, so 75x60 texels come off a 150x120
+           source -- a downscale, never a stretch -- and it displays 100x60,
+           which is the canvas's own 200x120 proportion halved. Every game gets
+           the same rect, so they are all the same size on screen. */
+        {
+            GSTEXTURE *logo = libLogo(libAt(libSel));
+            if (logo)
+                rmDrawPixmap(logo, CONTENT_X, LIB_HERO_TEXT_Y - 68, ALIGN_NONE,
+                             100, 60, SCALING_RATIO, gDefaultCol);
+        }
         if (name)
             fntRenderString(FNT_DEFAULT, CONTENT_X, LIB_HERO_TEXT_Y, ALIGN_NONE, 0, 0, name,
                             GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80));

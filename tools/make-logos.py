@@ -133,7 +133,12 @@ def box_scale(sw, sh, rows, dw, dh):
 
 def mean_luma(canvas, w, h):
     """Mean ink luminance, weighted by coverage so transparent padding does not
-    drag a bright figure down."""
+    drag a bright figure down.
+
+    Returns None when there is no ink at all. A placeholder logo is entirely
+    transparent, and averaging that gives 0.0 -- indistinguishable from a black
+    logo, which would plate the page white and leave a bright empty slab where
+    the art should be. "No ink" is a third case, not the darkest one."""
     lum = alpha = 0.0
     for y in range(h):
         row = canvas[y]
@@ -144,7 +149,7 @@ def mean_luma(canvas, w, h):
             f = a / 255
             lum += (0.2126*r + 0.7152*g + 0.0722*b) * f
             alpha += f
-    return (lum / alpha) if alpha else 0.0
+    return (lum / alpha) if alpha else None
 
 
 def write_panel(path, dark_logo):
@@ -192,12 +197,15 @@ for fn in sorted(os.listdir(art)):
         canvas[oy + y][ox * 4:(ox + tw) * 4] = small[y]
     write_png(os.path.join(out, fn), CANVAS_W, CANVAS_H, canvas)
     luma = mean_luma(canvas, CANVAS_W, CANVAS_H)
-    dark = luma < PLATE_LUMA
+    # No ink means there is nothing for a plate to help read, so leave the page
+    # colour: the hero shows through and the slot reads as empty on purpose.
+    dark = luma is not None and luma < PLATE_LUMA
     write_panel(os.path.join(out, fn.replace("_LGO.png", "_PANEL.png")), dark)
     n += 1
     if dark:
         plated += 1
-    print(f"  {fn[:-8]:<14} luma {luma:5.1f}  panel {'WHITE' if dark else 'black'}")
+    shown = "blank" if luma is None else f"{luma:5.1f}"
+    print(f"  {fn[:-8]:<14} luma {shown:>5}  panel {'WHITE' if dark else 'black'}")
 
 # The fade. Transparent at the left so the art shows through, fully background
 # at the right so the edge of the BG dissolves rather than stopping.

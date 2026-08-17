@@ -243,21 +243,26 @@ while IFS=$'\t' read -r gid; do
   line="  $gid" ; gaps=""
 
   # --- COV, box art -----------------------------------------------------------
+  # PNG24:/PNG32: on every write, placeholder or not. A flat fill compresses to
+  # a one-entry palette at 1 bit per pixel, which is a valid PNG that the hand
+  # written readers in make-logos.py and make-playbtn.py refuse -- they support
+  # 8-bit only. Pinning the format costs a few KB on three files and removes a
+  # whole category of "works until the art is missing" failure.
   if src=$(findsrc "$slug" ""); then
-    "$IM" "$src" -resize "${COV_W}x${COV_H}" -strip "$OUT/${gid}_COV.png"
+    "$IM" "$src" -resize "${COV_W}x${COV_H}" -strip "PNG24:$OUT/${gid}_COV.png"
     line+="  COV" ; real=$((real+1))
   else
-    "$IM" -size "${COV_W}x${COV_H}" "xc:$BROWN" -strip "$OUT/${gid}_COV.png"
+    "$IM" -size "${COV_W}x${COV_H}" "xc:$BROWN" -strip "PNG24:$OUT/${gid}_COV.png"
     line+="  cov*" ; gaps+="COV "
   fi
 
   # --- BG, wide key art -------------------------------------------------------
   if src=$(findsrc "$slug" "-BG"); then
     "$IM" "$src" -resize "${BG_W}x${BG_H}^" -gravity center -extent "${BG_W}x${BG_H}" \
-      -strip "$OUT/${gid}_BG.png"
+      -strip "PNG24:$OUT/${gid}_BG.png"
     line+="  BG" ; real=$((real+1))
   else
-    "$IM" -size "${BG_W}x${BG_H}" "xc:$BROWN" -strip "$OUT/${gid}_BG.png"
+    "$IM" -size "${BG_W}x${BG_H}" "xc:$BROWN" -strip "PNG24:$OUT/${gid}_BG.png"
     line+="  bg*" ; gaps+="BG "
   fi
 
@@ -265,11 +270,17 @@ while IFS=$'\t' read -r gid; do
   # The placeholder is fully transparent rather than brown: the logo is drawn
   # over the hero, so a filled rect there would be a brown slab across the art,
   # whereas nothing at all just leaves the hero showing.
+  #
+  # PNG32: is load-bearing. Left to itself ImageMagick notices that an all-
+  # transparent image needs no colour and writes 1-bit greyscale (IHDR colour
+  # type 0, depth 1), which is a perfectly good PNG that make-logos.py's reader
+  # rejects outright -- it handles 8-bit only. Forcing 32-bit RGBA keeps the
+  # placeholder in the one format every tool downstream can open.
   if src=$(findsrc "$slug" "-LG"); then
-    "$IM" "$src" -trim +repage -resize "${LGO_W}x" -strip "$OUT/${gid}_LGO.png"
+    "$IM" "$src" -trim +repage -resize "${LGO_W}x" -strip "PNG32:$OUT/${gid}_LGO.png"
     line+="  LGO" ; real=$((real+1))
   else
-    "$IM" -size "${LGO_W}x${LGO_H}" xc:none -strip "$OUT/${gid}_LGO.png"
+    "$IM" -size "${LGO_W}x${LGO_H}" xc:none -strip "PNG32:$OUT/${gid}_LGO.png"
     line+="  lgo*" ; gaps+="LGO "
   fi
 
@@ -322,22 +333,26 @@ if [ -s "$work/placeholders.txt" ]; then
   echo "  To fix one: download <slug>-gameArt.png / -BG.png / -LG.png into"
   echo "  $SRC, add '<slug>:<SERIAL>' to $ARTMAP if it is not there, re-run."
   echo
-  # make-logos.py weights luminance by alpha and returns 0.0 when a logo is
-  # entirely transparent, which reads as "dark logo" and plates the info page
-  # WHITE behind it -- a bright empty slab. Worth knowing before it surprises
-  # you on the console; the placeholder itself is correct.
+  # A blank LGO has no ink to measure. make-logos.py returns None for that case
+  # rather than 0.0 and leaves the panel at the page colour, so these read as
+  # deliberately empty instead of a bright white slab. Say so, because the
+  # alternative is silently trusting that the guard is still there.
   if grep -q 'LGO' "$work/placeholders.txt"; then
-    echo "  NOTE  the blank LGO placeholders measure luma 0.0, so make-logos.py"
-    echo "        will plate those games' info pages WHITE. Skip them, or give"
-    echo "        make-logos.py a fully-transparent guard, before staging."
+    echo "  NOTE  those blank LGOs carry no ink, so make-logos.py leaves their"
+    echo "        info-page panel at the page colour rather than plating white."
   fi
 else
   echo "  nothing -- every disc has real COV, BG and LGO"
 fi
 
 echo
-echo "next:  tools/make-bg.py            rebuild BG at the theme's 557x180"
-echo "       tools/make-logos.py         normalise LGO onto one canvas, write PANEL"
-echo "       tools/stage-device.sh       build the device tree"
+# Order is not a preference. stage-device.sh opens with rm -rf on its output
+# dir, and the three make-* tools write into that same dir, so running it after
+# any of them silently deletes their work.
+echo "next, in this order:"
+echo "  tools/stage-device.sh     wipes and builds _deploy: COV 100x150, COVHD 120x180"
+echo "  tools/make-bg.py          re-cuts BG to 418x180 from the Downloads originals"
+echo "  tools/make-logos.py       LGO onto one 150x120 canvas, writes PANEL"
+echo "  tools/make-playbtn.py     BTN, sampled per game"
 
 [ "$incomplete" -eq 0 ] || exit 1
