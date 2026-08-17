@@ -186,21 +186,36 @@ static void shelfGradV(int x, int y, int w, int h, int a0, int a1, u64 rgb)
                    rgb | ((u64)(a0 + (a1 - a0) * i / (n - 1)) << 24));
 }
 
+/* The sheet's palette. Declared here rather than with the landing page, which
+   is where it started: the rail, the dashboard and the landing are all one sheet
+   now, and a colour used by three sections does not belong to any of them. */
+#define LAND_BG    GS_SETREG_RGBA(0xC9, 0xBF, 0xA6, 0x80)
+#define LAND_INK   GS_SETREG_RGBA(0x3A, 0x2E, 0x22, 0x80)
+#define LAND_DIM   GS_SETREG_RGBA(0x3A, 0x2E, 0x22, 0x38)
+#define LAND_FAINT GS_SETREG_RGBA(0x3A, 0x2E, 0x22, 0x1C)
+#define LAND_RULE  GS_SETREG_RGBA(0x3A, 0x2E, 0x22, 0x4E)
+#define LAND_TEXT  GS_SETREG_RGBA(0x3A, 0x2E, 0x22, 0x80)
+#define LAND_MUTE  GS_SETREG_RGBA(0x3A, 0x2E, 0x22, 0x54)
+
 static void shelfDrawRail(int active)
 {
     static const int iconY[4] = {66, 102, 138, 174};
-    u64 on  = GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80);
-    u64 off = GS_SETREG_RGBA(0x5C, 0x66, 0x74, 0x80);
+    u64 on  = LAND_INK;
+    u64 off = LAND_MUTE;
     int i;
 
-    rmDrawRect(0, 0, SHELF_RAIL_W, 480, GS_SETREG_RGBA(0x14, 0x17, 0x1C, 0x80));
-    rmDrawRect(SHELF_RAIL_W, 0, 1, 480, GS_SETREG_RGBA(0x2A, 0x30, 0x38, 0x80));
+    /* The same ground as everything else, and one rule at its right edge. The
+       rail used to be a dark slab, which made it a separate object sitting
+       beside the page; on the same tan it is a margin of the sheet, and the one
+       line is all that is needed to say where the margin ends. */
+    rmDrawRect(0, 0, SHELF_RAIL_W, 480, LAND_BG);
+    rmDrawRect(SHELF_RAIL_W, 0, 1, 480, LAND_RULE);
 
-    /* Brand mark. A filled slab with the letter on it, because a lone glyph at
-       this size reads as debris rather than as a mark. */
-    rmDrawRect(9, 14, 17, 17, GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80));
-    fntRenderString(appsFontSmall, 14, 16, ALIGN_NONE, 0, 0, "S",
-                    GS_SETREG_RGBA(0x14, 0x17, 0x1C, 0x80));
+    /* Brand mark. A filled slab with the letter knocked out of it, because a
+       lone glyph at this size reads as debris rather than as a mark. Ink on tan
+       now rather than white on near-black, so the letter is the tan. */
+    rmDrawRect(9, 14, 17, 17, LAND_INK);
+    fntRenderString(appsFontSmall, 14, 16, ALIGN_NONE, 0, 0, "S", LAND_BG);
 
     for (i = 0; i < 4; i++) {
         u64 c = (i == active) ? on : off;
@@ -214,9 +229,11 @@ static void shelfDrawRail(int active)
         }
     }
 
+    /* Green stays green -- it means the network came up, and that is worth more
+       than palette consistency. The dead state joins the sheet. */
     rmDrawRect(15, 440, 5, 5,
                (gNetworkStartup == 0) ? GS_SETREG_RGBA(0x64, 0xC8, 0x78, 0x80)
-                                      : GS_SETREG_RGBA(0x3C, 0x44, 0x4E, 0x80));
+                                      : LAND_DIM);
 }
 
 static int frame;          /* 0..SHELF_FRAMES, position within the slide */
@@ -363,38 +380,37 @@ void shelfDraw(void)
     /* Dim what is behind, in step with the slide. */
     rmDrawRect(0, 0, 640, 480, GS_SETREG_RGBA(0x00, 0x00, 0x00, (int)(t * 0x50)));
 
-    rmDrawRect(x, 0, SHELF_WIDTH, 480, GS_SETREG_RGBA(0x14, 0x17, 0x1C, 0x80));
+    rmDrawRect(x, 0, SHELF_WIDTH, 480, LAND_BG);
     /* A 1px sprite, not a line. rmDrawLine is the only LINE primitive the panel
      * would issue, and shelf.c had the only *vertical* one in the whole tree --
      * everything else in OPL draws horizontal rules. Since the white flash
      * appears exactly when the panel opens, the untrodden primitive is the first
      * thing to remove; a 1px sprite is visually identical and is the same
      * primitive as everything else here. */
-    rmDrawRect(x + SHELF_WIDTH, 0, 1, 480, GS_SETREG_RGBA(0x3C, 0x44, 0x4E, 0x80));
+    rmDrawRect(x + SHELF_WIDTH, 0, 1, 480, LAND_RULE);
 
-    fntRenderString(FNT_DEFAULT, x + 24, 28, ALIGN_NONE, 0, 0, "SHELF",
-                    GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80));
+    fntRenderString(appsFontHead, x + 24, 28, ALIGN_NONE, 0, 0, "SHELF", LAND_INK);
 
     /* Read at draw time, but both are values OPL already holds -- no queries. */
     {
         const char *net = (gNetworkStartup == 0) ? "Online" : "Offline";
 
-        rmDrawRect(x + 16, 438, SHELF_WIDTH - 32, 1,
-                   GS_SETREG_RGBA(0x2A, 0x30, 0x38, 0x80));
-        fntRenderString(FNT_DEFAULT, x + 24, 450, ALIGN_NONE, 0, 0, net,
-                        GS_SETREG_RGBA(0x5C, 0x66, 0x74, 0x80));
+        rmDrawRect(x + 16, 438, SHELF_WIDTH - 32, 1, LAND_RULE);
+        fntRenderString(appsFontSmall, x + 24, 450, ALIGN_NONE, 0, 0, net, LAND_MUTE);
     }
 
     for (i = 0; i < (int)SHELF_ITEMS; i++) {
         int iy = 84 + i * 34;
 
-        if (i == selected)
-            rmDrawRect(x, iy - 8, SHELF_WIDTH, 30,
-                       GS_SETREG_RGBA(0x22, 0x27, 0x2F, 0x80));
+        /* Selection is a wash rather than a slab: on tan a filled bar would be
+           darker than the ink it carries, and the row would read as inverted. */
+        if (i == selected) {
+            rmDrawRect(x, iy - 8, SHELF_WIDTH, 30, LAND_FAINT);
+            rmDrawRect(x, iy - 8, 3, 30, LAND_INK);
+        }
 
-        fntRenderString(FNT_DEFAULT, x + 34, iy, ALIGN_NONE, 0, 0, items[i],
-                        i == selected ? GS_SETREG_RGBA(0xFF, 0xFF, 0xFF, 0x80)
-                                      : GS_SETREG_RGBA(0x88, 0x94, 0xA2, 0x80));
+        fntRenderString(appsFontSmall, x + 34, iy, ALIGN_NONE, 0, 0, items[i],
+                        i == selected ? LAND_INK : LAND_MUTE);
     }
 }
 
@@ -1213,14 +1229,6 @@ static int homeScrollT;
  * and the stream on the right is this build's actual configuration rather than
  * invented telemetry, which is the whole reason it is worth showing.
  */
-#define LAND_BG    GS_SETREG_RGBA(0xC9, 0xBF, 0xA6, 0x80)
-#define LAND_INK   GS_SETREG_RGBA(0x3A, 0x2E, 0x22, 0x80)
-#define LAND_DIM   GS_SETREG_RGBA(0x3A, 0x2E, 0x22, 0x38)
-#define LAND_FAINT GS_SETREG_RGBA(0x3A, 0x2E, 0x22, 0x1C)
-#define LAND_RULE  GS_SETREG_RGBA(0x3A, 0x2E, 0x22, 0x4E)
-#define LAND_TEXT  GS_SETREG_RGBA(0x3A, 0x2E, 0x22, 0x80)
-#define LAND_MUTE  GS_SETREG_RGBA(0x3A, 0x2E, 0x22, 0x54)
-
 /** A 45-degree run, as a staircase. There is no diagonal primitive; at one pixel
  *  per step the stair is the line. `dir` picks the quadrant. */
 static void shelfDiag(int x, int y, int len, int dx, int dy, u64 col)

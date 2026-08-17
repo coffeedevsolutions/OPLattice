@@ -2305,12 +2305,17 @@ const LIBP = { HERO_H: 196, GRID_Y: 240, FTR_Y: 450, FTR_TEXT: 454 };
 /* shelf.c's collapsed rail: brand mark, four destinations, link state. Drawn
    from rectangles in both places, because the shelf pages load no art. */
 function shelfRailPv(active) {
-  const on = 0xF2F5F8, off = 0x5C6674, iconY = [66, 102, 138, 174];
+  // Same tan as the rest of the sheet, and one rule at the right edge. See the
+  // note in shelf.c's shelfDrawRail.
+  // LAND_MUTE and LAND_RULE composited over LAND_BG: the console blends these at
+  // GS alpha 0x54 and 0x4E against tan, and eyeballing the result is how the
+  // previewer starts lying about contrast.
+  const on = 0x3A2E22, off = 0x6B604F, iconY = [66, 102, 138, 174];
   const R = (x, y, w, h, c) => { ctx.fillStyle = rgbHex(c); ctx.fillRect(x, y, w, h); };
-  R(0, 0, RAIL_W, SCREEN_H, 0x14171C);
-  R(RAIL_W, 0, 1, SCREEN_H, 0x2A3038);
-  R(9, 14, 17, 17, 0xF2F5F8);
-  shelfText(14, 16, "S", 0x14171C, SHELF_FNT_SM);
+  R(0, 0, RAIL_W, SCREEN_H, 0xC9BFA6);
+  R(RAIL_W, 0, 1, SCREEN_H, 0x726756);
+  R(9, 14, 17, 17, 0x3A2E22);
+  shelfText(14, 16, "S", 0xC9BFA6, SHELF_FNT_SM);
   iconY.forEach((y, i) => {
     const c = i === active ? on : off;
     if (i === active) R(0, y - 4, 3, 21, on);
@@ -2319,14 +2324,21 @@ function shelfRailPv(active) {
     else if (i === 2) { R(11, y, 13, 2, c); R(11, y + 11, 13, 2, c); R(11, y, 2, 13, c); R(22, y, 2, 13, c); R(16, y + 2, 2, 9, c); }
     else { R(14, y + 1, 7, 2, c); R(14, y + 10, 7, 2, c); R(12, y + 3, 2, 7, c); R(21, y + 3, 2, 7, c); R(16, y + 5, 3, 3, c); }
   });
-  R(15, 440, 5, 5, 0x64C878);
+  R(15, 440, 5, 5, 0x64C878);   // green means the link came up; it stays green
 }
 
+/* shelf.c's LIB_* constants, and nothing else.
+ *
+ * This used to read the geometry off the theme's ItemsList and fall back to
+ * these numbers -- but the Library page is hardcoded and never consults gTheme,
+ * so any theme with a grid made the mock disagree with the console. With OPL's
+ * injected default list it went further than disagreeing: one column of 19px
+ * cells gives artH = ch - gap - lh = -4, and every cover drew as a streak.
+ *
+ * If shelf.c's constants change, change them here. They are duplicated in the C
+ * too, for the same reason, and the comment there says so. */
 function libGridConst() {
-  const il = (S.theme?.chains?.main || []).find(e => e.extended && e.extended.columns);
-  const x = (il && il.extended) || {};
-  return { cols: x.columns || 6, cw: x.cellWidth || 88, ch: x.cellHeight || 136,
-           gap: x.gap || 14, lh: x.labelHeight || 11, frame: x.frameSize || 3 };
+  return { cols: 6, cw: 88, ch: 136, gap: 14, lh: 11, frame: 3 };
 }
 
 /** shelf.c's shelfHint: a drawn face button and a label. Returns width used. */
