@@ -983,7 +983,13 @@ function validateItemsList(doc, theme, list, chainKey, diags) {
  */
 function validateTheme(doc, theme, assets) {
   const diags = [];
-  const have = assets ? assets.names : null;      // Set of lowercase file names present
+  /* Theme files and game art are two different asset sets, and only the first
+     one can answer "is backdrop.png present". The caller enables validation when
+     *either* set is loaded, so loading art alone used to make every theme
+     `default=` report as missing against an empty file list -- a false error on
+     files that were sitting in the folder the whole time. An empty name set
+     means "no theme folder opened", not "opened and empty". */
+  const have = (assets && assets.names.size) ? assets.names : null;
 
   const allElements = [];
   for (const k of Object.keys(theme.chains)) allElements.push(...theme.chains[k]);

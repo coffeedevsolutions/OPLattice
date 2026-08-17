@@ -315,7 +315,7 @@ index 4330f1e..88a442e 100644
      compatmask = sbPrepare(game, configSet, size_smb_cdvdman_irx, smb_cdvdman_irx, &i);
  
 diff --git a/src/gui.c b/src/gui.c
-index 5393a55..53c5993 100644
+index 5393a55..f71902a 100644
 --- a/src/gui.c
 +++ b/src/gui.c
 @@ -16,6 +16,7 @@
@@ -332,7 +332,7 @@ index 5393a55..53c5993 100644
                                                  {&menuHandleInputGameMenu, &menuRenderGameMenu, 1},
 -                                                {&menuHandleInputAppMenu, &menuRenderAppMenu, 1}};
 +                                                {&menuHandleInputAppMenu, &menuRenderAppMenu, 1},
-+                                                {&shelfHandleInputPage, &shelfRenderHome, 1},
++                                                {&shelfHandleInputHome, &shelfRenderHome, 1},
 +                                                {&shelfHandleInputLibrary, &shelfRenderLibrary, 1},
 +                                                {&shelfHandleInputApps, &shelfRenderApps, 1}};
  

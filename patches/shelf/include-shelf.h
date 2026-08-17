@@ -51,6 +51,7 @@ void shelfRenderApps(void);
 void shelfHandleInputPage(void);
 void shelfHandleInputApps(void);
 void shelfHandleInputLibrary(void);
+void shelfHandleInputHome(void);
 
 /** Allocate the small font slot. Call once at startup, after fntInit and
  *  never from a render path -- fntLoadFile builds a FreeType face and takes
