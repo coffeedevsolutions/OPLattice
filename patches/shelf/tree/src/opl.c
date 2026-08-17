@@ -2351,6 +2351,21 @@ int main(int argc, char *argv[])
     // queue deffered init which shuts down the intro screen later
     ioPutRequest(IO_CUSTOM_SIMPLEACTION, &deferredInit);
 
+    /* Open on Home rather than on the device list.
+     *
+     * Only when the shell is actually enabled: with SHELF UI off its pages draw
+     * nothing, and booting into a blank screen with no way out is the one
+     * failure this must not have. The classic list is still there -- Settings in
+     * the panel goes to it -- so nothing becomes unreachable, it just stops
+     * being the thing you land on.
+     *
+     * Home is safe this early. It reads the recent list out of conf_last.cfg,
+     * which opl.c has already loaded, and everything else on it comes from
+     * menuGetActiveList(), which it null-checks because a device may not be
+     * chosen yet. */
+    if (gEnableShelfUI)
+        guiSetStartScreen(GUI_SCREEN_SHELF_HOME);
+
     guiIntroLoop();
     guiMainLoop();
 

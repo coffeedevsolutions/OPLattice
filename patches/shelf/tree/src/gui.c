@@ -145,6 +145,21 @@ void guiReloadScreenExtents()
     rmGetScreenExtents(&screenWidth, &screenHeight);
 }
 
+/* Which screen the main loop opens on.
+ *
+ * screenHandler's initialiser is a static, so it is fixed long before the config
+ * that would decide otherwise has been read. OPL therefore always opened on
+ * GUI_SCREEN_MENU -- the device list -- and only reached the themed list once
+ * something was picked there, which is the "settings screen, then the theme"
+ * anyone booting this sees. This lets opl.c say otherwise once it knows enough
+ * to be right. */
+void guiSetStartScreen(int screen)
+{
+    if (screen >= 0 &&
+        screen < (int)(sizeof(screenHandlers) / sizeof(screenHandlers[0])))
+        screenHandler = &screenHandlers[screen];
+}
+
 void guiInit(void)
 {
     guiFrameId = 0;

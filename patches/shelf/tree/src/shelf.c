@@ -22,6 +22,7 @@
 #include "include/appsupport.h"
 #include "include/menusys.h"
 #include "include/texcache.h"
+#include "include/textures.h"
 #include "include/config.h"
 #include "include/ioman.h"
 #include "include/gui.h"
@@ -222,6 +223,52 @@ static void shelfGradV(int x, int y, int w, int h, int a0, int a1, u64 rgb)
 #define LAND_TEXT  GS_SETREG_RGBA(0x3A, 0x2E, 0x22, 0x80)
 #define LAND_MUTE  GS_SETREG_RGBA(0x3A, 0x2E, 0x22, 0x54)
 
+
+/* The mark at the top of the rail, from the theme folder.
+ *
+ * Art, where everything else in this shell is primitives. That was the right
+ * call for a house and a grid of squares, whose every edge is axis-aligned; it
+ * is the wrong call for a mark with diagonals in it. Drawn by hand the
+ * PlayStation logo distorted differently along its own curves, because a
+ * one-pixel diagonal cannot be corrected for anamorphic the way a rectangle can.
+ *
+ * The file is 18 by 24 texels and drawn declared 24 by 24 with SCALING_RATIO,
+ * which multiplies declared width by three quarters -- so it is drawn 18 wide
+ * and the display stretches that back to 24. Texel for texel, no resampling. The
+ * file is pre-squashed to suit, which is why it looks narrow on disk.
+ *
+ * White with the logo as its alpha, tinted at draw time, so the mark follows the
+ * sheet's ink instead of the file baking a colour in.
+ *
+ * Reloaded when the theme changes, and asked for exactly once per theme: a
+ * missing file sets state to -1 and is never retried, because retrying a failed
+ * open every frame is how the font loader used to stall the renderer. */
+static GSTEXTURE psLogo;
+static int psLogoState;          /* 0 untried, 1 loaded, -1 absent */
+static int psLogoTheme = -1;
+
+static GSTEXTURE *shelfLogo(void)
+{
+    int themeId = thmGetGuiValue();
+
+    if (themeId != psLogoTheme) {
+        psLogoTheme = themeId;
+        psLogoState = 0;
+    }
+    if (psLogoState == 0) {
+        char path[192];
+        char *dir = thmGetFilePath(themeId);
+
+        psLogoState = -1;
+        if (dir) {
+            snprintf(path, sizeof(path), "%spslogo", dir);
+            if (texDiscoverLoad(&psLogo, path, -1) == 0)
+                psLogoState = 1;
+        }
+    }
+    return (psLogoState == 1) ? &psLogo : NULL;
+}
+
 static void shelfDrawRail(int active)
 {
     static const int iconY[4] = {64, 100, 136, 172};
@@ -242,32 +289,11 @@ static void shelfDrawRail(int active)
     rmDrawRect(0, 0, SHELF_RAIL_W, 480, LAND_BG);
     rmDrawRect(SHELF_RAIL_W, 0, 1, 480, LAND_RULE);
 
-    /* The button that opens this, drawn as the button. An "S" was a brand mark
-       for a shell nobody has a name for, and it answered a question nobody was
-       asking; the rail's one genuinely unguessable fact is which stick opens it.
-       18 by 24, because 18 across renders as wide as 24 down and the ring has to
-       read as round -- an ellipse here would look like a mistake rather than a
-       button. The table is a real ellipse sampled per scanline, not an octagon;
-       at this size the difference shows. */
     {
-        static const unsigned char l3ring[24][2] = {
-            {5, 2}, {4, 3}, {3, 3}, {2, 3}, {1, 3}, {1, 2},
-            {1, 1}, {0, 2}, {0, 2}, {0, 1}, {0, 1}, {0, 1},
-            {0, 1}, {0, 1}, {0, 1}, {0, 2}, {0, 2}, {1, 1},
-            {1, 2}, {1, 3}, {2, 3}, {3, 3}, {4, 3}, {5, 2}
-        };
-        const int bw = 18, bh = 24, by = 12;
-        int bx = (SHELF_RAIL_W - bw) / 2;
-        int tw = fntCalcDimensions(appsFontSmall, "L3");
-        int i;
-
-        for (i = 0; i < bh; i++) {
-            int lx = l3ring[i][0], run = l3ring[i][1];
-            rmDrawRect(bx + lx, by + i, run, 1, LAND_INK);
-            rmDrawRect(bx + bw - lx - run, by + i, run, 1, LAND_INK);
-        }
-        fntRenderString(appsFontSmall, bx + (bw - tw) / 2, by + (bh - 12) / 2,
-                        ALIGN_NONE, 0, 0, "L3", LAND_INK);
+        GSTEXTURE *logo = shelfLogo();
+        if (logo)
+            rmDrawPixmap(logo, (SHELF_RAIL_W - 18) / 2, 12, ALIGN_NONE, 24, 24,
+                         SCALING_RATIO, LAND_INK);
     }
 
     {
@@ -285,13 +311,32 @@ static void shelfDrawRail(int active)
         }
     }
 
-    /* Green stays green -- it means the network came up, and that is worth more
-       than palette consistency. The dead state joins the sheet. */
+    /* The button that opens the panel, where the link dot used to sit. The dot
+       reported something nobody was deciding anything on, and it reported it in
+       the one place a first-time user looks to find out what to press. 18 by 24,
+       because 18 across renders as wide as 24 down and a button drawn as an
+       ellipse reads as a mistake rather than a control. The ring is a real
+       ellipse sampled per scanline, not the octagon the footer marks use; at 24
+       pixels that difference is visible. */
     {
-        int dw = 3;                 /* 3 by 4 is a square on screen */
-        rmDrawRect((SHELF_RAIL_W - dw) / 2, 440, dw, 4,
-                   (gNetworkStartup == 0) ? GS_SETREG_RGBA(0x64, 0xC8, 0x78, 0x80)
-                                          : LAND_DIM);
+        static const unsigned char l3ring[24][2] = {
+            {5, 2}, {4, 3}, {3, 3}, {2, 3}, {1, 3}, {1, 2},
+            {1, 1}, {0, 2}, {0, 2}, {0, 1}, {0, 1}, {0, 1},
+            {0, 1}, {0, 1}, {0, 1}, {0, 2}, {0, 2}, {1, 1},
+            {1, 2}, {1, 3}, {2, 3}, {3, 3}, {4, 3}, {5, 2}
+        };
+        const int bw = 18, bh = 24, by = 424;
+        int bx = (SHELF_RAIL_W - bw) / 2;
+        int tw = fntCalcDimensions(appsFontSmall, "L3");
+        int k;
+
+        for (k = 0; k < bh; k++) {
+            int lx = l3ring[k][0], run = l3ring[k][1];
+            rmDrawRect(bx + lx, by + k, run, 1, LAND_INK);
+            rmDrawRect(bx + bw - lx - run, by + k, run, 1, LAND_INK);
+        }
+        fntRenderString(appsFontSmall, bx + (bw - tw) / 2, by + (bh - 12) / 2,
+                        ALIGN_NONE, 0, 0, "L3", LAND_INK);
     }
     }
 }
@@ -504,12 +549,9 @@ void shelfHandleInputPage(void)
         shelfHandleInput();
         return;
     }
-    /* No left edge on a page that has no cursor: L3 only. */
-    if (shelfTrigger(0))
-        return;
-
-    if (getKeyOn(gSelectButton == KEY_CIRCLE ? KEY_CROSS : KEY_CIRCLE))
-        guiSwitchScreen(GUI_SCREEN_MAIN);
+    /* No left edge on a page that has no cursor: L3 only. And no Back -- see the
+       note on the three real pages. */
+    shelfTrigger(0);
 }
 
 /* ------------------------------------------------------------------ Apps page
@@ -814,8 +856,9 @@ void shelfRenderApps(void)
     rmDrawRect(APPS_MARGIN, 438, 640 - APPS_MARGIN - 24, 1, LAND_RULE);
     {
         int hx = APPS_MARGIN;
-        hx += shelfHint(hx, FTR_TEXT_Y, 0, "Launch");
-        shelfHint(hx, FTR_TEXT_Y, 1, "Back");
+        /* No Back hint, because there is no Back. A footer that advertises a
+           button which does nothing is worse than a footer with one fewer. */
+        shelfHint(hx, FTR_TEXT_Y, 0, "Launch");
     }
     /* The acceptance test made visible. Deliberately labelled with a tilde:
        this counts what was asked for this frame and cannot see gsKit's
@@ -858,10 +901,12 @@ void shelfHandleInputApps(void)
         return;
 
 
-    if (getKeyOn(KEY_CIRCLE)) {
-        guiSwitchScreen(GUI_SCREEN_MAIN);
-        return;
-    }
+    /* No Back. Home, Library and Apps are top-level views, not somewhere you
+       arrived from -- there is nothing above them to return to, and a Back that
+       drops you onto the classic list makes the shell feel like a detour off it
+       rather than the thing you booted into. L3 opens the panel; the panel is
+       the whole of the navigation. Details and Settings keep theirs, because
+       those you genuinely did arrive at from somewhere. */
     if (total <= 0)
         return;
 
@@ -1328,8 +1373,7 @@ void shelfRenderLibrary(void)
     {
         int hx = CONTENT_X, w, rx = 605;
         hx += shelfHint(hx, LIB_FTR_TEXT, 0, "Play");
-        hx += shelfHint(hx, LIB_FTR_TEXT, 2, "Details");
-        shelfHint(hx, LIB_FTR_TEXT, 1, "Back");
+        shelfHint(hx, LIB_FTR_TEXT, 2, "Details");
         if (total > 0) {
             snprintf(buf, sizeof(buf), "%d of %d", libSel + 1, total);
             w = fntCalcDimensions(appsFontSmall, buf);
@@ -1360,10 +1404,12 @@ void shelfHandleInputLibrary(void)
         return;
 
 
-    if (getKeyOn(KEY_CIRCLE)) {
-        guiSwitchScreen(GUI_SCREEN_MAIN);
-        return;
-    }
+    /* No Back. Home, Library and Apps are top-level views, not somewhere you
+       arrived from -- there is nothing above them to return to, and a Back that
+       drops you onto the classic list makes the shell feel like a detour off it
+       rather than the thing you booted into. L3 opens the panel; the panel is
+       the whole of the navigation. Details and Settings keep theirs, because
+       those you genuinely did arrive at from somewhere. */
     if (total <= 0)
         return;
 
@@ -1710,9 +1756,8 @@ void shelfRenderHome(void)
         } else if (total > 0) {
             hx += shelfHint(hx, LIB_FTR_TEXT, 0,
                             homeFocus >= 2 ? "Open" : homeFocus == 0 ? "Resume" : "Play");
-            hx += shelfHint(hx, LIB_FTR_TEXT, 2, "Details");
+            shelfHint(hx, LIB_FTR_TEXT, 2, "Details");
         }
-        shelfHint(hx, LIB_FTR_TEXT, 1, "Back");
     }
     shelfDrawRail(guiShelfPageIndex());
 }
@@ -2061,10 +2106,12 @@ void shelfHandleInputHome(void)
     if (shelfTrigger(0))
         return;
 
-    if (getKeyOn(KEY_CIRCLE)) {
-        guiSwitchScreen(GUI_SCREEN_MAIN);
-        return;
-    }
+    /* No Back. Home, Library and Apps are top-level views, not somewhere you
+       arrived from -- there is nothing above them to return to, and a Back that
+       drops you onto the classic list makes the shell feel like a detour off it
+       rather than the thing you booted into. L3 opens the panel; the panel is
+       the whole of the navigation. Details and Settings keep theirs, because
+       those you genuinely did arrive at from somewhere. */
     if (total <= 0)
         return;
 

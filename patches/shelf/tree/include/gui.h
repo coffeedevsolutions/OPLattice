@@ -74,6 +74,7 @@ void guiReloadScreenExtents();
 
 /** Initializes the GUI */
 void guiInit();
+void guiSetStartScreen(int screen);
 
 /** Clean-up the GUI */
 void guiEnd();
