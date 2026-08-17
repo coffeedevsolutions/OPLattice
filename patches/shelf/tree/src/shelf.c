@@ -405,6 +405,20 @@ int shelfWasWithheld(void)
     return 0;
 }
 
+/* Which row the panel opens on: the page you are already looking at.
+ *
+ * It always opened on Home, so from Library the first thing you did was walk
+ * down past a highlight sitting on somewhere you were not. The panel is the only
+ * navigation now, which makes "where am I" the first thing it should answer.
+ *
+ * guiShelfPageIndex returns -1 off the shell -- the classic list, the details
+ * page -- and Home is the right answer there, because it is the way back in. */
+static int shelfOpenSelection(void)
+{
+    int page = guiShelfPageIndex();
+    return (page >= 0 && page < (int)SHELF_ITEMS) ? page : 0;
+}
+
 int shelfTrigger(int atLeftEdge)
 {
     if (state != SHELF_CLOSED)
@@ -413,7 +427,7 @@ int shelfTrigger(int atLeftEdge)
     /* L3: works anywhere, including screens with no meaningful left edge. */
     if (getKeyOn(KEY_L3)) {
         state = SHELF_OPENING;
-        selected = 0;
+        selected = shelfOpenSelection();
         leftHeld = 0;
         leftPending = 0;
         return 1;
@@ -428,7 +442,7 @@ int shelfTrigger(int atLeftEdge)
     leftPending = 1;
     if (++leftHeld >= SHELF_HOLD_FRAMES) {
         state = SHELF_OPENING;
-        selected = 0;
+        selected = shelfOpenSelection();
         leftHeld = 0;
         leftPending = 0;
         return 1;
