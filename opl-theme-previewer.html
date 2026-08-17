@@ -2347,7 +2347,7 @@ function libDrawAlphabetPv(gridX, total, sel, cols) {
   for (let i = 0; i < LIBP.ALPHA_N; i++) {
     const col = i === near ? 0x3A2E22 : 0x8A806C, y = libAlphaY(i);
     if (named.has(i)) shelfText(ax, y, String.fromCharCode(65 + i), col, SHELF_FNT_LBL);
-    else R(ax, y + 3, 2, 2, col);   // flush left with the caps, which start at ax
+    else R(ax, y + 3, 2, 3, col);   // flush left with the caps; 2 by 3 is square on screen
   }
   R(lx, my + 3, 9, 2, 0x3A2E22);
 }
@@ -2416,29 +2416,31 @@ function libGridConst() {
 
 /** shelf.c's shelfHint: a drawn face button and a label. Returns width used. */
 function shelfHintPv(x, y, kind, label) {
-  // Drawn, not typed. None of the three faces on the card carries U+25CB,
-  // U+25A1 or U+25B3, so a footer written as text renders as blanks on the
-  // console and looks fine here only because the browser substitutes. Ink, and
-  // sized to the 9px label, so the row reads as one line of type.
-  const ring = [[3,3],[1,2],[0,1],[0,1],[0,1],[0,1],[0,1],[1,2],[3,3]];
+  // Seven wide by nine tall, matching shelf.c's shelfHint. x is laid across 640
+  // and y down 480, so seven across renders as wide as nine down and the square
+  // is a square; at 9 by 9 the circle came out an oval. Drawn rather than typed
+  // because none of the card's three faces carries U+25CB, U+25A1 or U+25B3 --
+  // it only looks right in a browser because the browser substitutes.
+  const ring = [[2,3],[1,1],[0,1],[0,1],[0,1],[0,1],[0,1],[1,1],[2,3]];
+  const cross = [0,1,2,2,3,4,4,5,6];
   const cy = y + 4;
   ctx.fillStyle = rgbHex(0x3A2E22);
   if (kind === "square") {
-    ctx.fillRect(x, cy - 4, 9, 1); ctx.fillRect(x, cy + 4, 9, 1);
-    ctx.fillRect(x, cy - 4, 1, 9); ctx.fillRect(x + 8, cy - 4, 1, 9);
+    ctx.fillRect(x, cy - 4, 7, 1); ctx.fillRect(x, cy + 4, 7, 1);
+    ctx.fillRect(x, cy - 4, 1, 9); ctx.fillRect(x + 6, cy - 4, 1, 9);
   } else if (kind === "cross") {
-    for (let i = 0; i < 9; i++) {
-      ctx.fillRect(x + i, cy - 4 + i, 1, 1);
-      ctx.fillRect(x + 8 - i, cy - 4 + i, 1, 1);
-    }
+    cross.forEach((c, i) => {
+      ctx.fillRect(x + c, cy - 4 + i, 1, 1);
+      ctx.fillRect(x + 6 - c, cy - 4 + i, 1, 1);
+    });
   } else {
     ring.forEach(([lx, t], i) => {
       ctx.fillRect(x + lx, cy - 4 + i, t, 1);
-      if (i !== 0 && i !== 8) ctx.fillRect(x + 9 - lx - t, cy - 4 + i, t, 1);
+      if (i !== 0 && i !== 8) ctx.fillRect(x + 7 - lx - t, cy - 4 + i, t, 1);
     });
   }
-  shelfText(x + 14, y, label, 0x3A2E22, SHELF_FNT_LBL);
-  return 14 + textWidth(label, SHELF_FNT_LBL) + 18;
+  shelfText(x + 12, y, label, 0x3A2E22, SHELF_FNT_LBL);
+  return 12 + textWidth(label, SHELF_FNT_LBL) + 18;
 }
 
 /* ------------------------------------------------ SHELF Home (mirrors shelf.c)

@@ -12,7 +12,7 @@ index ed7a862..3d1b42f 100644
  		appsupport.o mmcesupport.o gui.o guigame.o textures.o opl.o atlas.o nbns.o httpclient.o gsm.o cheatman.o sound.o ps2cnf.o
  
 diff --git a/include/appsupport.h b/include/appsupport.h
-index 4fca27c..a7d9a47 100644
+index d6ae764..a7d9a47 100644
 --- a/include/appsupport.h
 +++ b/include/appsupport.h
 @@ -9,10 +9,15 @@
@@ -31,7 +31,7 @@ index 4fca27c..a7d9a47 100644
  
  #define APP_TITLE_CONFIG_FILE "title.cfg"
  
-@@ -22,11 +27,17 @@ typedef struct
+@@ -22,6 +27,7 @@ typedef struct
      char path[APP_PATH_MAX + 1];
      char boot[APP_BOOT_MAX + 1];
      char argv1[APP_ARGV1_MAX + 1];
@@ -39,8 +39,7 @@ index 4fca27c..a7d9a47 100644
      u8 legacy;
  } app_info_t;
  
--void appInit();
-+void appInit(item_list_t *itemList);
+@@ -29,4 +35,9 @@ void appInit(item_list_t *itemList);
  item_list_t *appGetObject(int initOnly);
  void appPostUpdateCallback(int mode);
  
@@ -50,47 +49,26 @@ index 4fca27c..a7d9a47 100644
 +const app_info_t *appGetList(void);
 +
  #endif
-diff --git a/include/bdmsupport.h b/include/bdmsupport.h
-index 5c85b13..c3e877c 100644
---- a/include/bdmsupport.h
-+++ b/include/bdmsupport.h
-@@ -42,7 +42,7 @@ typedef struct
-     unsigned char ForceRefresh;
- } bdm_device_data_t;
- 
--void bdmInit();
-+void bdmInit(item_list_t *itemList);
- int bdmFindPartition(char *target, const char *name, int write);
- void bdmLoadModules(void);
- void bdmLaunchGame(item_list_t *itemList, int id, config_set_t *configSet);
 diff --git a/include/config.h b/include/config.h
-index ff7d8ec..135714a 100644
+index 46d9da7..135714a 100644
 --- a/include/config.h
 +++ b/include/config.h
-@@ -119,6 +119,13 @@ enum CONFIG_INDEX {
- #define CONFIG_OPL_DEFAULT_BGM_PATH     "default_bgm_path"
+@@ -120,6 +120,7 @@ enum CONFIG_INDEX {
  #define CONFIG_OPL_XSENSITIVITY         "x_sensitivity"
  #define CONFIG_OPL_YSENSITIVITY         "y_sensitivity"
-+#define CONFIG_OPL_PLAY_STATS           "play_stats"
+ #define CONFIG_OPL_PLAY_STATS           "play_stats"
 +#define CONFIG_OPL_SHELF_UI             "shelf_ui"
-+
-+/* Pending-session record, in CONFIG_LAST beside last_played. RAM does not
-+ * survive the game, so the launch stamp has to be on disc before we hand over. */
-+#define CONFIG_LAST_PENDING_STARTUP     "pending_startup"
-+#define CONFIG_LAST_PENDING_STAMP       "pending_stamp"
  
- // Network config keys
- #define CONFIG_NET_ETH_LINKM          "eth_linkmode"
+ /* Pending-session record, in CONFIG_LAST beside last_played. RAM does not
+  * survive the game, so the launch stamp has to be on disc before we hand over. */
 diff --git a/include/dialogs.h b/include/dialogs.h
-index 64c613b..bb9e7ae 100644
+index a0699e9..bb9e7ae 100644
 --- a/include/dialogs.h
 +++ b/include/dialogs.h
-@@ -52,6 +52,9 @@ enum UI_ITEMS {
-     CFG_AUTOSTARTLAST,
-     CFG_SELECTBUTTON,
+@@ -54,6 +54,7 @@ enum UI_ITEMS {
      CFG_ENWRITEOP,
-+    CFG_LBL_PLAYSTATS,
-+    CFG_PLAYSTATS,
+     CFG_LBL_PLAYSTATS,
+     CFG_PLAYSTATS,
 +    CFG_SHELFUI,
      CFG_BDMPREFIX,
      CFG_ETHPREFIX,
@@ -116,19 +94,6 @@ index 79f256f..34ec521 100644
  
  void guiReloadScreenExtents();
  
-diff --git a/include/hddsupport.h b/include/hddsupport.h
-index ddbd949..1bbe60c 100644
---- a/include/hddsupport.h
-+++ b/include/hddsupport.h
-@@ -59,7 +59,7 @@ void hddFreeHDLGamelist(hdl_games_list_t *game_list);
- int hddSetHDLGameInfo(hdl_game_info_t *ginfo);
- int hddDeleteHDLGame(hdl_game_info_t *ginfo);
- 
--void hddInit();
-+void hddInit(item_list_t *itemList);
- item_list_t *hddGetObject(int initOnly);
- void hddLoadModules(void);
- void hddLoadSupportModules(void);
 diff --git a/include/menusys.h b/include/menusys.h
 index e2ef117..e284fb0 100644
 --- a/include/menusys.h
@@ -143,34 +108,6 @@ index e2ef117..e284fb0 100644
  void menuInit();
  void menuEnd();
  void menuReinitMainMenu(void);
-diff --git a/include/mmcesupport.h b/include/mmcesupport.h
-index a121689..e699d2f 100644
---- a/include/mmcesupport.h
-+++ b/include/mmcesupport.h
-@@ -14,7 +14,7 @@ typedef struct
-     vmc_spec_t specs; /* Card specifications */
- } mmce_vmc_infos_t;
- 
--void mmceInit();
-+void mmceInit(item_list_t *itemList);
- item_list_t *mmceGetObject(int initOnly);
- void mmceLoadModules(void);
- void mmceLaunchGame(item_list_t *itemList, int fd, config_set_t *configSet);
-diff --git a/include/opl.h b/include/opl.h
-index dccdc44..70d12dc 100644
---- a/include/opl.h
-+++ b/include/opl.h
-@@ -148,6 +148,10 @@ extern int gSortMode;
- /// Most-recently-launched list, newest first. Persisted in conf_last.cfg.
- #define OPL_RECENT_MAX 8
- void oplRecentPush(const char *startup, const char *title);
-+
-+extern int gEnablePlayStats;
-+void oplStatsOnLaunch(const char *startup, config_set_t *configSet);
-+void oplStatsOnReturn(void);
- void oplRecentLoad(void);
- int oplRecentCount(void);
- const char *oplRecentStartup(int index);
 diff --git a/include/renderman.h b/include/renderman.h
 index 6b1f380..dfc094f 100644
 --- a/include/renderman.h
@@ -216,32 +153,6 @@ index 6b1f380..dfc094f 100644
  /** Widescreen scaling */
  int rmWideScale(int x);
  
-diff --git a/include/textures.h b/include/textures.h
-index 9407f43..22cf7db 100644
---- a/include/textures.h
-+++ b/include/textures.h
-@@ -107,5 +107,7 @@ int texLookupInternalTexId(const char *name);
- int texLoadInternal(GSTEXTURE *texture, int texId);
- int texDiscoverLoad(GSTEXTURE *texture, const char *path, int texId);
- void texFree(GSTEXTURE *texture);
-+int texMakePlaceholder(GSTEXTURE *texture);
-+void texCheckBudget(unsigned int poolBytes);
- 
- #endif
-diff --git a/include/themes.h b/include/themes.h
-index ce614a1..30ef5ae 100644
---- a/include/themes.h
-+++ b/include/themes.h
-@@ -137,6 +137,9 @@ typedef struct theme_element
-      * anamorphic 16:9. Applied at draw time, because toggling widescreen calls
-      * rmSetAspectRatio without reloading the theme (gui.c:633). */
-     short xScaled;
-+    /* InfoHintText only. 0 hides the Run hint, for themes that draw their own
-+     * launch affordance and would otherwise say it twice. */
-+    short showRun;
-     short aligned;
-     int width;
-     int height;
 diff --git a/src/appsupport.c b/src/appsupport.c
 index 443a7bf..81db456 100644
 --- a/src/appsupport.c
@@ -281,35 +192,14 @@ index 443a7bf..81db456 100644
          if (configGetStr(appConfig, APP_CONFIG_ARGV1, &argv1) != 0) {
              strncpy(app->app.argv1, argv1, APP_ARGV1_MAX + 1);
              app->app.argv1[APP_ARGV1_MAX] = '\0';
-diff --git a/src/bdmsupport.c b/src/bdmsupport.c
-index 770f0d8..f34ab4c 100644
---- a/src/bdmsupport.c
-+++ b/src/bdmsupport.c
-@@ -510,6 +510,7 @@ void bdmLaunchGame(item_list_t *itemList, int id, config_set_t *configSet)
-     }
- 
-     oplRecentPush(game->startup, game->name);
-+    oplStatsOnLaunch(game->startup, configSet);
- 
-     if (configGetStrCopy(configSet, CONFIG_ITEM_ALTSTARTUP, filename, sizeof(filename)) == 0)
-         strcpy(filename, game->startup);
 diff --git a/src/dialogs.c b/src/dialogs.c
-index b9671e6..9a5e26c 100644
+index e7552f7..9a5e26c 100644
 --- a/src/dialogs.c
 +++ b/src/dialogs.c
-@@ -197,6 +197,20 @@ struct UIItem diaConfig[] = {
-     {UI_BOOL, CFG_ENWRITEOP, 1, 1, -1, 0, 0, {.intvalue = {0, 0}}},
+@@ -206,6 +206,11 @@ struct UIItem diaConfig[] = {
+     {UI_BOOL, CFG_PLAYSTATS, 1, 1, -1, 0, 0, {.intvalue = {0, 0}}},
      {UI_BREAK},
  
-+    /* Sits under Write Operations because it cannot function without it, and is
-+     * hidden rather than greyed when that is off -- dia has no disabled state.
-+     * Literal label: adding a localised string would mean regenerating every
-+     * language file for a feature that is still a minimal core. */
-+    {UI_LABEL, CFG_LBL_PLAYSTATS, 1, 1, -1, -40, 0, {.label = {"Play Stats", -1}}},
-+    {UI_SPACER},
-+    {UI_BOOL, CFG_PLAYSTATS, 1, 1, -1, 0, 0, {.intvalue = {0, 0}}},
-+    {UI_BREAK},
-+
 +    {UI_LABEL, 0, 1, 1, -1, -40, 0, {.label = {"SHELF UI", -1}}},
 +    {UI_SPACER},
 +    {UI_BOOL, CFG_SHELFUI, 1, 1, -1, 0, 0, {.intvalue = {0, 0}}},
@@ -318,20 +208,8 @@ index b9671e6..9a5e26c 100644
      {UI_LABEL, 0, 1, 1, -1, -40, 0, {.label = {NULL, _STR_LASTPLAYED}}},
      {UI_SPACER},
      {UI_BOOL, CFG_LASTPLAYED, 1, 1, -1, 0, 0, {.intvalue = {0, 0}}},
-diff --git a/src/ethsupport.c b/src/ethsupport.c
-index 4330f1e..88a442e 100644
---- a/src/ethsupport.c
-+++ b/src/ethsupport.c
-@@ -636,6 +636,7 @@ static void ethLaunchGame(item_list_t *itemList, int id, config_set_t *configSet
-     }
- 
-     oplRecentPush(game->startup, game->name);
-+    oplStatsOnLaunch(game->startup, configSet);
- 
-     compatmask = sbPrepare(game, configSet, size_smb_cdvdman_irx, smb_cdvdman_irx, &i);
- 
 diff --git a/src/gui.c b/src/gui.c
-index 5393a55..5640df3 100644
+index e82bd2c..5640df3 100644
 --- a/src/gui.c
 +++ b/src/gui.c
 @@ -16,6 +16,7 @@
@@ -388,45 +266,23 @@ index 5393a55..5640df3 100644
  static int transIndex;
  
  // Helper perlin noise data
-@@ -459,6 +491,17 @@ static int guiUpdater(int modified)
-     int showAutoStartLast;
- 
-     if (modified) {
-+        int writeOps;
-+
-+        /* Play stats cannot function without write operations, and a toggle
-+         * reading On while doing nothing is worse than one that is absent.
-+         * Hidden rather than greyed because dia has no disabled state -- the
-+         * same treatment AUTOSTARTLAST gets below. The stored value is left
-+         * alone, so re-enabling write operations restores the preference. */
-+        diaGetInt(diaConfig, CFG_ENWRITEOP, &writeOps);
-+        diaSetVisible(diaConfig, CFG_LBL_PLAYSTATS, writeOps);
-+        diaSetVisible(diaConfig, CFG_PLAYSTATS, writeOps);
-+
-         diaGetInt(diaConfig, CFG_LASTPLAYED, &showAutoStartLast);
-         diaSetVisible(diaConfig, CFG_LBL_AUTOSTARTLAST, showAutoStartLast);
-         diaSetVisible(diaConfig, CFG_AUTOSTARTLAST, showAutoStartLast);
-@@ -530,6 +573,10 @@ void guiShowConfig()
+@@ -541,6 +573,7 @@ void guiShowConfig()
      diaSetInt(diaConfig, CFG_HDDSPINDOWN, gHDDSpindown);
      diaSetString(diaConfig, CFG_BDMPREFIX, gBDMPrefix);
      diaSetString(diaConfig, CFG_ETHPREFIX, gETHPrefix);
 +    diaSetInt(diaConfig, CFG_SHELFUI, gEnableShelfUI);
-+    diaSetInt(diaConfig, CFG_PLAYSTATS, gEnablePlayStats);
-+    diaSetVisible(diaConfig, CFG_LBL_PLAYSTATS, gEnableWrite);
-+    diaSetVisible(diaConfig, CFG_PLAYSTATS, gEnableWrite);
-     diaSetInt(diaConfig, CFG_LASTPLAYED, gRememberLastPlayed);
-     diaSetInt(diaConfig, CFG_AUTOSTARTLAST, gAutoStartLastPlayed);
-     diaSetVisible(diaConfig, CFG_AUTOSTARTLAST, gRememberLastPlayed);
-@@ -551,6 +598,8 @@ void guiShowConfig()
-         diaGetInt(diaConfig, CFG_HDDGAMELISTCACHE, &gHDDGameListCache);
+     diaSetInt(diaConfig, CFG_PLAYSTATS, gEnablePlayStats);
+     diaSetVisible(diaConfig, CFG_LBL_PLAYSTATS, gEnableWrite);
+     diaSetVisible(diaConfig, CFG_PLAYSTATS, gEnableWrite);
+@@ -566,6 +599,7 @@ void guiShowConfig()
          diaGetString(diaConfig, CFG_EXITTO, gExitPath, sizeof(gExitPath));
          diaGetInt(diaConfig, CFG_ENWRITEOP, &gEnableWrite);
-+        diaGetInt(diaConfig, CFG_PLAYSTATS, &gEnablePlayStats);
+         diaGetInt(diaConfig, CFG_PLAYSTATS, &gEnablePlayStats);
 +        diaGetInt(diaConfig, CFG_SHELFUI, &gEnableShelfUI);
          diaGetInt(diaConfig, CFG_HDDSPINDOWN, &gHDDSpindown);
          diaGetString(diaConfig, CFG_BDMPREFIX, gBDMPrefix, sizeof(gBDMPrefix));
          diaGetString(diaConfig, CFG_ETHPREFIX, gETHPrefix, sizeof(gETHPrefix));
-@@ -1535,6 +1584,18 @@ static void guiReadPads()
+@@ -1550,6 +1584,18 @@ static void guiReadPads()
  // screen handlers. Fade transition code written by Maximus32
  static void guiShow()
  {
@@ -445,7 +301,7 @@ index 5393a55..5640df3 100644
      // is there a transmission effect going on or are
      // we in a normal rendering state?
      if (screenHandlerTarget) {
-@@ -1566,6 +1627,16 @@ static void guiShow()
+@@ -1581,6 +1627,16 @@ static void guiShow()
      } else
          // render with the set screen handler
          screenHandler->renderScreen();
@@ -462,18 +318,6 @@ index 5393a55..5640df3 100644
  }
  
  void guiIntroLoop(void)
-diff --git a/src/hddsupport.c b/src/hddsupport.c
-index e7cd888..cc3c2d2 100644
---- a/src/hddsupport.c
-+++ b/src/hddsupport.c
-@@ -520,6 +520,7 @@ void hddLaunchGame(item_list_t *itemList, int id, config_set_t *configSet)
-     }
- 
-     oplRecentPush(game->startup, game->name);
-+    oplStatsOnLaunch(game->startup, configSet);
- 
-     char gid[5];
-     configGetDiscIDBinary(configSet, gid);
 diff --git a/src/menusys.c b/src/menusys.c
 index 9cc2a8a..980f8f4 100644
 --- a/src/menusys.c
@@ -578,20 +422,8 @@ index 9cc2a8a..980f8f4 100644
      if (getKey(KEY_LEFT)) {
          if (grid)
              menuPrevItem();
-diff --git a/src/mmcesupport.c b/src/mmcesupport.c
-index b7308a1..5441392 100644
---- a/src/mmcesupport.c
-+++ b/src/mmcesupport.c
-@@ -304,6 +304,7 @@ void mmceLaunchGame(item_list_t *itemList, int id, config_set_t *configSet)
-     }
- 
-     oplRecentPush(game->startup, game->name);
-+    oplStatsOnLaunch(game->startup, configSet);
- 
-     if (configGetStrCopy(configSet, CONFIG_ITEM_ALTSTARTUP, filename, sizeof(filename)) == 0)
-         strcpy(filename, game->startup);
 diff --git a/src/opl.c b/src/opl.c
-index 4389c39..65c029d 100644
+index 4a037f6..65c029d 100644
 --- a/src/opl.c
 +++ b/src/opl.c
 @@ -20,6 +20,7 @@
@@ -602,234 +434,31 @@ index 4389c39..65c029d 100644
  #include "include/util.h"
  #include "include/compatupd.h"
  #include "include/extern_irx.h"
-@@ -187,6 +188,7 @@ char gBDMPrefix[32];
- char gMMCEPrefix[32];
- char gETHPrefix[32];
- int gRememberLastPlayed;
-+int gEnablePlayStats;
- int KeyPressedOnce;
- int gAutoStartLastPlayed;
- int RemainSecs, DisableCron;
-@@ -948,6 +950,8 @@ static void _loadConfig()
-             configGetStrCopy(configOPL, CONFIG_OPL_BDM_PREFIX, gBDMPrefix, sizeof(gBDMPrefix));
+@@ -950,6 +951,7 @@ static void _loadConfig()
              configGetStrCopy(configOPL, CONFIG_OPL_ETH_PREFIX, gETHPrefix, sizeof(gETHPrefix));
              configGetInt(configOPL, CONFIG_OPL_REMEMBER_LAST, &gRememberLastPlayed);
-+            configGetInt(configOPL, CONFIG_OPL_PLAY_STATS, &gEnablePlayStats);
+             configGetInt(configOPL, CONFIG_OPL_PLAY_STATS, &gEnablePlayStats);
 +            configGetInt(configOPL, CONFIG_OPL_SHELF_UI, &gEnableShelfUI);
              configGetInt(configOPL, CONFIG_OPL_AUTOSTART_LAST, &gAutoStartLastPlayed);
              configGetInt(configOPL, CONFIG_OPL_BDM_MODE, &gBDMStartMode);
              configGetInt(configOPL, CONFIG_OPL_HDD_MODE, &gHDDStartMode);
-@@ -1012,6 +1016,10 @@ static void _loadConfig()
- 
-     applyConfig(themeID, langID, 0);
- 
-+    /* A pending session, if any, is resolved once the device lists exist --
-+     * oplStatsFindSupport needs them to locate the game's CFG. */
-+    oplStatsOnReturn();
-+
-     lscret = result;
-     lscstatus = 0;
-     showCfgPopup = 1;
-@@ -1115,6 +1123,8 @@ static void _saveConfig()
-         configSetStr(configOPL, CONFIG_OPL_BDM_PREFIX, gBDMPrefix);
+@@ -1122,6 +1124,7 @@ static void _saveConfig()
          configSetStr(configOPL, CONFIG_OPL_ETH_PREFIX, gETHPrefix);
          configSetInt(configOPL, CONFIG_OPL_REMEMBER_LAST, gRememberLastPlayed);
-+        configSetInt(configOPL, CONFIG_OPL_PLAY_STATS, gEnablePlayStats);
+         configSetInt(configOPL, CONFIG_OPL_PLAY_STATS, gEnablePlayStats);
 +        configSetInt(configOPL, CONFIG_OPL_SHELF_UI, gEnableShelfUI);
          configSetInt(configOPL, CONFIG_OPL_AUTOSTART_LAST, gAutoStartLastPlayed);
          configSetInt(configOPL, CONFIG_OPL_BDM_MODE, gBDMStartMode);
          configSetInt(configOPL, CONFIG_OPL_HDD_MODE, gHDDStartMode);
-@@ -1734,6 +1744,180 @@ void oplRecentLoad(void)
-     }
- }
- 
-+/* ------------------------------------------------------------------ stats */
-+
-+/** The support driver whose list currently contains this startup id.
-+ *
-+ * The pending record survives on disc but the device does not: a game launched
-+ * from MMCE and returned to with the card absent has nowhere to fold its
-+ * minutes back into. Walking the live modules is the only honest way to find
-+ * out, and finding nothing is a normal outcome rather than an error.
-+ */
-+static item_list_t *oplStatsFindSupport(const char *startup)
-+{
-+    int m, i;
-+
-+    for (m = 0; m < MODE_COUNT; m++) {
-+        item_list_t *support = list_support[m].support;
-+
-+        if (!support || !support->enabled || !support->itemGetStartup)
-+            continue;
-+
-+        for (i = support->itemGetCount(support) - 1; i >= 0; i--) {
-+            char *s = support->itemGetStartup(support, i);
-+            if (s && !strcmp(s, startup))
-+                return support;
-+        }
-+    }
-+
-+    return NULL;
-+}
-+
-+
-+/** RTC as whole minutes, for subtraction only.
-+ *
-+ * The Mechacon clock is BCD (see OSDHistory.c, which does the same conversion)
-+ * and reads JST on a Japanese console. No timezone conversion is applied here
-+ * on purpose: this value is only ever subtracted from another reading of the
-+ * same clock, and a constant offset cancels. JST has no daylight saving, so
-+ * there is no discontinuity to trip over either.
-+ *
-+ * LastPlayed's displayed date does inherit that offset and can therefore be a
-+ * day out either side of midnight. That is a known limitation of this minimal
-+ * core, to be resolved by the full clock feature which will own the timezone.
-+ */
-+static int statsNowMinutes(void)
-+{
-+    sceCdCLOCK clock;
-+    int y, m, d, era, yoe, doy, doe, days;
-+
-+    if (!sceCdReadClock(&clock))
-+        return -1;
-+
-+    y = 2000 + btoi(clock.year);
-+    m = btoi(clock.month & 0x7F);
-+    d = btoi(clock.day);
-+    if (m < 1 || m > 12 || d < 1 || d > 31)
-+        return -1;
-+
-+    /* days_from_civil, Howard Hinnant's algorithm. */
-+    y -= (m <= 2);
-+    era = (y >= 0 ? y : y - 399) / 400;
-+    yoe = y - era * 400;
-+    doy = (153 * (m + (m > 2 ? -3 : 9)) + 2) / 5 + d - 1;
-+    doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
-+    days = era * 146097 + doe - 719468;
-+
-+    return days * 1440 + btoi(clock.hour) * 60 + btoi(clock.minute);
-+}
-+
-+/** Longest session we are willing to believe, in minutes.
-+ *
-+ * A session ended with the power button leaves its pending record on disc, and
-+ * the next cold boot computes launch-to-now -- which includes however long the
-+ * console sat switched off. There is no way to tell that apart from a genuine
-+ * marathon after the fact, so anything past this is discarded rather than
-+ * recorded. A missing session is recoverable; a fabricated 40-hour one silently
-+ * poisons a total nobody can audit.
-+ */
-+#define STATS_SESSION_CAP_MINUTES (12 * 60)
-+
-+void oplStatsOnLaunch(const char *startup, config_set_t *configSet)
-+{
-+    config_set_t *configLast;
-+    char stamp[16];
-+    int now, count = 0;
-+
-+    if (!gEnablePlayStats || !gEnableWrite || startup == NULL || startup[0] == '\0')
-+        return;
-+
-+    now = statsNowMinutes();
-+    if (now < 0) {
-+        LOG("STATS: RTC unreadable, not recording a launch\n");
-+        return;
-+    }
-+
-+    /* Per-game keys. configWrite rewrites the whole in-memory list in order, so
-+     * everything already in this file survives untouched. */
-+    if (configSet) {
-+        sceCdCLOCK clock;
-+        char date[16];
-+
-+        if (sceCdReadClock(&clock)) {
-+            snprintf(date, sizeof(date), "%02d-%02d-%04d",
-+                     btoi(clock.day), btoi(clock.month & 0x7F), 2000 + btoi(clock.year));
-+            configSetStr(configSet, "LastPlayed", date);
-+        }
-+        configGetInt(configSet, "PlayCount", &count);
-+        configSetInt(configSet, "PlayCount", count + 1);
-+        configWrite(configSet);
-+    }
-+
-+    /* The pending record has to reach disc before the game takes the machine. */
-+    configLast = configGetByType(CONFIG_LAST);
-+    snprintf(stamp, sizeof(stamp), "%d", now);
-+    configSetStr(configLast, CONFIG_LAST_PENDING_STARTUP, startup);
-+    configSetStr(configLast, CONFIG_LAST_PENDING_STAMP, stamp);
-+    saveConfig(CONFIG_LAST, 0);
-+}
-+
-+void oplStatsOnReturn(void)
-+{
-+    config_set_t *configLast, *configSet;
-+    const char *startup = NULL;
-+    int stamp = 0, now, delta, total = 0;
-+    item_list_t *support;
-+    base_game_info_t game;
-+
-+    if (!gEnablePlayStats || !gEnableWrite)
-+        return;
-+
-+    configLast = configGetByType(CONFIG_LAST);
-+    if (!configGetStr(configLast, CONFIG_LAST_PENDING_STARTUP, &startup) || !startup || !startup[0])
-+        return;
-+    configGetInt(configLast, CONFIG_LAST_PENDING_STAMP, &stamp);
-+
-+    /* Clear it first, whatever happens next. A record that cannot be resolved
-+     * must not be retried on every boot. */
-+    configRemoveKey(configLast, CONFIG_LAST_PENDING_STARTUP);
-+    configRemoveKey(configLast, CONFIG_LAST_PENDING_STAMP);
-+    saveConfig(CONFIG_LAST, 0);
-+
-+    now = statsNowMinutes();
-+    if (now < 0 || stamp <= 0)
-+        return;
-+
-+    delta = now - stamp;
-+    if (delta <= 0) {
-+        LOG("STATS: non-positive session (%d min), discarded\n", delta);
-+        return;
-+    }
-+    if (delta > STATS_SESSION_CAP_MINUTES) {
-+        LOG("STATS: %d min exceeds the %d min cap -- probably a power-off, discarded\n",
-+            delta, STATS_SESSION_CAP_MINUTES);
-+        return;
-+    }
-+
-+    memset(&game, 0, sizeof(game));
-+    strncpy(game.startup, startup, GAME_STARTUP_MAX - 1);
-+    support = oplStatsFindSupport(startup);
-+    if (!support) {
-+        LOG("STATS: no device holds %s, %d min lost\n", startup, delta);
-+        return;
-+    }
-+
-+    configSet = sbPopulateConfig(&game, support->itemGetPrefix(support), "/");
-+    if (!configSet)
-+        return;
-+
-+    configGetInt(configSet, "Playtime", &total);
-+    configSetInt(configSet, "Playtime", total + delta);   /* raw minutes */
-+    configWrite(configSet);
-+    configFree(configSet);
-+
-+    LOG("STATS: %s +%d min, %d total\n", startup, delta, total + delta);
-+}
-+
- void oplRecentPush(const char *startup, const char *title)
- {
-     config_set_t *configLast = configGetByType(CONFIG_LAST);
-@@ -1847,6 +2031,8 @@ static void setDefaults(void)
-     gHDDGameListCache = 0;
+@@ -2029,6 +2032,7 @@ static void setDefaults(void)
      gEnableWrite = 0;
      gRememberLastPlayed = 0;
-+    gEnablePlayStats = 0;
+     gEnablePlayStats = 0;
 +    gEnableShelfUI = 0;
      gAutoStartLastPlayed = 9;
      gSelectButton = KEY_CIRCLE; // Default to Japan.
      gMMCEPrefix[0] = '\0';
-@@ -1909,6 +2095,7 @@ static void init(void)
+@@ -2091,6 +2095,7 @@ static void init(void)
      configInit(NULL);
  
      rmInit();
@@ -838,18 +467,10 @@ index 4389c39..65c029d 100644
      thmInit();
      guiInit();
 diff --git a/src/renderman.c b/src/renderman.c
-index 4d90251..f2c3ff4 100644
+index 0a83587..f2c3ff4 100644
 --- a/src/renderman.c
 +++ b/src/renderman.c
-@@ -10,6 +10,7 @@
- #include "include/opl.h"
- #include "include/renderman.h"
- #include "include/ioman.h"
-+#include "include/textures.h"
- 
- // Allocateable space in vram, as indicated in GsKit's code
- #define __VRAM_SIZE 4194304
-@@ -78,6 +79,10 @@ static int iDisplayYOff;
+@@ -79,6 +79,10 @@ static int iDisplayYOff;
  // Transposition values including overscan compensation
  static float fRenderXOff = 0.0f;
  static float fRenderYOff = 0.0f;
@@ -860,7 +481,7 @@ index 4d90251..f2c3ff4 100644
  
  const u64 gColWhite = GS_SETREG_RGBA(0xFF, 0xFF, 0xFF, 0x80);  // Alpha 0x80 -> solid white
  const u64 gColBlack = GS_SETREG_RGBA(0x00, 0x00, 0x00, 0x80);  // Alpha 0x80 -> solid black
-@@ -97,11 +102,58 @@ void rmUnloadTexture(GSTEXTURE *txt)
+@@ -98,11 +102,58 @@ void rmUnloadTexture(GSTEXTURE *txt)
      gsKit_TexManager_free(gsGlobal, txt);
  }
  
@@ -919,28 +540,7 @@ index 4d90251..f2c3ff4 100644
      order = 0;
  }
  
-@@ -135,7 +187,7 @@ void rmEndFrame(void)
-     gsKit_TexManager_nextFrame(gsGlobal);
- }
- 
--static int rmOnVSync(void)
-+static int rmOnVSync(int cause)
- {
-     if (guiWakeupCount == 0) {
-         guiWakeupCount = 1;
-@@ -229,6 +281,11 @@ int rmSetMode(int force)
-         gsKit_set_test(gsGlobal, GS_ZTEST_OFF);
-         gsKit_set_primalpha(gsGlobal, gDefaultAlpha, 0);
- 
-+        /* The framebuffers are allocated by now, so CurrentPointer is where the
-+         * texture pool starts and everything above it is what gsKit will hand
-+         * out. Check the per-texture cap fits inside it -- see texCheckBudget. */
-+        texCheckBudget(__VRAM_SIZE - gsGlobal->CurrentPointer);
-+
-         // reset the contents of the screen to avoid garbage being displayed
-         if (hires) {
-             gsKit_hires_sync(gsGlobal);
-@@ -331,6 +388,7 @@ void rmDrawQuad(rm_quad_t *q)
+@@ -337,6 +388,7 @@ void rmDrawQuad(rm_quad_t *q)
      }
  
      gsKit_TexManager_bind(gsGlobal, q->txt);
@@ -948,7 +548,7 @@ index 4d90251..f2c3ff4 100644
      gsKit_prim_sprite_texture(gsGlobal, q->txt,
                                q->ul.x + fRenderXOff, q->ul.y + fRenderYOff,
                                q->ul.u, q->ul.v,
-@@ -366,6 +424,7 @@ void rmDrawOverlayPixmap(GSTEXTURE *overlay, int x, int y, short aligned, int w,
+@@ -372,6 +424,7 @@ void rmDrawOverlayPixmap(GSTEXTURE *overlay, int x, int y, short aligned, int w,
          gsGlobal->PrimAlphaEnable = GS_SETTING_OFF;
  
      gsKit_TexManager_bind(gsGlobal, inlay);
@@ -956,7 +556,7 @@ index 4d90251..f2c3ff4 100644
      gsKit_prim_quad_texture(gsGlobal, inlay,
                              quad.ul.x + ulx + fRenderXOff, quad.ul.y + uly + fRenderYOff,
                              0.0f, 0.0f,
-@@ -380,6 +439,28 @@ void rmDrawOverlayPixmap(GSTEXTURE *overlay, int x, int y, short aligned, int w,
+@@ -386,6 +439,28 @@ void rmDrawOverlayPixmap(GSTEXTURE *overlay, int x, int y, short aligned, int w,
      rmDrawQuad(&quad);
  }
  
@@ -985,7 +585,7 @@ index 4d90251..f2c3ff4 100644
  void rmDrawRect(int x, int y, int w, int h, u64 color)
  {
      float fx = X_SCALE(x) + fRenderXOff;
-@@ -404,6 +485,31 @@ void rmDrawLine(int x1, int y1, int x2, int y2, u64 color)
+@@ -410,6 +485,31 @@ void rmDrawLine(int x1, int y1, int x2, int y2, u64 color)
      order++;
  }
  
@@ -1017,7 +617,7 @@ index 4d90251..f2c3ff4 100644
  void rmSetDisplayOffset(int x, int y)
  {
      gsKit_set_display_offset(gsGlobal, x * rm_mode_table[vmode].VCK, y);
-@@ -482,6 +588,8 @@ void rmSetOverscan(int overscan)
+@@ -488,6 +588,8 @@ void rmSetOverscan(int overscan)
  
      fRenderXOff = (float)iDisplayXOff - 0.5f;
      fRenderYOff = (float)iDisplayYOff - 0.5f;
@@ -1026,88 +626,8 @@ index 4d90251..f2c3ff4 100644
  
      if (rmGetInterlacedFrameMode() == 1)
          fRenderYOff += 0.25f;
-diff --git a/src/textures.c b/src/textures.c
-index b2539dd..787e273 100644
---- a/src/textures.c
-+++ b/src/textures.c
-@@ -233,6 +233,75 @@ int texLookupInternalTexId(const char *name)
-     return result;
- }
- 
-+static void texPrepare(GSTEXTURE *texture);
-+
-+/** A visible stand-in for a texture that failed to load.
-+ *
-+ * The point is that it is seen. LOG output needs a debug build, and the failure
-+ * being fixed here is one that only shows up on a television -- an asset that
-+ * quietly does not appear looks identical to an asset nobody added. Magenta is
-+ * chosen because nothing in the art pipeline produces it by accident.
-+ */
-+int texMakePlaceholder(GSTEXTURE *texture)
-+{
-+    const int dim = 16;
-+    u32 *px;
-+    int x, y;
-+
-+    texPrepare(texture);
-+    texture->Width = dim;
-+    texture->Height = dim;
-+    texture->PSM = GS_PSM_CT32;
-+    texture->Mem = memalign(128, gsKit_texture_size_ee(dim, dim, GS_PSM_CT32));
-+    if (!texture->Mem)
-+        return -1;
-+
-+    px = (u32 *)texture->Mem;
-+    for (y = 0; y < dim; y++) {
-+        for (x = 0; x < dim; x++) {
-+            /* 0x80 is fully opaque on the GS, not 0xFF. */
-+            px[y * dim + x] = (((x >> 3) ^ (y >> 3)) & 1) ? 0x80FF00FF : 0x80400040;
-+        }
-+    }
-+
-+    return 0;
-+}
-+
-+/** Clamp the per-texture cap to something the VRAM pool can actually satisfy.
-+ *
-+ * gsKit's _blockAlloc loops `while (block == NULL)` with no failure exit. A
-+ * request larger than the whole pool can never be satisfied by eviction, so it
-+ * spins forever -- a hung console rather than a rejected asset. Nothing in gsKit
-+ * guards this; maxSize is the only thing that does, and it lives here.
-+ *
-+ * This clamps rather than asserting, deliberately. LOG compiles out in a release
-+ * build, so a warning would be invisible in exactly the build that ships, and a
-+ * return code would be discarded. Lowering maxSize makes the hang unreachable by
-+ * construction: an oversized asset is rejected by texSizeValidate, which is the
-+ * clean failure we already handle and now draw a placeholder for.
-+ *
-+ * Called once the video mode is known, because the pool is whatever the
-+ * framebuffers leave behind and that depends on the mode.
-+ */
-+void texCheckBudget(unsigned int poolBytes)
-+{
-+    /* Worst case is a texture at the cap plus its 16x16 CT32 palette, which
-+     * gsKit allocates as one block. */
-+    unsigned int clut = gsKit_texture_size(16, 16, GS_PSM_CT32);
-+    unsigned int required = (unsigned int)maxSize + clut;
-+
-+    if (required > poolBytes) {
-+        int clamped = (int)(poolBytes - clut);
-+
-+        LOG("TEXTURES maxSize %d + CLUT %u exceeds the %u byte pool; clamping to %d\n",
-+            maxSize, clut, poolBytes, clamped);
-+        maxSize = clamped > 0 ? clamped : 0;
-+    } else {
-+        LOG("TEXTURES budget ok: %u of %u bytes, %u spare\n",
-+            required, poolBytes, poolBytes - required);
-+    }
-+}
-+
- static int texSizeValidate(int width, int height, u8 psm)
- {
-     if (width > 1024 || height > 1024)
 diff --git a/src/themes.c b/src/themes.c
-index fe90cb6..a958952 100644
+index 445dddf..a958952 100644
 --- a/src/themes.c
 +++ b/src/themes.c
 @@ -51,6 +51,7 @@ enum ELEM_ATTRIBUTE_TYPE {
@@ -1286,53 +806,28 @@ index fe90cb6..a958952 100644
  static void initAttributeText(const char *themePath, config_set_t *themeConfig, theme_t *theme, theme_element_t *elem, const char *name)
  {
      const char *attribute;
-@@ -392,13 +538,20 @@ static image_texture_t *initImageTexture(const char *themePath, config_set_t *th
-     if (themePath) {
-         char path[256];
-         snprintf(path, sizeof(path), "%s%s", themePath, imgName);
--        if (texDiscoverLoad(&texture->source, path, texId) >= 0)
--            ;
-+        if (texDiscoverLoad(&texture->source, path, texId) < 0) {
-+            /* Was an empty statement. A texture that fails to load drew nothing
-+             * at all, which is indistinguishable from a theme that never asked
-+             * for one -- the silent failure this campaign exists to remove. */
-+            LOG("THEMES texture load FAILED: %s\n", path);
-+            texMakePlaceholder(&texture->source);
-+        }
-         result = 1;
-     } else {
-         texId = texLookupInternalTexId(imgName);
--        if (texLoadInternal(&texture->source, texId) >= 0)
--            ;
-+        if (texLoadInternal(&texture->source, texId) < 0) {
-+            LOG("THEMES internal texture load FAILED: %s\n", imgName);
-+            texMakePlaceholder(&texture->source);
-+        }
-         result = 1;
+@@ -1492,20 +1638,6 @@ static void drawInfoHintText(struct menu_list *menu, struct submenu_list *item,
+         return;
      }
  
-@@ -1471,6 +1624,20 @@ static void drawInfoHintText(struct menu_list *menu, struct submenu_list *item,
-     int infoIcons[2] = {CIRCLE_ICON, CROSS_ICON};
-     int x = elem->posX;
- 
-+    /* A theme that draws its own launch affordance does not want OPL saying
-+     * "Run" a second time. Back is never hidden -- it is the only way off this
-+     * screen, and a theme cannot be allowed to strand the user. */
-+    if (!elem->showRun) {
-+        int backOnly[1] = {_STR_BACK};
-+        int backIcon[1] = {CROSS_ICON};
-+
-+        if (elem->aligned)
-+            x = guiAlignSubMenuHints(1, backOnly, backIcon, elem->font, elem->width, 1);
-+
-+        guiDrawIconAndText(gSelectButton == KEY_CIRCLE ? infoIcons[1] : infoIcons[0], _STR_BACK, elem->font, x, elem->posY, elem->color);
-+        return;
-+    }
-+
+-    /* A theme that draws its own launch affordance does not want OPL saying
+-     * "Run" a second time. Back is never hidden -- it is the only way off this
+-     * screen, and a theme cannot be allowed to strand the user. */
+-    if (!elem->showRun) {
+-        int backOnly[1] = {_STR_BACK};
+-        int backIcon[1] = {CROSS_ICON};
+-
+-        if (elem->aligned)
+-            x = guiAlignSubMenuHints(1, backOnly, backIcon, elem->font, elem->width, 1);
+-
+-        guiDrawIconAndText(gSelectButton == KEY_CIRCLE ? infoIcons[1] : infoIcons[0], _STR_BACK, elem->font, x, elem->posY, elem->color);
+-        return;
+-    }
+-
      if (elem->aligned)
          x = guiAlignSubMenuHints(2, infoHints, infoIcons, elem->font, elem->width, 1);
  
-@@ -1557,7 +1724,10 @@ static int addGUIElem(const char *themePath, config_set_t *themeConfig, theme_t
+@@ -1592,7 +1724,10 @@ static int addGUIElem(const char *themePath, config_set_t *themeConfig, theme_t
          snprintf(elemProp, sizeof(elemProp), "%s_type", name);
          configGetStr(themeConfig, elemProp, &type);
          if (type) {
@@ -1344,14 +839,3 @@ index fe90cb6..a958952 100644
                  elem = initBasic(themePath, themeConfig, theme, name, ELEM_TYPE_ATTRIBUTE_TEXT, 0, 0, ALIGN_CENTER, DIM_UNDEF, DIM_UNDEF, SCALING_RATIO, theme->textColor, theme->fonts[0]);
                  initAttributeText(themePath, themeConfig, theme, elem, name);
              } else if (!strcmp(elementsType[ELEM_TYPE_STATIC_TEXT], type)) {
-@@ -1610,6 +1780,10 @@ static int addGUIElem(const char *themePath, config_set_t *themeConfig, theme_t
-                 elem->drawElem = &drawHintText;
-             } else if (!strcmp(elementsType[ELEM_TYPE_INFO_HINT_TEXT], type)) {
-                 elem = initBasic(themePath, themeConfig, theme, name, ELEM_TYPE_INFO_HINT_TEXT, 16, -HINT_HEIGHT, ALIGN_NONE, 12, 20, SCALING_RATIO, theme->textColor, theme->fonts[0]);
-+                int showRun = 1;
-+                snprintf(elemProp, sizeof(elemProp), "%s_show_run", name);
-+                configGetInt(themeConfig, elemProp, &showRun);
-+                elem->showRun = showRun != 0;
-                 elem->drawElem = &drawInfoHintText;
-             } else if (!strcmp(elementsType[ELEM_TYPE_LOADING_ICON], type)) {
-                 if (!theme->loadingIcon)
