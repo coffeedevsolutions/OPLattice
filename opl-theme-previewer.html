@@ -2305,8 +2305,11 @@ function shelfText(x, y, str, colorHex, spec = SHELF_FNT, align = "left", maxW =
    theme's answer and the difference becomes visible instead of silent.
 */
 const RAIL_W = 34, CONTENT_X = RAIL_W + 14;
-const LIBP = { HERO_H: 196, GRID_Y: 240, FTR_Y: 450, FTR_TEXT: 454,
-               ALPHA_Y0: 206, ALPHA_Y1: 440, ALPHA_DX: 22, ALPHA_N: 26 };
+// FTR_TEXT is derived from the height, as shelf.c derives LIB_FTR_TEXT: a 26px
+// bar with a 9px hint row centres at FTR_Y + (26 - 9) / 2.
+const LIBP = { HERO_H: 196, GRID_Y: 240, FTR_H: 26, FTR_Y: 480 - 26,
+               FTR_TEXT: (480 - 26) + ((26 - 9) >> 1),
+               ALPHA_Y0: 222, ALPHA_Y1: 428, ALPHA_DX: 22, ALPHA_N: 26 };
 
 /* The alphabet index down the left of the Library grid -- shelf.c's
    libDrawAlphabet. Fixed by construction: drawn from constants and the grid's
@@ -2829,8 +2832,8 @@ function renderShelfApps() {
   ctx.fillStyle = rgbHex(SHELF_PAL.rule); ctx.fillRect(M, 438, SCREEN_W - M - 24, 1);
   {
     let hx = M;
-    hx += shelfHintPv(hx, 454, "cross", "Launch");
-    shelfHintPv(hx, 454, "circle", "Back");
+    hx += shelfHintPv(hx, LIBP.FTR_TEXT, "cross", "Launch");
+    shelfHintPv(hx, LIBP.FTR_TEXT, "circle", "Back");
   }
   shelfRailPv(2);   // last, as shelf.c does, so it composites over the page
   ctx.restore();

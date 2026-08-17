@@ -482,7 +482,7 @@ void shelfHandleInputPage(void)
 #define HDR_H       40
 #define HDR_CY(sz)  ((HDR_H - (sz)) / 2)
 #define HDR_TEXT_Y  HDR_CY(12)
-#define FTR_TEXT_Y  452
+#define FTR_TEXT_Y  462   /* == LIB_FTR_TEXT; one hint row height everywhere */
 
 #define APPS_COLS   3
 #define APPS_PER    (APPS_COLS * 2)
@@ -864,14 +864,21 @@ void shelfHandleInputApps(void)
 /* The theme's own footer: botbar is a 30px strip at y=-30, and HintText sits at
    y=-26 in font2 (12px) #8894A2. Matched rather than invented, so the shelf and
    the screen the console boots into agree about where the bottom of the page is. */
-#define LIB_FTR_Y     450
-/* The alphabet index down the left of the grid. Y span is chosen so 26 letters
-   at 9px clear each other: 234 pixels over 25 gaps is 9.36 apiece, which is the
-   tightest this can be without the caps touching. It starts above the grid
-   because the space beside the hero is empty anyway and the extra height is
-   what buys that clearance. */
-#define LIB_ALPHA_Y0  206
-#define LIB_ALPHA_Y1  440
+/* The footer, and the hint row centred in it. Height first, position derived:
+   it was a 30px bar with the text nailed to 454, which centred a 12px string and
+   then kept the number when the hints dropped to 9 -- leaving them six pixels
+   high in their own bar. Deriving the text from the height is what stops that
+   happening the next time a font size moves. */
+#define LIB_FTR_H     26
+#define LIB_FTR_Y     (480 - LIB_FTR_H)
+/* The alphabet index down the left of the grid.
+   The span no longer has to seat 26 caps -- only nine are letters now and the
+   rest are dots -- so it gives back the room it was borrowing at both ends and
+   stands clear of the hero above and the footer below rather than running into
+   them. 206 over 25 gaps is 8.24 apiece, and the named letters are three marks
+   apart, so they clear each other by nearly 25. */
+#define LIB_ALPHA_Y0  222
+#define LIB_ALPHA_Y1  428
 #define LIB_ALPHA_DX  22            /* left of the grid, which moves with aspect */
 #define LIB_ALPHA_N   26
 /* Nine letters named, the rest dots: A D G J M P S V Z. That is every third,
@@ -880,7 +887,7 @@ void shelfHandleInputApps(void)
    count across the span instead puts a label on both ends and pays for it with
    one gap of four at the bottom rather than a missing Z. */
 #define LIB_ALPHA_LABELS 9
-#define LIB_FTR_TEXT  454
+#define LIB_FTR_TEXT  (LIB_FTR_Y + (LIB_FTR_H - 9) / 2)
 
 static image_cache_t *libCache;
 static image_cache_t *libHeroCache;
