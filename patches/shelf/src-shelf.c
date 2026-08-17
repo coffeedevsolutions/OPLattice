@@ -860,7 +860,11 @@ void shelfHandleInputApps(void)
 #define LIB_ART_H     (LIB_CELL_H - LIB_GAP - LIB_LABEL_H) /* 111 */
 #define LIB_PER       LIB_COLS
 #define LIB_HERO_H    196
-#define LIB_GRID_Y    240
+/* The covers start where the scale beside them starts. It was 240 against an
+   alphabet at 222, so the ruler began 18 pixels above the first thing it was
+   measuring. Moving the grid rather than the scale is what keeps the second row
+   showing more of itself above the footer. */
+#define LIB_GRID_Y    222
 /* The theme's own footer: botbar is a 30px strip at y=-30, and HintText sits at
    y=-26 in font2 (12px) #8894A2. Matched rather than invented, so the shelf and
    the screen the console boots into agree about where the bottom of the page is. */
@@ -877,7 +881,7 @@ void shelfHandleInputApps(void)
    stands clear of the hero above and the footer below rather than running into
    them. 206 over 25 gaps is 8.24 apiece, and the named letters are three marks
    apart, so they clear each other by nearly 25. */
-#define LIB_ALPHA_Y0  222
+#define LIB_ALPHA_Y0  LIB_GRID_Y    /* top of the scale == top of the first cover */
 #define LIB_ALPHA_Y1  428
 #define LIB_ALPHA_DX  22            /* left of the grid, which moves with aspect */
 #define LIB_ALPHA_N   26

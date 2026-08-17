@@ -2307,7 +2307,10 @@ function shelfText(x, y, str, colorHex, spec = SHELF_FNT, align = "left", maxW =
 const RAIL_W = 34, CONTENT_X = RAIL_W + 14;
 // FTR_TEXT is derived from the height, as shelf.c derives LIB_FTR_TEXT: a 26px
 // bar with a 9px hint row centres at FTR_Y + (26 - 9) / 2.
-const LIBP = { HERO_H: 196, GRID_Y: 240, FTR_H: 26, FTR_Y: 480 - 26,
+// GRID_Y and ALPHA_Y0 are the same number on purpose: the covers start where
+// the scale beside them starts. FTR_TEXT is derived from the height, as shelf.c
+// derives LIB_FTR_TEXT -- a 26px bar with a 9px hint row centres at +((26-9)/2).
+const LIBP = { HERO_H: 196, GRID_Y: 222, FTR_H: 26, FTR_Y: 480 - 26,
                FTR_TEXT: (480 - 26) + ((26 - 9) >> 1),
                ALPHA_Y0: 222, ALPHA_Y1: 428, ALPHA_DX: 22, ALPHA_N: 26 };
 
