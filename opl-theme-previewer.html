@@ -2735,28 +2735,32 @@ function renderShelfApps() {
   ctx.save();
   ctx.fillStyle = rgbHex(SHELF_PAL.pageBg); ctx.fillRect(0, 0, SCREEN_W, SCREEN_H);
 
-  /* top status bar */
-  ctx.fillStyle = rgbHex(SHELF_PAL.barBg); ctx.fillRect(0, 0, SCREEN_W, 40);
-  ctx.fillStyle = rgbHex(SHELF_PAL.rule);  ctx.fillRect(0, 40, SCREEN_W, 1);
-  shelfText(32, 27, "APPS", SHELF_PAL.text, SHELF_FNT_HD);
+  /* top status bar. Starts at the rail and the header sits on CONTENT_X, the
+     same left edge as the cards -- this mock had it spanning the full width from
+     x=32 with no rail at all, which is why its header looked misaligned against
+     a grid that starts at 48. HDR_CY in shelf.c: centring subtracts the string's
+     own size, because fntRenderString's y is the top of the glyph box. */
+  ctx.fillStyle = rgbHex(SHELF_PAL.barBg); ctx.fillRect(RAIL_W, 0, SCREEN_W - RAIL_W, 40);
+  ctx.fillStyle = rgbHex(SHELF_PAL.rule);  ctx.fillRect(RAIL_W, 40, SCREEN_W - RAIL_W, 1);
+  shelfText(CONTENT_X, (40 - 11) / 2, "APPS", SHELF_PAL.text, SHELF_FNT_HD);
 
   // Right cluster, laid out right-to-left so nothing needs measuring twice.
+  const HY = (40 - 12) / 2;
   let rx = 608;
-  rx -= shelfText(rx, 26, "12:04", SHELF_PAL.text, SHELF_FNT, "right");   // placeholder
+  rx -= shelfText(rx, HY, "12:04", SHELF_PAL.text, SHELF_FNT_SM, "right");   // placeholder
   rx -= 22;
   // Free space is drawn as an em-dash because no free-space query exists for
   // this device class -- see the Phase 5 doc. The slot is real; the value is not.
-  rx -= shelfText(rx, 26, "— free", SHELF_PAL.muted, SHELF_FNT, "right");
+  rx -= shelfText(rx, HY, "— free", SHELF_PAL.muted, SHELF_FNT_SM, "right");
   rx -= 22;
   const online = true;
-  shelfText(rx, 26, "NET", online ? SHELF_PAL.net : SHELF_PAL.netOff, SHELF_FNT, "right");
-  ctx.beginPath();
-  ctx.arc(rx - textWidth("NET", SHELF_FNT) * (S.aspect / 4) - 12, 21, 4, 0, Math.PI * 2);
-  ctx.fillStyle = rgbHex(online ? SHELF_PAL.net : SHELF_PAL.netOff); ctx.fill();
+  shelfText(rx, HY, "NET", online ? SHELF_PAL.net : SHELF_PAL.netOff, SHELF_FNT_SM, "right");
+  ctx.fillStyle = rgbHex(online ? SHELF_PAL.net : SHELF_PAL.netOff);
+  ctx.fillRect(rx - textWidth("NET", SHELF_FNT_SM) * (S.aspect / 4) - 14, (40 - 8) / 2, 5, 5);
 
-  /* card grid: 3 x 2, 32px margins, 16px gutters */
-  const M = 32, GAP = 16, COLS = 3;
-  const CW = ((SCREEN_W - 2 * M) - (COLS - 1) * GAP) / COLS;   // 176
+  /* card grid: 3 x 2, from CONTENT_X, 16px gutters -- shelf.c's APPS_* */
+  const M = CONTENT_X, GAP = 16, COLS = 3;
+  const CW = ((SCREEN_W - M - 24) - (COLS - 1) * GAP) / COLS;   // 178
   const CH = 170, Y0 = 64;      // two rows reach y=420, just above the footer rule
   for (let i = 0; i < SHELF_APPS_MOCK.length; i++) {
     const a = SHELF_APPS_MOCK[i];
@@ -2781,12 +2785,13 @@ function renderShelfApps() {
   }
 
   /* footer hints */
-  ctx.fillStyle = rgbHex(SHELF_PAL.rule); ctx.fillRect(M, 438, SCREEN_W - 2 * M, 1);
+  ctx.fillStyle = rgbHex(SHELF_PAL.rule); ctx.fillRect(M, 438, SCREEN_W - M - 24, 1);
   {
     let hx = M;
     hx += shelfHintPv(hx, 454, "cross", "Launch");
     shelfHintPv(hx, 454, "circle", "Back");
   }
+  shelfRailPv(2);   // last, as shelf.c does, so it composites over the page
   ctx.restore();
   octx.clearRect(0, 0, SCREEN_W, SCREEN_H);
   applyViewport();

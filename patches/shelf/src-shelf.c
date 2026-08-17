@@ -473,10 +473,15 @@ void shelfHandleInputPage(void)
 */
 
 /* fntRenderString's y is the TOP of the glyph box, not the baseline
-   (textBaselineOffset adds size-2 for ALIGN_NONE). A 17px string in a 40px bar
-   therefore starts at (40-17)/2, not at 27 -- which hung it 4px below the bar. */
+   (textBaselineOffset adds size-2 for ALIGN_NONE), so centring a string in the
+   bar means subtracting its own size -- not a constant.
+   It was a constant, ((HDR_H - 17) / 2), written when everything in this bar was
+   FNT_DEFAULT at 17px. The header moved to the 11px face with the theme fonts
+   and kept the old offset, which left it sitting three pixels high in its own
+   bar. Taking the size as an argument is what stops that happening again. */
 #define HDR_H       40
-#define HDR_TEXT_Y  ((HDR_H - 17) / 2)
+#define HDR_CY(sz)  ((HDR_H - (sz)) / 2)
+#define HDR_TEXT_Y  HDR_CY(12)
 #define FTR_TEXT_Y  452
 
 #define APPS_COLS   3
@@ -644,30 +649,30 @@ static void appsStatusBar(void)
 
     rmDrawRect(SHELF_RAIL_W, 0, 640 - SHELF_RAIL_W, 40, LAND_BG);
     rmDrawRect(SHELF_RAIL_W, 40, 640 - SHELF_RAIL_W, 1, LAND_RULE);
-    fntRenderString(appsFontHead, CONTENT_X, HDR_TEXT_Y, ALIGN_NONE, 0, 0, "APPS", LAND_INK);
+    fntRenderString(appsFontHead, CONTENT_X, HDR_CY(11), ALIGN_NONE, 0, 0, "APPS", LAND_INK);
 
     /* Placeholder until Phase 8 binds it. sceCdReadClock is available and
        already used at OSDHistory.c:122, but its fields are BCD and its RTC runs
        on JST, so an honest clock needs an offset this phase cannot configure. */
-    w = fntCalcDimensions(FNT_DEFAULT, "--:--");
-    fntRenderString(FNT_DEFAULT, rx - w, HDR_TEXT_Y, ALIGN_NONE, 0, 0, "--:--", LAND_MUTE);
+    w = fntCalcDimensions(appsFontSmall, "--:--");
+    fntRenderString(appsFontSmall, rx - w, HDR_TEXT_Y, ALIGN_NONE, 0, 0, "--:--", LAND_MUTE);
     rx -= w + 22;
 
     /* Free space has no query for this device class. Nothing in bdmsupport,
        mmcesupport or ethsupport reports capacity; the only capacity call in the
        tree is HDIOC_TOTALSECTOR for the internal HDD, which is total and not
        free. The slot is real, the value is not, and inventing one is worse. */
-    w = fntCalcDimensions(FNT_DEFAULT, "\xe2\x80\x94 free");
-    fntRenderString(FNT_DEFAULT, rx - w, HDR_TEXT_Y, ALIGN_NONE, 0, 0, "\xe2\x80\x94 free", LAND_MUTE);
+    w = fntCalcDimensions(appsFontSmall, "\xe2\x80\x94 free");
+    fntRenderString(appsFontSmall, rx - w, HDR_TEXT_Y, ALIGN_NONE, 0, 0, "\xe2\x80\x94 free", LAND_MUTE);
     rx -= w + 22;
 
     {
         const char *net = (gNetworkStartup == 0) ? "NET" : "OFF";
         u64 col = (gNetworkStartup == 0) ? GS_SETREG_RGBA(0x2E, 0x6E, 0x3C, 0x80)
                                          : LAND_MUTE;
-        w = fntCalcDimensions(FNT_DEFAULT, net);
-        fntRenderString(FNT_DEFAULT, rx - w, HDR_TEXT_Y, ALIGN_NONE, 0, 0, net, col);
-        rmDrawRect(rx - w - 14, 17, 8, 8, col);
+        w = fntCalcDimensions(appsFontSmall, net);
+        fntRenderString(appsFontSmall, rx - w, HDR_TEXT_Y, ALIGN_NONE, 0, 0, net, col);
+        rmDrawRect(rx - w - 14, HDR_CY(8), 5, 5, col);
     }
 }
 
@@ -742,7 +747,10 @@ void shelfRenderApps(void)
                         apps[idx].subtitle, APPS_CW - 16, LAND_MUTE);
     }
 
-    rmDrawRect(APPS_MARGIN, 438, 640 - 2 * APPS_MARGIN, 1, LAND_RULE);
+    /* Ends where the cards end, not 2 x margin in. The grid's right edge is
+       640 - 24, not 640 - APPS_MARGIN, so the symmetric version stopped 70px
+       short of the column it was supposed to sit under. */
+    rmDrawRect(APPS_MARGIN, 438, 640 - APPS_MARGIN - 24, 1, LAND_RULE);
     {
         int hx = APPS_MARGIN;
         hx += shelfHint(hx, FTR_TEXT_Y, 0, "Launch");
