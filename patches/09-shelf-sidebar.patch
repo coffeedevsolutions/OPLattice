@@ -96,10 +96,10 @@ index 64c613b..bb9e7ae 100644
      CFG_ETHPREFIX,
      CFG_HDDSPINDOWN,
 diff --git a/include/gui.h b/include/gui.h
-index 79f256f..388c46c 100644
+index 79f256f..34ec521 100644
 --- a/include/gui.h
 +++ b/include/gui.h
-@@ -59,7 +59,15 @@ extern int guiFrameId;
+@@ -59,7 +59,16 @@ extern int guiFrameId;
  #define GUI_SCREEN_GAME_MENU 3
  #define GUI_SCREEN_APP_MENU  4
  
@@ -112,6 +112,7 @@ index 79f256f..388c46c 100644
  void guiSwitchScreen(int target);
 +int guiOnMainScreen(void);
 +int guiOnShelfPage(void);
++int guiShelfPageIndex(void);
  
  void guiReloadScreenExtents();
  
@@ -315,7 +316,7 @@ index 4330f1e..88a442e 100644
      compatmask = sbPrepare(game, configSet, size_smb_cdvdman_irx, smb_cdvdman_irx, &i);
  
 diff --git a/src/gui.c b/src/gui.c
-index 5393a55..f71902a 100644
+index 5393a55..0a4f89b 100644
 --- a/src/gui.c
 +++ b/src/gui.c
 @@ -16,6 +16,7 @@
@@ -326,7 +327,7 @@ index 5393a55..f71902a 100644
  #include "include/ethsupport.h"
  #include "include/compatupd.h"
  #include "include/pggsm.h"
-@@ -87,13 +88,34 @@ static gui_screen_handler_t screenHandlers[] = {{&menuHandleInputMain, &menuRend
+@@ -87,13 +88,44 @@ static gui_screen_handler_t screenHandlers[] = {{&menuHandleInputMain, &menuRend
                                                  {&menuHandleInputMenu, &menuRenderMenu, 1},
                                                  {&menuHandleInputInfo, &menuRenderInfo, 1},
                                                  {&menuHandleInputGameMenu, &menuRenderGameMenu, 1},
@@ -354,6 +355,16 @@ index 5393a55..f71902a 100644
 +   auto-start countdown is drawn by guiDrawOverlays on every screen, but the
 +   launch it counts down to only fires from menuHandleInputMain -- so on a shelf
 +   page it can never be consumed, and must be held rather than left to run. */
++/* 0 Home, 1 Library, 2 Apps -- the rail's order, so it can mark the current
++   page without shelf.c needing to know the screen ids. -1 when not on one. */
++int guiShelfPageIndex(void)
++{
++    int i = (int)(screenHandler - &screenHandlers[0]);
++    if (i >= GUI_SCREEN_SHELF_HOME && i <= GUI_SCREEN_SHELF_APPS)
++        return i - GUI_SCREEN_SHELF_HOME;
++    return -1;
++}
++
 +int guiOnShelfPage(void)
 +{
 +    return screenHandler >= &screenHandlers[GUI_SCREEN_SHELF_HOME] &&
@@ -362,7 +373,7 @@ index 5393a55..f71902a 100644
  static int transIndex;
  
  // Helper perlin noise data
-@@ -459,6 +481,17 @@ static int guiUpdater(int modified)
+@@ -459,6 +491,17 @@ static int guiUpdater(int modified)
      int showAutoStartLast;
  
      if (modified) {
@@ -380,7 +391,7 @@ index 5393a55..f71902a 100644
          diaGetInt(diaConfig, CFG_LASTPLAYED, &showAutoStartLast);
          diaSetVisible(diaConfig, CFG_LBL_AUTOSTARTLAST, showAutoStartLast);
          diaSetVisible(diaConfig, CFG_AUTOSTARTLAST, showAutoStartLast);
-@@ -530,6 +563,10 @@ void guiShowConfig()
+@@ -530,6 +573,10 @@ void guiShowConfig()
      diaSetInt(diaConfig, CFG_HDDSPINDOWN, gHDDSpindown);
      diaSetString(diaConfig, CFG_BDMPREFIX, gBDMPrefix);
      diaSetString(diaConfig, CFG_ETHPREFIX, gETHPrefix);
@@ -391,7 +402,7 @@ index 5393a55..f71902a 100644
      diaSetInt(diaConfig, CFG_LASTPLAYED, gRememberLastPlayed);
      diaSetInt(diaConfig, CFG_AUTOSTARTLAST, gAutoStartLastPlayed);
      diaSetVisible(diaConfig, CFG_AUTOSTARTLAST, gRememberLastPlayed);
-@@ -551,6 +588,8 @@ void guiShowConfig()
+@@ -551,6 +598,8 @@ void guiShowConfig()
          diaGetInt(diaConfig, CFG_HDDGAMELISTCACHE, &gHDDGameListCache);
          diaGetString(diaConfig, CFG_EXITTO, gExitPath, sizeof(gExitPath));
          diaGetInt(diaConfig, CFG_ENWRITEOP, &gEnableWrite);
@@ -400,7 +411,7 @@ index 5393a55..f71902a 100644
          diaGetInt(diaConfig, CFG_HDDSPINDOWN, &gHDDSpindown);
          diaGetString(diaConfig, CFG_BDMPREFIX, gBDMPrefix, sizeof(gBDMPrefix));
          diaGetString(diaConfig, CFG_ETHPREFIX, gETHPrefix, sizeof(gETHPrefix));
-@@ -1566,6 +1605,14 @@ static void guiShow()
+@@ -1566,6 +1615,14 @@ static void guiShow()
      } else
          // render with the set screen handler
          screenHandler->renderScreen();

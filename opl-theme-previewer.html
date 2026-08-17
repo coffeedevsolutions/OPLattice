@@ -2203,7 +2203,28 @@ function shelfText(x, y, str, colorHex, spec = SHELF_FNT, align = "left", maxW =
    in again, so if conf_theme.cfg and shelf.c drift apart this page shows the
    theme's answer and the difference becomes visible instead of silent.
 */
+const RAIL_W = 34, CONTENT_X = RAIL_W + 14;
 const LIBP = { HERO_H: 196, GRID_Y: 240, FTR_Y: 450, FTR_TEXT: 454 };
+
+/* shelf.c's collapsed rail: brand mark, four destinations, link state. Drawn
+   from rectangles in both places, because the shelf pages load no art. */
+function shelfRailPv(active) {
+  const on = 0xF2F5F8, off = 0x5C6674, iconY = [66, 102, 138, 174];
+  const R = (x, y, w, h, c) => { ctx.fillStyle = rgbHex(c); ctx.fillRect(x, y, w, h); };
+  R(0, 0, RAIL_W, SCREEN_H, 0x14171C);
+  R(RAIL_W, 0, 1, SCREEN_H, 0x2A3038);
+  R(9, 14, 17, 17, 0xF2F5F8);
+  shelfText(14, 16, "S", 0x14171C, SHELF_FNT_SM);
+  iconY.forEach((y, i) => {
+    const c = i === active ? on : off;
+    if (i === active) R(0, y - 4, 3, 21, on);
+    if (i === 0) { for (let k = 0; k < 6; k++) R(17 - k, y + k, 2 + k * 2, 2, c); R(13, y + 6, 10, 7, c); }
+    else if (i === 1) { for (let j = 0; j < 3; j++) for (let k = 0; k < 3; k++) R(10 + k * 5, y + j * 5, 3, 3, c); }
+    else if (i === 2) { R(11, y, 13, 2, c); R(11, y + 11, 13, 2, c); R(11, y, 2, 13, c); R(22, y, 2, 13, c); R(16, y + 2, 2, 9, c); }
+    else { R(14, y + 1, 7, 2, c); R(14, y + 10, 7, 2, c); R(12, y + 3, 2, 7, c); R(21, y + 3, 2, 7, c); R(16, y + 5, 3, 3, c); }
+  });
+  R(15, 440, 5, 5, 0x64C878);
+}
 
 function libGridConst() {
   const il = (S.theme?.chains?.main || []).find(e => e.extended && e.extended.columns);
@@ -2255,73 +2276,99 @@ function homeFormatTimePv(mins) {
 }
 
 function renderShelfHome() {
-  const g = libGridConst();
-  const artW = g.cw - g.gap, artH = g.ch - g.gap - g.lh;
-  const wide = S.aspect === 3;
-  const sc = v => wide ? (v * 3) >> 2 : v;
-  const pitchX = sc(g.cw), drawnW = sc(artW);
-  const TILES = 6, HERO_H = 196, GRID_Y = 240, FTR_Y = 450, FTR_TEXT = 454;
-  const x0 = (SCREEN_W - pitchX * TILES) / 2;
+  const M = CONTENT_X, COLW = 184, RX = M + COLW + 12, RW = SCREEN_W - RX - 24;
   const games = gameList();
   const recent = games.slice(0, 8);
   const sel = Math.min(Math.max(S.gameIndex | 0, 0), Math.max(recent.length - 1, 0));
+  const R = (x, y, w, h, c) => { ctx.fillStyle = rgbHex(c); ctx.fillRect(x, y, w, h); };
+  const card = (x, y, w, h, label) => {
+    R(x, y, w, h, 0x161A20); R(x, y, w, 1, 0x2A3038);
+    if (label) shelfText(x + 12, y + 10, label, 0x5C6674, SHELF_FNT_SM);
+  };
+  const fmt = m => m <= 0 ? "" : m < 60 ? m + " m" : Math.floor(m / 60) + " h";
 
   ctx.save();
-  ctx.fillStyle = rgbHex(0x0A0C0F); ctx.fillRect(0, 0, SCREEN_W, SCREEN_H);
+  R(0, 0, SCREEN_W, SCREEN_H, 0x0A0C0F);
 
-  if (!recent.length) {
-    shelfText(32, 120, "Nothing played yet.", 0xF2F5F8, SHELF_FNT);
-    shelfText(32, 150, "Launch something and it appears here, most recent first.",
-              0x5C6674, SHELF_FNT_SM);
-    ctx.restore(); octx.clearRect(0,0,SCREEN_W,SCREEN_H); applyViewport(); return;
+  // header
+  shelfText(M, 14, "HOME", 0x8894A2, SHELF_FNT_SM);
+  let rx = SCREEN_W - 24;
+  const clock = "21:01";                       // stand-in: the RTC is console-side
+  let w = textWidth(clock, SHELF_FNT_SM);
+  R(rx - w - 16, 8, w + 16, 20, 0x1C2027);
+  shelfText(rx - w - 8, 12, clock, 0xF2F5F8, SHELF_FNT_SM);
+  rx -= w + 26;
+  w = textWidth("NET", SHELF_FNT_SM);
+  R(rx - w - 26, 8, w + 26, 20, 0x1C2027);
+  R(rx - w - 18, 16, 5, 5, 0x64C878);
+  shelfText(rx - w - 8, 12, "NET", 0x64C878, SHELF_FNT_SM);
+
+  // left column
+  card(M, 40, COLW, 108, "CLOCK");
+  shelfText(M + 12, 62, "Good evening", 0xF2F5F8, SHELF_FNT_SM);
+  shelfText(M + 12, 82, clock, 0xF2F5F8, SHELF_FNT);
+
+  card(M, 156, COLW, 132, "MOST PLAYED");
+  const top = PLAYTIME_MOCK.map((m, i) => ({ m, t: (games[i] || {}).title || "" }))
+                           .filter(x => x.m > 0).sort((a, b) => b.m - a.m).slice(0, 4);
+  top.forEach((e, i) => {
+    const y = 182 + i * 28;
+    shelfText(M + 12, y, e.t, 0xF2F5F8, SHELF_FNT_SM, "left", COLW - 60);
+    const tw = textWidth(fmt(e.m), SHELF_FNT_SM);
+    shelfText(M + COLW - 12 - tw, y, fmt(e.m), 0x5C6674, SHELF_FNT_SM);
+    R(M + 12, y + 15, COLW - 24, 2, 0x2A3038);
+    R(M + 12, y + 15, Math.round((COLW - 24) * e.m / top[0].m), 2, 0x64C878);
+  });
+
+  card(M, 296, COLW, 118, "SYSTEM");
+  const totalM = PLAYTIME_MOCK.filter(m => m > 0).reduce((a, b) => a + b, 0);
+  shelfText(M + 12, 322, `${top.length} of ${games.length} played`, 0x8894A2, SHELF_FNT_SM);
+  shelfText(M + 12, 342, `${fmt(totalM)} total`, 0x8894A2, SHELF_FNT_SM);
+  shelfText(M + 12, 362, "v1.2.0-Beta-2216", 0x5C6674, SHELF_FNT_SM);
+
+  // right column
+  card(RX, 40, RW, 108, "CONTINUE PLAYING");
+  if (sel === 0) {
+    R(RX, 40, RW, 2, 0xF2F5F8); R(RX, 146, RW, 2, 0xF2F5F8);
+    R(RX, 40, 2, 108, 0xF2F5F8); R(RX + RW - 2, 40, 2, 108, 0xF2F5F8);
   }
+  const cov = recent[sel] && gameArt(recent[sel].serial, "COVHD");
+  if (cov) ctx.drawImage(cov, RX + RW - 66, 52, 42, 84);
+  shelfText(RX + 14, 62, (recent[sel] || {}).title || "—", 0xF2F5F8, SHELF_FNT, "left", RW - 90);
+  shelfText(RX + 14, 92, `Last played yesterday  ·  ${fmt(PLAYTIME_MOCK[sel] || 0)} total`,
+            0x8894A2, SHELF_FNT_SM);
+  shelfText(RX + 14, 110, "14 launches", 0x5C6674, SHELF_FNT_SM);
+  const lbl = sel === 0 ? "Resume" : "Play";
+  const lw = textWidth(lbl, SHELF_FNT_SM);
+  R(RX + 14, 126, lw + 22, 18, 0x2E353F);
+  R(RX + 20, 132, 6, 6, 0x64C878);
+  shelfText(RX + 32, 128, lbl, 0xF2F5F8, SHELF_FNT_SM);
 
-  const hero = gameArt(recent[sel].serial, "BG");
-  if (hero) ctx.drawImage(hero, 0, 0, SCREEN_W, HERO_H);
-  else { ctx.fillStyle = rgbHex(0x14171C); ctx.fillRect(0, 0, SCREEN_W, HERO_H); }
-  for (let i = 0; i < 12; i++) {
-    ctx.fillStyle = "rgba(10,12,15," + ((4 + i * 7) / 128) + ")";
-    ctx.fillRect(0, HERO_H - 132 + i * 11, SCREEN_W, 11);
-  }
-
-  // The eyebrow changes with position: only the newest entry is a "continue".
-  shelfText(32, 78, sel === 0 ? "CONTINUE" : "RECENTLY PLAYED", 0x64C878, SHELF_FNT_SM);
-  shelfText(32, 100, recent[sel].title, 0xF2F5F8, SHELF_FNT);
-  const t = homeFormatTimePv(PLAYTIME_MOCK[sel] || 0);
-  if (t) shelfText(32, 128, t + " played", 0x8894A2, SHELF_FNT_SM);
-
+  shelfText(RX, 162, "RECENTLY PLAYED", 0x5C6674, SHELF_FNT_SM);
+  const TILES = 4, tw2 = (RW - 3 * 10) / TILES, th2 = Math.round(tw2 * 180 / 418);
   for (let i = 0; i < TILES && i < recent.length; i++) {
-    const cx = x0 + i * pitchX, cy = GRID_Y;
-    const cov = gameArt(recent[i].serial, "COV");
-    if (cov) ctx.drawImage(cov, cx, cy, drawnW, artH);
-    else { ctx.fillStyle = rgbHex(0x14171C); ctx.fillRect(cx, cy, drawnW, artH); }
+    const cx = RX + i * (tw2 + 10);
+    const bg = gameArt(recent[i].serial, "BG");
+    if (bg) ctx.drawImage(bg, cx, 182, tw2, th2);
+    else R(cx, 182, tw2, th2, 0x161A20);
     if (i === sel) {
-      ctx.fillStyle = rgbHex(0xF2F5F8);
-      ctx.fillRect(cx, cy, drawnW, g.frame);
-      ctx.fillRect(cx, cy + artH - g.frame, drawnW, g.frame);
-      ctx.fillRect(cx, cy, g.frame, artH);
-      ctx.fillRect(cx + drawnW - g.frame, cy, g.frame, artH);
+      R(cx, 182, tw2, 2, 0xF2F5F8); R(cx, 182 + th2 - 2, tw2, 2, 0xF2F5F8);
+      R(cx, 182, 2, th2, 0xF2F5F8); R(cx + tw2 - 2, 182, 2, th2, 0xF2F5F8);
     }
-    shelfText(cx, cy + artH, recent[i].title, i === sel ? 0xF2F5F8 : 0x8894A2,
-              SHELF_FNT_SM, "left", drawnW);
+    shelfText(cx, 182 + th2 + 6, recent[i].title, i === sel ? 0xF2F5F8 : 0x8894A2,
+              SHELF_FNT_SM, "left", tw2);
+    const m = PLAYTIME_MOCK[i] || 0;
+    shelfText(cx, 182 + th2 + 20, m ? `${i + 1}d ago · ${fmt(m)}` : `${i + 1}d ago`,
+              0x5C6674, SHELF_FNT_SM, "left", tw2);
   }
 
-  // Totals: the denominator is the point -- it is the sum of a few games, not
-  // a library statistic, and saying so is the difference from a bare number.
-  const played = PLAYTIME_MOCK.slice(0, games.length).filter(m => m > 0);
-  const mins = played.reduce((a, b) => a + b, 0);
-  const tt = homeFormatTimePv(mins);
-  shelfText(32, 410, tt ? `${tt} across ${played.length} of ${games.length} titles`
-                        : `${games.length} titles, none played yet`,
-            0x5C6674, SHELF_FNT_SM);
+  R(RAIL_W, LIBP.FTR_Y, SCREEN_W - RAIL_W, SCREEN_H - LIBP.FTR_Y, 0x14171C);
+  let hx = CONTENT_X;
+  hx += shelfHintPv(hx, LIBP.FTR_TEXT, "cross", sel === 0 ? "Resume" : "Play");
+  hx += shelfHintPv(hx, LIBP.FTR_TEXT, "square", "Details");
+  hx += shelfHintPv(hx, LIBP.FTR_TEXT, "circle", "Back");
 
-  ctx.fillStyle = rgbHex(0x14171C);
-  ctx.fillRect(0, FTR_Y, SCREEN_W, SCREEN_H - FTR_Y);
-  let hx = 35;
-  hx += shelfHintPv(hx, FTR_TEXT, "cross", sel === 0 ? "Continue" : "Play");
-  hx += shelfHintPv(hx, FTR_TEXT, "square", "Details");
-  hx += shelfHintPv(hx, FTR_TEXT, "circle", "Back");
-
+  shelfRailPv(0);
   ctx.restore();
   octx.clearRect(0, 0, SCREEN_W, SCREEN_H);
   applyViewport();
@@ -2333,7 +2380,7 @@ function renderShelfLibrary() {
   const wide = S.aspect === 3;
   const sc = v => wide ? (v * 3) >> 2 : v;
   const pitchX = sc(g.cw), drawnW = sc(artW);
-  const x0 = (SCREEN_W - pitchX * g.cols) / 2;
+  const x0 = RAIL_W + (SCREEN_W - RAIL_W - pitchX * g.cols) / 2;
   // gameList() is the previewer's own source of truth -- the same one drawElement
   // uses -- rather than a second list that could disagree with the main page.
   const games = gameList();
@@ -2345,17 +2392,17 @@ function renderShelfLibrary() {
   ctx.fillStyle = rgbHex(0x0A0C0F); ctx.fillRect(0, 0, SCREEN_W, SCREEN_H);
 
   const bg = game.serial ? gameArt(game.serial, "BG") : null;
-  if (bg) ctx.drawImage(bg, 0, 0, SCREEN_W, LIBP.HERO_H);
-  else { ctx.fillStyle = rgbHex(0x14171C); ctx.fillRect(0, 0, SCREEN_W, LIBP.HERO_H); }
+  if (bg) ctx.drawImage(bg, RAIL_W, 0, SCREEN_W - RAIL_W, LIBP.HERO_H);
+  else { ctx.fillStyle = rgbHex(0x14171C); ctx.fillRect(RAIL_W, 0, SCREEN_W - RAIL_W, LIBP.HERO_H); }
   for (let i = 0; i < 12; i++) {
     ctx.fillStyle = "rgba(10,12,15," + ((4 + i * 7) / 128) + ")";
-    ctx.fillRect(0, LIBP.HERO_H - 132 + i * 11, SCREEN_W, 11);
+    ctx.fillRect(RAIL_W, LIBP.HERO_H - 132 + i * 11, SCREEN_W - RAIL_W, 11);
   }
 
-  shelfText(32, 100, game.title || "—", 0xF2F5F8, SHELF_FNT);
+  shelfText(CONTENT_X, 100, game.title || "—", 0xF2F5F8, SHELF_FNT);
   const meta = [gameAttr(game, "genre"), gameAttr(game, "release"),
                 gameAttr(game, "developer")].filter(Boolean).join("  ·  ");
-  if (meta) shelfText(32, 128, meta, 0x8894A2, SHELF_FNT_SM);
+  if (meta) shelfText(CONTENT_X, 128, meta, 0x8894A2, SHELF_FNT_SM);
 
   for (let n = 0; n < g.cols * 2; n++) {
     const cy = LIBP.GRID_Y + Math.floor(n / g.cols) * g.ch;
@@ -2380,8 +2427,8 @@ function renderShelfLibrary() {
 
   /* Drawn last, so the bottom row runs under it rather than being squashed. */
   ctx.fillStyle = rgbHex(0x14171C);
-  ctx.fillRect(0, LIBP.FTR_Y, SCREEN_W, SCREEN_H - LIBP.FTR_Y);
-  let hx = 35;
+  ctx.fillRect(RAIL_W, LIBP.FTR_Y, SCREEN_W - RAIL_W, SCREEN_H - LIBP.FTR_Y);
+  let hx = CONTENT_X;
   hx += shelfHintPv(hx, LIBP.FTR_TEXT, "cross", "Play");
   hx += shelfHintPv(hx, LIBP.FTR_TEXT, "square", "Details");
   hx += shelfHintPv(hx, LIBP.FTR_TEXT, "circle", "Back");
@@ -2390,6 +2437,7 @@ function renderShelfLibrary() {
   if (605 - cw > hx + 8)
     shelfText(605 - cw, LIBP.FTR_TEXT, count, 0x8894A2, SHELF_FNT_SM);
 
+  shelfRailPv(1);
   ctx.restore();
   octx.clearRect(0, 0, SCREEN_W, SCREEN_H);
   applyViewport();

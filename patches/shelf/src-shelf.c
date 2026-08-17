@@ -30,7 +30,19 @@
 int gEnableShelfUI;
 
 #define SHELF_WIDTH   218
-#define SHELF_PEEK      5   /* sliver left visible when closed */
+/* The collapsed sidebar is an icon rail, not a sliver. It is always present on
+   a SHELF page -- it is where you are, and hiding the only navigation until you
+   remember a gesture is how the pages became a one-way door in the first place.
+   On the classic list it doubles as the affordance that the panel exists.
+
+   Icons are drawn from rectangles. The pages load no art by design, and a glyph
+   from the font would be at the mercy of whichever face the theme supplies. */
+#define SHELF_RAIL_W   34
+#define SHELF_PEEK     SHELF_RAIL_W
+
+/* Content starts after the rail on every page, so the rail can never sit on
+   top of a page's own left edge. */
+#define CONTENT_X    (SHELF_RAIL_W + 14)
 #define SHELF_FRAMES   12
 
 /* How long LEFT must be held at the edge before the panel opens.
@@ -46,7 +58,82 @@ int gEnableShelfUI;
 #define SHELF_HOLD_FRAMES 12
 
 static enum ShelfState state;
+static int appsFontSmall;   /* small face; used by the rail and every page */
+
 static void shelfHoldCron(void);
+
+/** A 3x3 block of dots: Library. */
+static void railGrid(int x, int y, u64 c)
+{
+    int i, j;
+    for (j = 0; j < 3; j++)
+        for (i = 0; i < 3; i++)
+            rmDrawRect(x + i * 5, y + j * 5, 3, 3, c);
+}
+
+/** A house: roof from stacked bars, then a body. Home. */
+static void railHome(int x, int y, u64 c)
+{
+    int i;
+    for (i = 0; i < 6; i++)
+        rmDrawRect(x + 6 - i, y + i, 2 + i * 2, 2, c);
+    rmDrawRect(x + 2, y + 6, 10, 7, c);
+}
+
+/** A pane split by a divider: Apps. */
+static void railPanel(int x, int y, u64 c)
+{
+    rmDrawRect(x, y, 13, 2, c);
+    rmDrawRect(x, y + 11, 13, 2, c);
+    rmDrawRect(x, y, 2, 13, c);
+    rmDrawRect(x + 11, y, 2, 13, c);
+    rmDrawRect(x + 5, y + 2, 2, 9, c);
+}
+
+/** A ring with four teeth: Settings. */
+static void railGear(int x, int y, u64 c)
+{
+    rmDrawRect(x + 3, y + 1, 7, 2, c);
+    rmDrawRect(x + 3, y + 10, 7, 2, c);
+    rmDrawRect(x + 1, y + 3, 2, 7, c);
+    rmDrawRect(x + 10, y + 3, 2, 7, c);
+    rmDrawRect(x + 5, y + 5, 3, 3, c);
+}
+
+/** The collapsed rail: brand mark, the four destinations, and link state.
+ *  `active` is the item to mark, or -1 on the classic list where none applies. */
+static void shelfDrawRail(int active)
+{
+    static const int iconY[4] = {66, 102, 138, 174};
+    u64 on  = GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80);
+    u64 off = GS_SETREG_RGBA(0x5C, 0x66, 0x74, 0x80);
+    int i;
+
+    rmDrawRect(0, 0, SHELF_RAIL_W, 480, GS_SETREG_RGBA(0x14, 0x17, 0x1C, 0x80));
+    rmDrawRect(SHELF_RAIL_W, 0, 1, 480, GS_SETREG_RGBA(0x2A, 0x30, 0x38, 0x80));
+
+    /* Brand mark. A filled slab with the letter on it, because a lone glyph at
+       this size reads as debris rather than as a mark. */
+    rmDrawRect(9, 14, 17, 17, GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80));
+    fntRenderString(appsFontSmall, 14, 16, ALIGN_NONE, 0, 0, "S",
+                    GS_SETREG_RGBA(0x14, 0x17, 0x1C, 0x80));
+
+    for (i = 0; i < 4; i++) {
+        u64 c = (i == active) ? on : off;
+        if (i == active)
+            rmDrawRect(0, iconY[i] - 4, 3, 21, on);
+        switch (i) {
+            case 0: railHome(11, iconY[i], c);  break;
+            case 1: railGrid(10, iconY[i], c);  break;
+            case 2: railPanel(11, iconY[i], c); break;
+            default: railGear(11, iconY[i], c); break;
+        }
+    }
+
+    rmDrawRect(15, 440, 5, 5,
+               (gNetworkStartup == 0) ? GS_SETREG_RGBA(0x64, 0xC8, 0x78, 0x80)
+                                      : GS_SETREG_RGBA(0x3C, 0x44, 0x4E, 0x80));
+}
 
 static int frame;          /* 0..SHELF_FRAMES, position within the slide */
 static int selected;
@@ -175,12 +262,12 @@ void shelfDraw(void)
      * the panel exists. It also keeps the panel's right edge on screen at all
      * times, so no primitive is ever issued wholly at negative x. */
     if (state == SHELF_CLOSED) {
-        if (!guiOnMainScreen())
+        /* On a SHELF page the rail is part of the page and marks where you are.
+           On the classic list it is the affordance that the panel exists. */
+        int page = guiOnShelfPage() ? guiShelfPageIndex() : -1;
+        if (!guiOnMainScreen() && page < 0)
             return;
-        rmDrawRect(0, 0, SHELF_PEEK, 480, GS_SETREG_RGBA(0x14, 0x17, 0x1C, 0x70));
-        rmDrawRect(SHELF_PEEK, 0, 1, 480, GS_SETREG_RGBA(0x3C, 0x44, 0x4E, 0x60));
-        /* A short grabber at the vertical centre, where the eye goes looking. */
-        rmDrawRect(0, 216, SHELF_PEEK + 2, 48, GS_SETREG_RGBA(0x5C, 0x66, 0x74, 0x70));
+        shelfDrawRail(page);
         return;
     }
 
@@ -287,9 +374,9 @@ void shelfHandleInputPage(void)
 
 #define APPS_COLS   3
 #define APPS_PER    (APPS_COLS * 2)
-#define APPS_MARGIN 32
+#define APPS_MARGIN CONTENT_X
 #define APPS_GAP    16
-#define APPS_CW     ((640 - 2 * APPS_MARGIN - (APPS_COLS - 1) * APPS_GAP) / APPS_COLS)
+#define APPS_CW     ((640 - APPS_MARGIN - 24 - (APPS_COLS - 1) * APPS_GAP) / APPS_COLS)
 #define APPS_CH     170
 #define APPS_Y0     64
 
@@ -349,7 +436,6 @@ static void shelfHoldCron(void)
 }
 
 static int appsSel;
-static int appsFontSmall;
 
 /* FNT_DEFAULT is a single size, so a subtitle at the same size is not a
    subtitle. A NULL path makes fntLoadSlot fall back to the embedded face
@@ -399,9 +485,9 @@ static void appsStatusBar(void)
 {
     int rx = 608, w;
 
-    rmDrawRect(0, 0, 640, 40, GS_SETREG_RGBA(0x18, 0x1C, 0x22, 0x80));
-    rmDrawRect(0, 40, 640, 1, GS_SETREG_RGBA(0x2A, 0x30, 0x38, 0x80));
-    fntRenderString(FNT_DEFAULT, 32, HDR_TEXT_Y, ALIGN_NONE, 0, 0, "Apps",
+    rmDrawRect(SHELF_RAIL_W, 0, 640 - SHELF_RAIL_W, 40, GS_SETREG_RGBA(0x18, 0x1C, 0x22, 0x80));
+    rmDrawRect(SHELF_RAIL_W, 40, 640 - SHELF_RAIL_W, 1, GS_SETREG_RGBA(0x2A, 0x30, 0x38, 0x80));
+    fntRenderString(FNT_DEFAULT, CONTENT_X, HDR_TEXT_Y, ALIGN_NONE, 0, 0, "Apps",
                     GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80));
 
     /* Placeholder until Phase 8 binds it. sceCdReadClock is available and
@@ -451,10 +537,10 @@ void shelfRenderApps(void)
     if (total <= 0) {
         /* An empty state, not a grid of nothing with a selection index pointing
            at an item that does not exist. */
-        fntRenderString(FNT_DEFAULT, 32, 120, ALIGN_NONE, 0, 0,
+        fntRenderString(FNT_DEFAULT, CONTENT_X, 120, ALIGN_NONE, 0, 0,
                         "No applications found.",
                         GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80));
-        fntRenderString(appsFontSmall, 32, 148, ALIGN_NONE, 0, 0,
+        fntRenderString(appsFontSmall, CONTENT_X, 148, ALIGN_NONE, 0, 0,
                         "Put an ELF and a title.cfg under APPS/ on a device OPL can see.",
                         GS_SETREG_RGBA(0x5C, 0x66, 0x74, 0x80));
     }
@@ -534,6 +620,8 @@ void shelfRenderApps(void)
         fntRenderString(appsFontSmall, rx - w, 424, ALIGN_NONE, 0, 0, v,
                         GS_SETREG_RGBA(0x3C, 0x44, 0x4E, 0x80));
     }
+
+    shelfDrawRail(guiShelfPageIndex());
 }
 
 void shelfHandleInputApps(void)
@@ -790,7 +878,8 @@ void shelfRenderLibrary(void)
     int pitchX = rmWideScale(LIB_CELL_W);
     int drawnW = rmWideScale(LIB_ART_W);
     int gridW  = pitchX * LIB_COLS;
-    int x0     = (640 - gridW) / 2;
+    /* Centred in the space beside the rail, not in the whole screen. */
+    int x0     = SHELF_RAIL_W + (640 - SHELF_RAIL_W - gridW) / 2;
     int first, i, n;
     char buf[80];
 
@@ -809,12 +898,13 @@ void shelfRenderLibrary(void)
     if (total > 0) {
         GSTEXTURE *hero = libHero(libSel);
         if (hero)
-            rmDrawPixmap(hero, 0, 0, ALIGN_NONE, 640, LIB_HERO_H, SCALING_NONE,
-                         gDefaultCol);
+            rmDrawPixmap(hero, SHELF_RAIL_W, 0, ALIGN_NONE, 640 - SHELF_RAIL_W,
+                         LIB_HERO_H, SCALING_NONE, gDefaultCol);
         else
-            rmDrawRect(0, 0, 640, LIB_HERO_H, GS_SETREG_RGBA(0x14, 0x17, 0x1C, 0x80));
+            rmDrawRect(SHELF_RAIL_W, 0, 640 - SHELF_RAIL_W, LIB_HERO_H,
+                       GS_SETREG_RGBA(0x14, 0x17, 0x1C, 0x80));
         for (i = 0; i < 12; i++)
-            rmDrawRect(0, LIB_HERO_H - 132 + i * 11, 640, 11,
+            rmDrawRect(SHELF_RAIL_W, LIB_HERO_H - 132 + i * 11, 640 - SHELF_RAIL_W, 11,
                        GS_SETREG_RGBA(0x0A, 0x0C, 0x0F, 4 + i * 7));
     }
 
@@ -825,20 +915,20 @@ void shelfRenderLibrary(void)
                          : (libList && libList->itemGetName
                             ? libList->itemGetName(libList, libSel) : NULL);
         if (name)
-            fntRenderString(FNT_DEFAULT, 32, 100, ALIGN_NONE, 0, 0, name,
+            fntRenderString(FNT_DEFAULT, CONTENT_X, 100, ALIGN_NONE, 0, 0, name,
                             GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80));
         /* One line, not four. The full set belongs on the details page, which
            Square now opens; repeating it here only crowded the picture. */
         if (libMetaA[0])
-            fntRenderString(appsFontSmall, 32, 128, ALIGN_NONE, 0, 0, libMetaA,
+            fntRenderString(appsFontSmall, CONTENT_X, 128, ALIGN_NONE, 0, 0, libMetaA,
                             GS_SETREG_RGBA(0x88, 0x94, 0xA2, 0x80));
     }
 
     if (total <= 0) {
-        fntRenderString(FNT_DEFAULT, 32, 120, ALIGN_NONE, 0, 0,
+        fntRenderString(FNT_DEFAULT, CONTENT_X, 120, ALIGN_NONE, 0, 0,
                         "Nothing to show yet.",
                         GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80));
-        fntRenderString(appsFontSmall, 32, 148, ALIGN_NONE, 0, 0,
+        fntRenderString(appsFontSmall, CONTENT_X, 148, ALIGN_NONE, 0, 0,
                         "This page follows the device the main list is on. Pick one there first.",
                         GS_SETREG_RGBA(0x5C, 0x66, 0x74, 0x80));
     }
@@ -890,9 +980,9 @@ void shelfRenderLibrary(void)
     }
 
     /* Drawn last, so the bottom row of tiles runs under it. */
-    rmDrawRect(0, LIB_FTR_Y, 640, 480 - LIB_FTR_Y, GS_SETREG_RGBA(0x14, 0x17, 0x1C, 0x80));
+    rmDrawRect(SHELF_RAIL_W, LIB_FTR_Y, 640 - SHELF_RAIL_W, 480 - LIB_FTR_Y, GS_SETREG_RGBA(0x14, 0x17, 0x1C, 0x80));
     {
-        int hx = 35, w, rx = 605;
+        int hx = CONTENT_X, w, rx = 605;
         hx += shelfHint(hx, LIB_FTR_TEXT, 0, "Play");
         hx += shelfHint(hx, LIB_FTR_TEXT, 2, "Details");
         shelfHint(hx, LIB_FTR_TEXT, 1, "Back");
@@ -906,6 +996,8 @@ void shelfRenderLibrary(void)
                                 buf, GS_SETREG_RGBA(0x88, 0x94, 0xA2, 0x80));
         }
     }
+
+    shelfDrawRail(guiShelfPageIndex());
 }
 
 void shelfHandleInputLibrary(void)
@@ -972,10 +1064,10 @@ void shelfHandleInputLibrary(void)
 */
 
 #define HOME_TILES   4
-#define HOME_M       24
+#define HOME_M       CONTENT_X
 #define HOME_COL_W   184
 #define HOME_R_X     (HOME_M + HOME_COL_W + 12)
-#define HOME_R_W     (640 - HOME_R_X - HOME_M)
+#define HOME_R_W     (640 - HOME_R_X - 24)
 
 static image_cache_t *homeCover, *homeHero;
 static int homeCovId[OPL_RECENT_MAX], homeCovUid[OPL_RECENT_MAX];
@@ -1338,15 +1430,17 @@ void shelfRenderHome(void)
         }
     }
 
-    rmDrawRect(0, LIB_FTR_Y, 640, 480 - LIB_FTR_Y, GS_SETREG_RGBA(0x14, 0x17, 0x1C, 0x80));
+    rmDrawRect(SHELF_RAIL_W, LIB_FTR_Y, 640 - SHELF_RAIL_W, 480 - LIB_FTR_Y, GS_SETREG_RGBA(0x14, 0x17, 0x1C, 0x80));
     {
-        int hx = 35;
+        int hx = CONTENT_X;
         if (total > 0) {
             hx += shelfHint(hx, LIB_FTR_TEXT, 0, homeSel == 0 ? "Resume" : "Play");
             hx += shelfHint(hx, LIB_FTR_TEXT, 2, "Details");
         }
         shelfHint(hx, LIB_FTR_TEXT, 1, "Back");
     }
+
+    shelfDrawRail(guiShelfPageIndex());
 }
 
 void shelfHandleInputHome(void)
