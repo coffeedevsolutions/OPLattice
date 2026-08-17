@@ -2383,9 +2383,13 @@ function renderShelfHome() {
     ctx.fillRect(x, y, w, h);
   };
   const card = (x, y, w, h, label, phase) => {
+    // Outlined and square: the page is a drawing now, and a drawing does not
+    // round its boxes or fill them in.
     const dy = drift(phase, 2);
-    RR(x, y + dy, w, h, 0x161A20); R(x + 3, y + dy, w - 6, 1, 0x2A3038);
-    if (label) shelfText(x + 12, y + dy + 9, label, 0x5C6674, SHELF_FNT_LBL);
+    R(x, y + dy, w, h, 0x3A2E22, 0x0C);
+    R(x, y + dy, w, 1, 0x3A2E22, 0x4E); R(x, y + dy + h - 1, w, 1, 0x3A2E22, 0x4E);
+    R(x, y + dy, 1, h, 0x3A2E22, 0x4E); R(x + w - 1, y + dy, 1, h, 0x3A2E22, 0x4E);
+    if (label) shelfText(x + 10, y + dy + 7, label, 0x7A6A55, SHELF_FNT_LBL);
     return dy;
   };
   // 2px bands, matching shelf.c. The step count used to be a parameter set far
@@ -2410,31 +2414,31 @@ function renderShelfHome() {
   };
 
   ctx.save();
-  R(0, 0, SCREEN_W, SCREEN_H, 0x0A0C0F);
+  R(0, 0, SCREEN_W, SCREEN_H, 0xC9BFA6);
 
-  shelfText(M, 14, "HOME", 0x8894A2, SHELF_FNT_SM);
+  shelfText(M, 14, "HOME", 0x6B5A46, SHELF_FNT_SM);
   let rx = SCREEN_W - 24;
   const hhmm = "21:01";
   let w = textWidth(hhmm, SHELF_FNT_SM);
-  R(rx - w - 16, 8, w + 16, 20, 0x1C2027);
-  shelfText(rx - w - 8, 12, hhmm, 0xF2F5F8, SHELF_FNT_SM);
+  R(rx - w - 16, 8, w + 16, 20, 0xBDB29A);
+  shelfText(rx - w - 8, 12, hhmm, 0x3A2E22, SHELF_FNT_SM);
   rx -= w + 26;
   w = textWidth("NET", SHELF_FNT_SM);
-  R(rx - w - 26, 8, w + 26, 20, 0x1C2027);
+  R(rx - w - 26, 8, w + 26, 20, 0xBDB29A);
   R(rx - w - 18, 16, 5, 5, 0x64C878);
   shelfText(rx - w - 8, 12, "NET", 0x64C878, SHELF_FNT_SM);
 
   // clock card, with the evening tint and the display face
   const dyA = card(M, 40, COLW, 122, "CLOCK", 0);
   gradV(M, 41 + dyA, COLW, 120, 0x48, 0x00, 0x3A2C52);
-  shelfText(M + 12, 66 + dyA, "Good evening", 0xB4BEC8, SHELF_FNT_SM);
+  shelfText(M + 12, 66 + dyA, "Good evening", 0x6B5A46, SHELF_FNT_SM);
   const BIG = { size: 46, family: SHELF_FNT.family };
-  shelfText(M + 10, 86 + dyA, "21", 0xF2F5F8, BIG);
+  shelfText(M + 10, 86 + dyA, "21", 0x3A2E22, BIG);
   const hw = textWidth("21", BIG);
   ctx.globalAlpha = (0x38 + pulse / 3) / 128;
-  shelfText(M + 12 + hw, 86 + dyA, ":", 0xF2F5F8, BIG);
+  shelfText(M + 12 + hw, 86 + dyA, ":", 0x3A2E22, BIG);
   ctx.globalAlpha = 1;
-  shelfText(M + 14 + hw + textWidth(":", BIG), 86 + dyA, "01", 0xF2F5F8, BIG);
+  shelfText(M + 14 + hw + textWidth(":", BIG), 86 + dyA, "01", 0x3A2E22, BIG);
 
   // Two destinations rather than a ranking: this column had the only room for
   // something you can press.
@@ -2444,15 +2448,19 @@ function renderShelfHome() {
     const bx = M + k * (BW + 10);
     const on = (S.homeFocus | 0) === 2 + k;
     const lf = on ? 2 : 0;
-    RR(bx - lf, BY + dyB - lf, BW + 2 * lf, BH + 2 * lf, on ? 0x262C35 : 0x161A20);
+    R(bx - lf, BY + dyB - lf, BW + 2 * lf, BH + 2 * lf, 0x3A2E22, on ? 0x2E : 0x0C);
+    R(bx - lf, BY + dyB - lf, BW + 2 * lf, 1, 0x3A2E22, 0x4E);
+    R(bx - lf, BY + dyB - lf + BH + 2 * lf - 1, BW + 2 * lf, 1, 0x3A2E22, 0x4E);
+    R(bx - lf, BY + dyB - lf, 1, BH + 2 * lf, 0x3A2E22, 0x4E);
+    R(bx - lf + BW + 2 * lf - 1, BY + dyB - lf, 1, BH + 2 * lf, 0x3A2E22, 0x4E);
     if (on) {
-      const e = 0xF2F5F8, a = 0x40 + pulse / 4;
+      const e = 0x3A2E22, a = 0x40 + pulse / 4;
       R(bx - lf + 3, BY + dyB - lf, BW + 2 * lf - 6, 2, e, a);
       R(bx - lf + 3, BY + dyB - lf + BH + 2 * lf - 2, BW + 2 * lf - 6, 2, e, a);
       R(bx - lf, BY + dyB - lf + 3, 2, BH + 2 * lf - 6, e, a);
       R(bx - lf + BW + 2 * lf - 2, BY + dyB - lf + 3, 2, BH + 2 * lf - 6, e, a);
     }
-    const ic = on ? 0xF2F5F8 : 0x8894A2;
+    const ic = on ? 0x3A2E22 : 0x6B5A46;
     const gx = bx + BW / 2 - 6, gy = BY + dyB + 10;
     if (k === 0) { for (let j = 0; j < 3; j++) for (let i2 = 0; i2 < 3; i2++) R(gx + i2 * 5, gy + j * 5, 3, 3, ic); }
     else { R(gx, gy, 13, 2, ic); R(gx, gy + 11, 13, 2, ic); R(gx, gy, 2, 13, ic); R(gx + 11, gy, 2, 13, ic); R(gx + 5, gy + 2, 2, 9, ic); }
@@ -2462,35 +2470,35 @@ function renderShelfHome() {
 
   const dyC = card(M, 236, COLW, 178, "SYSTEM", 190);
   const totalM = PLAYTIME_MOCK.filter(m => m > 0).reduce((a, b) => a + b, 0);
-  shelfText(M + 12, 266 + dyC, `${top.length} of ${games.length} played`, 0x8894A2, SHELF_FNT_SM);
-  shelfText(M + 12, 286 + dyC, `${fmt(totalM)} total`, 0x8894A2, SHELF_FNT_SM);
-  shelfText(M + 12, 306 + dyC, "v1.2.0-Beta-2216", 0x5C6674, SHELF_FNT_SM);
+  shelfText(M + 12, 266 + dyC, `${top.length} of ${games.length} played`, 0x6B5A46, SHELF_FNT_SM);
+  shelfText(M + 12, 286 + dyC, `${fmt(totalM)} total`, 0x6B5A46, SHELF_FNT_SM);
+  shelfText(M + 12, 306 + dyC, "v1.2.0-Beta-2216", 0x7A6A55, SHELF_FNT_SM);
 
   // the continue card IS the artwork
   const focus = S.homeFocus | 0;                 // 0 = hero, 1 = strip
   const lift = focus === 0 ? 3 : 0;
   const hx0 = RX - lift, hy0 = 40 - lift + drift(45, lift ? 3 : 2);
   const hw0 = RW + 2 * lift, hh0 = HERO_H + 2 * lift;
-  RR(hx0, hy0, hw0, hh0, 0x14171C);
+  R(hx0, hy0, hw0, hh0, 0x3A2E22, 0x18);
   const bg = recent[0] && gameArt(recent[0].serial, "BG");
   if (bg) ctx.drawImage(bg, hx0, hy0, hw0, hh0);
-  gradV(hx0, hy0 + hh0 - 92, hw0, 92, 0x04, 0x6E, 0x0A0C0F);
+  gradV(hx0, hy0 + hh0 - 92, hw0, 92, 0x04, 0x76, 0x2A2218);
   RMask(hx0, hy0, hw0, hh0, 0x0A0C0F);
   const cov = recent[0] && gameArt(recent[0].serial, "COVHD");
   if (cov) ctx.drawImage(cov, hx0 + hw0 - 62, hy0 + 12, 42, 84);
   if (focus === 0) {
-    const e = 0xF2F5F8, a = (0x40 + pulse / 4);
+    const e = 0x3A2E22, a = (0x40 + pulse / 4);
     R(hx0, hy0, hw0, 2, e, a); R(hx0, hy0 + hh0 - 2, hw0, 2, e, a);
     R(hx0, hy0, 2, hh0, e, a); R(hx0 + hw0 - 2, hy0, 2, hh0, e, a);
   }
-  shelfText(hx0 + 14, hy0 + hh0 - 84, "CONTINUE PLAYING", 0xB4BEC8, SHELF_FNT_LBL);
+  shelfText(hx0 + 14, hy0 + hh0 - 84, "CONTINUE PLAYING", 0xE8E2D4, SHELF_FNT_LBL);
   shelfText(hx0 + 14, hy0 + hh0 - 68, (recent[0] || {}).title || "—",
-            0xF2F5F8, SHELF_FNT, "left", RW - 84);
+            0xF6F2E8, SHELF_FNT, "left", RW - 84);
   shelfText(hx0 + 14, hy0 + hh0 - 38,
             `Last played yesterday  ·  ${fmt(PLAYTIME_MOCK[0] || 0)} total  ·  14 launches`,
-            0xB4BEC8, SHELF_FNT_SM, "left", RW - 28);
+            0xD8D0C0, SHELF_FNT_SM, "left", RW - 28);
 
-  shelfText(RX, 188, "RECENTLY PLAYED", 0x5C6674, SHELF_FNT_LBL);
+  shelfText(RX, 188, "RECENTLY PLAYED", 0x7A6A55, SHELF_FNT_LBL);
   // Drawn width first, declared width from it -- the row must fill RW.
   const GAP = 10;
   const dw2 = Math.floor((RW - (COLS - 1) * GAP) / COLS);
@@ -2505,20 +2513,21 @@ function renderShelfHome() {
     const b2 = gameArt(recent[idx].serial, "COVHD");
     // Square: a cover is a printed object, and rounding it makes it read as a
     // UI tile rather than as the thing it pictures.
-    if (b2) ctx.drawImage(b2, cx, ty, tww, thh); else R(cx, ty, tww, thh, 0x161A20);
+    if (b2) ctx.drawImage(b2, cx, ty, tww, thh); else R(cx, ty, tww, thh, 0xC3B9A0);
     if (idx === sel) {
       const a = on ? 0x40 + pulse / 4 : 0x50;
-      R(cx, ty, tww, 2, 0xF2F5F8, a); R(cx, ty + thh - 2, tww, 2, 0xF2F5F8, a);
-      R(cx, ty, 2, thh, 0xF2F5F8, a); R(cx + tww - 2, ty, 2, thh, 0xF2F5F8, a);
+      R(cx, ty, tww, 2, 0x3A2E22, a); R(cx, ty + thh - 2, tww, 2, 0x3A2E22, a);
+      R(cx, ty, 2, thh, 0x3A2E22, a); R(cx + tww - 2, ty, 2, thh, 0x3A2E22, a);
     }
-    shelfText(cx + lf, ty + thh + 6, recent[idx].title, i === sel ? 0xF2F5F8 : 0x8894A2,
+    shelfText(cx + lf, ty + thh + 6, recent[idx].title, i === sel ? 0x3A2E22 : 0x6B5A46,
               SHELF_FNT_SM, "left", dw2);
     const m = PLAYTIME_MOCK[idx] || 0;
     shelfText(cx + lf, ty + thh + 20, m ? `${idx}d ago · ${fmt(m)}` : `${idx}d ago`,
-              0x5C6674, SHELF_FNT_SM, "left", dw2);
+              0x7A6A55, SHELF_FNT_SM, "left", dw2);
   }
 
-  R(RAIL_W, LIBP.FTR_Y, SCREEN_W - RAIL_W, SCREEN_H - LIBP.FTR_Y, 0x14171C);
+  R(RAIL_W, LIBP.FTR_Y, SCREEN_W - RAIL_W, SCREEN_H - LIBP.FTR_Y, 0x3A2E22, 0x1A);
+  R(RAIL_W, LIBP.FTR_Y, SCREEN_W - RAIL_W, 1, 0x3A2E22, 0x4E);
   let hx = CONTENT_X;
   hx += shelfHintPv(hx, LIBP.FTR_TEXT, "cross", focus === 0 ? "Resume" : "Play");
   hx += shelfHintPv(hx, LIBP.FTR_TEXT, "square", "Details");

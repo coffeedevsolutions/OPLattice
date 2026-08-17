@@ -147,39 +147,7 @@ static int shelfFloat(int phase, int amp)
  *  dark background. Alpha runs 0..0x80 on the GS, so 2px bands put each step
  *  near one unit and the ramp reads as continuous. Sprites are cheap; the
  *  banding was not worth the primitives it saved. */
-/** A filled rect with its corners taken off.
- *
- *  There is no rounded primitive and no mask, so the shape is built from
- *  horizontal bands whose ends step inward. Three bands is enough at this size:
- *  more steps do not survive the framebuffer, and fewer read as a chamfer. */
-static void shelfRound(int x, int y, int w, int h, int r, u64 col)
-{
-    static const int inset[3] = {3, 2, 1};
-    int i;
-    if (r < 3) {
-        rmDrawRect(x, y, w, h, col);
-        return;
-    }
-    for (i = 0; i < 3; i++) {
-        rmDrawRect(x + inset[i], y + i, w - 2 * inset[i], 1, col);
-        rmDrawRect(x + inset[i], y + h - 1 - i, w - 2 * inset[i], 1, col);
-    }
-    rmDrawRect(x, y + 3, w, h - 6, col);
-}
 
-/** The same corners, but cut *out* of whatever was drawn underneath -- for art,
- *  which cannot be masked. Only honest over a known flat ground. */
-static void shelfRoundMask(int x, int y, int w, int h, u64 ground)
-{
-    static const int inset[3] = {3, 2, 1};
-    int i;
-    for (i = 0; i < 3; i++) {
-        rmDrawRect(x, y + i, inset[i], 1, ground);
-        rmDrawRect(x + w - inset[i], y + i, inset[i], 1, ground);
-        rmDrawRect(x, y + h - 1 - i, inset[i], 1, ground);
-        rmDrawRect(x + w - inset[i], y + h - 1 - i, inset[i], 1, ground);
-    }
-}
 
 static void shelfGradV(int x, int y, int w, int h, int a0, int a1, u64 rgb)
 {
@@ -1191,6 +1159,9 @@ static int homeScrollT;
 #define LAND_INK   GS_SETREG_RGBA(0x3A, 0x2E, 0x22, 0x80)
 #define LAND_DIM   GS_SETREG_RGBA(0x3A, 0x2E, 0x22, 0x38)
 #define LAND_FAINT GS_SETREG_RGBA(0x3A, 0x2E, 0x22, 0x1C)
+#define LAND_RULE  GS_SETREG_RGBA(0x3A, 0x2E, 0x22, 0x4E)
+#define LAND_TEXT  GS_SETREG_RGBA(0x3A, 0x2E, 0x22, 0x80)
+#define LAND_MUTE  GS_SETREG_RGBA(0x3A, 0x2E, 0x22, 0x54)
 
 /** A 45-degree run, as a staircase. There is no diagonal primitive; at one pixel
  *  per step the stair is the line. `dir` picks the quadrant. */
@@ -1440,7 +1411,8 @@ void shelfRenderHome(void)
 
     /* Chrome does not scroll. */
     rmDrawRect(SHELF_RAIL_W, LIB_FTR_Y, 640 - SHELF_RAIL_W, 480 - LIB_FTR_Y,
-               GS_SETREG_RGBA(0x14, 0x17, 0x1C, 0x80));
+               GS_SETREG_RGBA(0x3A, 0x2E, 0x22, 0x1A));
+    rmDrawRect(SHELF_RAIL_W, LIB_FTR_Y, 640 - SHELF_RAIL_W, 1, LAND_RULE);
     {
         int hx = CONTENT_X;
         if (homeView == 0) {
@@ -1489,14 +1461,23 @@ static GSTEXTURE *homeArt(image_cache_t *cache, int *ids, int *uids, int idx)
 /** A panel, drifting on its own phase. Returns the drift so the caller can
  *  offset its contents by the same amount -- a card that moves while its text
  *  stays put is worse than one that does not move at all. */
+/** A panel on the dashboard: an outline and a label, not a filled slab.
+ *
+ *  Square corners, because the page is a drawing now and a drawing does not
+ *  round its boxes. The fill is a barely-there wash rather than a block, so the
+ *  ground reads as one sheet with things drawn on it instead of as cards
+ *  floating over a background. */
 static int homeCard(int x, int y, int w, int h, const char *label, int phase)
 {
     int dy = shelfFloat(phase, 2);
-    shelfRound(x, y + dy, w, h, 4, GS_SETREG_RGBA(0x16, 0x1A, 0x20, 0x80));
-    rmDrawRect(x + 3, y + dy, w - 6, 1, GS_SETREG_RGBA(0x2A, 0x30, 0x38, 0x80));
+    rmDrawRect(x, y + dy, w, h, GS_SETREG_RGBA(0x3A, 0x2E, 0x22, 0x0C));
+    rmDrawRect(x, y + dy, w, 1, LAND_RULE);
+    rmDrawRect(x, y + dy + h - 1, w, 1, LAND_RULE);
+    rmDrawRect(x, y + dy, 1, h, LAND_RULE);
+    rmDrawRect(x + w - 1, y + dy, 1, h, LAND_RULE);
     if (label)
-        fntRenderString(appsFontLabel, x + 12, y + dy + 9, ALIGN_NONE, 0, 0, label,
-                        GS_SETREG_RGBA(0x5C, 0x66, 0x74, 0x80));
+        fntRenderString(appsFontLabel, x + 10, y + dy + 7, ALIGN_NONE, 0, 0, label,
+                        LAND_DIM);
     return dy;
 }
 
@@ -1520,19 +1501,19 @@ static void homeDrawDash(void)
         homeCover = cacheInitCache(3, "ART", 1, "COVHD", HOME_TILES + 2);
     }
 
-    rmDrawRect(0, 0, 640, 480, GS_SETREG_RGBA(0x0A, 0x0C, 0x0F, 0x80));
+    rmDrawRect(0, 0, 640, 480, LAND_BG);
 
     /* ---- header ---- */
     fntRenderString(appsFontSmall, HOME_M, 14, ALIGN_NONE, 0, 0, "HOME",
-                    GS_SETREG_RGBA(0x88, 0x94, 0xA2, 0x80));
+                    LAND_MUTE);
     {
         int rx = 640 - HOME_M, w;
         if (haveClock) {
             snprintf(buf, sizeof(buf), "%02d:%02d", hh, mm);
             w = fntCalcDimensions(appsFontSmall, buf);
-            rmDrawRect(rx - w - 16, 8, w + 16, 20, GS_SETREG_RGBA(0x1C, 0x20, 0x27, 0x80));
+            rmDrawRect(rx - w - 16, 8, w + 16, 20, GS_SETREG_RGBA(0x3A, 0x2E, 0x22, 0x14));
             fntRenderString(appsFontSmall, rx - w - 8, 12, ALIGN_NONE, 0, 0, buf,
-                            GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80));
+                            LAND_TEXT);
             rx -= w + 26;
         }
         {
@@ -1540,7 +1521,7 @@ static void homeDrawDash(void)
             u64 col = (gNetworkStartup == 0) ? GS_SETREG_RGBA(0x64, 0xC8, 0x78, 0x80)
                                              : GS_SETREG_RGBA(0x6E, 0x76, 0x81, 0x80);
             w = fntCalcDimensions(appsFontSmall, net);
-            rmDrawRect(rx - w - 26, 8, w + 26, 20, GS_SETREG_RGBA(0x1C, 0x20, 0x27, 0x80));
+            rmDrawRect(rx - w - 26, 8, w + 26, 20, GS_SETREG_RGBA(0x3A, 0x2E, 0x22, 0x14));
             rmDrawRect(rx - w - 18, 16, 5, 5, col);
             fntRenderString(appsFontSmall, rx - w - 8, 12, ALIGN_NONE, 0, 0, net, col);
         }
@@ -1560,22 +1541,22 @@ static void homeDrawDash(void)
         int hw;
         shelfGradV(HOME_M, 41 + dyA, HOME_COL_W, 120, 0x48, 0x00, tint);
         fntRenderString(appsFontSmall, HOME_M + 12, 66 + dyA, ALIGN_NONE, 0, 0, greet,
-                        GS_SETREG_RGBA(0xB4, 0xBE, 0xC8, 0x80));
+                        LAND_MUTE);
         /* Hours, colon and minutes drawn separately so the colon can breathe
            without the digits moving. A blink that shifts the time is worse than
            no blink. */
         snprintf(buf, sizeof(buf), "%02d", hh);
         fntRenderString(appsFontBig, HOME_M + 10, 86 + dyA, ALIGN_NONE, 0, 0, buf,
-                        GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80));
+                        LAND_TEXT);
         hw = fntCalcDimensions(appsFontBig, buf);
         fntRenderString(appsFontBig, HOME_M + 12 + hw, 86 + dyA, ALIGN_NONE, 0, 0, ":",
                         GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x38 + shelfPulse(2 * FPS) / 3));
         snprintf(buf, sizeof(buf), "%02d", mm);
         fntRenderString(appsFontBig, HOME_M + 14 + hw + fntCalcDimensions(appsFontBig, ":"),
-                        86 + dyA, ALIGN_NONE, 0, 0, buf, GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80));
+                        86 + dyA, ALIGN_NONE, 0, 0, buf, LAND_TEXT);
     } else {
         fntRenderString(appsFontSmall, HOME_M + 12, 90 + dyA, ALIGN_NONE, 0, 0,
-                        "RTC unreadable", GS_SETREG_RGBA(0x5C, 0x66, 0x74, 0x80));
+                        "RTC unreadable", LAND_DIM);
     }
 
     /* Two destinations rather than a ranking. This column had the only space on
@@ -1590,14 +1571,18 @@ static void homeDrawDash(void)
             int bx = HOME_M + k * (bw + 10);
             int on = (homeFocus == 2 + k);
             int lf = on ? 2 : 0;
-            u64 face = on ? GS_SETREG_RGBA(0x26, 0x2C, 0x35, 0x80)
-                          : GS_SETREG_RGBA(0x16, 0x1A, 0x20, 0x80);
+            u64 face = on ? GS_SETREG_RGBA(0x3A, 0x2E, 0x22, 0x2E)
+                          : GS_SETREG_RGBA(0x3A, 0x2E, 0x22, 0x0C);
             int tw2 = fntCalcDimensions(appsFontSmall, lbl[k]);
 
-            shelfRound(bx - lf, by + dyB - lf, bw + 2 * lf, bh + 2 * lf, 4, face);
+            rmDrawRect(bx - lf, by + dyB - lf, bw + 2 * lf, bh + 2 * lf, face);
+            rmDrawRect(bx - lf, by + dyB - lf, bw + 2 * lf, 1, LAND_RULE);
+            rmDrawRect(bx - lf, by + dyB - lf + bh + 2 * lf - 1, bw + 2 * lf, 1, LAND_RULE);
+            rmDrawRect(bx - lf, by + dyB - lf, 1, bh + 2 * lf, LAND_RULE);
+            rmDrawRect(bx - lf + bw + 2 * lf - 1, by + dyB - lf, 1, bh + 2 * lf, LAND_RULE);
             if (on) {
-                u64 e = GS_SETREG_RGBA(0xF2, 0xF5, 0xF8,
-                                       0x40 + shelfPulse(3 * FPS) / 4);
+                u64 e = GS_SETREG_RGBA(0x3A, 0x2E, 0x22,
+                                       0x50 + shelfPulse(3 * FPS) / 5);
                 rmDrawRect(bx - lf + 3, by + dyB - lf, bw + 2 * lf - 6, 2, e);
                 rmDrawRect(bx - lf + 3, by + dyB - lf + bh + 2 * lf - 2,
                            bw + 2 * lf - 6, 2, e);
@@ -1610,15 +1595,15 @@ static void homeDrawDash(void)
             if (k == 0)
                 railGrid(bx + bw / 2 - 6, by + dyB + 10,
                          on ? GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80)
-                            : GS_SETREG_RGBA(0x88, 0x94, 0xA2, 0x80));
+                            : LAND_MUTE);
             else
                 railPanel(bx + bw / 2 - 6, by + dyB + 10,
                           on ? GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80)
-                             : GS_SETREG_RGBA(0x88, 0x94, 0xA2, 0x80));
+                             : LAND_MUTE);
             fntRenderString(appsFontSmall, bx + (bw - tw2) / 2, by + dyB + 28,
                             ALIGN_NONE, 0, 0, lbl[k],
                             on ? GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80)
-                               : GS_SETREG_RGBA(0x88, 0x94, 0xA2, 0x80));
+                               : LAND_MUTE);
         }
     }
 
@@ -1627,26 +1612,26 @@ static void homeDrawDash(void)
     homeFormatTime(t, sizeof(t), homeTotalMinutes);
     snprintf(buf, sizeof(buf), "%d of %d played", homeTotalPlayed, homeTotalTitles);
     fntRenderString(appsFontSmall, HOME_M + 12, y, ALIGN_NONE, 0, 0, buf,
-                    GS_SETREG_RGBA(0x88, 0x94, 0xA2, 0x80));
+                    LAND_MUTE);
     y += 20;
     if (t[0]) {
         snprintf(buf, sizeof(buf), "%s total", t);
         fntRenderString(appsFontSmall, HOME_M + 12, y, ALIGN_NONE, 0, 0, buf,
-                        GS_SETREG_RGBA(0x88, 0x94, 0xA2, 0x80));
+                        LAND_MUTE);
         y += 20;
     }
     fntRenderString(appsFontSmall, HOME_M + 12, y, ALIGN_NONE, 0, 0, OPL_VERSION,
-                    GS_SETREG_RGBA(0x5C, 0x66, 0x74, 0x80));
+                    LAND_DIM);
 
     /* ---- right column: continue, recently played ---- */
     if (total <= 0) {
         homeCard(HOME_R_X, 40, HOME_R_W, 108, "CONTINUE PLAYING", 45);
         fntRenderString(FNT_DEFAULT, HOME_R_X + 14, 76, ALIGN_NONE, 0, 0,
                         "Nothing played yet.",
-                        GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80));
+                        LAND_TEXT);
         fntRenderString(appsFontSmall, HOME_R_X + 14, 106, ALIGN_NONE, 0, 0,
                         "Launch something and it appears here.",
-                        GS_SETREG_RGBA(0x5C, 0x66, 0x74, 0x80));
+                        LAND_DIM);
     } else {
         GSTEXTURE *bg  = homeArt(homeHero, homeHeroId, homeHeroUid, 0);
         GSTEXTURE *cov = homeArt(homeCover, homeCovId, homeCovUid, 0);
@@ -1670,21 +1655,20 @@ static void homeDrawDash(void)
 
         /* The card *is* the artwork. A cover thumbnail on a flat panel was a list row
            wearing a hero's label; the BG is what the game looks like. */
-        shelfRound(hx0, hy0, hw0, hh0, 4, GS_SETREG_RGBA(0x14, 0x17, 0x1C, 0x80));
+        rmDrawRect(hx0, hy0, hw0, hh0, GS_SETREG_RGBA(0x3A, 0x2E, 0x22, 0x18));
         if (bg)
             rmDrawPixmap(bg, hx0, hy0, ALIGN_NONE, hw0, hh0, SCALING_NONE, gDefaultCol);
         /* Scrim from the bottom, so the type sits on something whatever the art
            does. Everything above it has to stay readable over a white sky. */
         shelfGradV(hx0, hy0 + hh0 - 92, hw0, 92,
-                   0x04, 0x6E, GS_SETREG_RGBA(0x0A, 0x0C, 0x0F, 0));
+                   0x04, 0x76, GS_SETREG_RGBA(0x2A, 0x22, 0x18, 0));
 
-        shelfRoundMask(hx0, hy0, hw0, hh0, GS_SETREG_RGBA(0x0A, 0x0C, 0x0F, 0x80));
         if (cov)
             rmDrawPixmap(cov, hx0 + hw0 - 62, hy0 + 12, ALIGN_NONE, 56, 84,
                          SCALING_RATIO, gDefaultCol);
 
         if (homeFocus == 0) {
-            u64 e = GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x40 + shelfPulse(3 * FPS) / 4);
+            u64 e = GS_SETREG_RGBA(0x3A, 0x2E, 0x22, 0x50 + shelfPulse(3 * FPS) / 5);
             rmDrawRect(hx0, hy0, hw0, 2, e);
             rmDrawRect(hx0, hy0 + hh0 - 2, hw0, 2, e);
             rmDrawRect(hx0, hy0, 2, hh0, e);
@@ -1693,11 +1677,12 @@ static void homeDrawDash(void)
 
         fntRenderString(appsFontLabel, hx0 + 14, hy0 + hh0 - 84,
                         ALIGN_NONE, 0, 0,
-                        "CONTINUE PLAYING", GS_SETREG_RGBA(0xB4, 0xBE, 0xC8, 0x80));
+                        "CONTINUE PLAYING",
+                        GS_SETREG_RGBA(0xE8, 0xE2, 0xD4, 0x80));
         if (title)
             fntRenderString(FNT_DEFAULT, hx0 + 14, hy0 + hh0 - 68,
                             ALIGN_NONE, HOME_R_W - 84, 24, title,
-                            GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80));
+                            GS_SETREG_RGBA(0xF6, 0xF2, 0xE8, 0x80));
         homeFormatTime(t, sizeof(t), mins);
         buf[0] = '\0';
         if (when[0] && t[0])  snprintf(buf, sizeof(buf), "Last played %s  \xc2\xb7  %s total", when, t);
@@ -1712,9 +1697,9 @@ static void homeDrawDash(void)
         if (buf[0])
             fntRenderString(appsFontSmall, hx0 + 14, hy0 + hh0 - 38,
                             ALIGN_NONE, HOME_R_W - 28, 14, buf,
-                            GS_SETREG_RGBA(0xB4, 0xBE, 0xC8, 0x80));
+                            GS_SETREG_RGBA(0xD8, 0xD0, 0xC0, 0x80));
                 fntRenderString(appsFontLabel, HOME_R_X, 188, ALIGN_NONE, 0, 0,
-                        "RECENTLY PLAYED", GS_SETREG_RGBA(0x5C, 0x66, 0x74, 0x80));
+                        "RECENTLY PLAYED", LAND_DIM);
         {
             /* Work back from the space, not forward from a guess. The row has
                to fill HOME_R_W, so the *drawn* width is what the arithmetic
@@ -1748,8 +1733,8 @@ static void homeDrawDash(void)
                    the artwork does not. */
                 else    rmDrawRect(cx, ty, tww, thh, GS_SETREG_RGBA(0x16, 0x1A, 0x20, 0x80));
                 if (idx == homeSel) {
-                    u64 e = GS_SETREG_RGBA(0xF2, 0xF5, 0xF8,
-                                           on ? 0x40 + shelfPulse(3 * FPS) / 4 : 0x50);
+                    u64 e = GS_SETREG_RGBA(0x3A, 0x2E, 0x22,
+                                           on ? 0x50 + shelfPulse(3 * FPS) / 5 : 0x60);
                     rmDrawRect(cx, ty, tww, 2, e);
                     rmDrawRect(cx, ty + thh - 2, tww, 2, e);
                     rmDrawRect(cx, ty, 2, thh, e);
@@ -1761,7 +1746,7 @@ static void homeDrawDash(void)
                         fntRenderString(appsFontSmall, cx + lift, ty + thh + 6, ALIGN_NONE,
                                         dw, 12, nm,
                                         i == homeSel ? GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80)
-                                                     : GS_SETREG_RGBA(0x88, 0x94, 0xA2, 0x80));
+                                                     : LAND_MUTE);
                 }
                 if (c2) configGetInt(c2, "Playtime", &m2);
                 homeWhen(when, sizeof(when), c2, days);
@@ -1772,7 +1757,7 @@ static void homeDrawDash(void)
                 else if (t[0])       snprintf(buf, sizeof(buf), "%s", t);
                 if (buf[0])
                     fntRenderString(appsFontSmall, cx + lift, ty + thh + 20, ALIGN_NONE,
-                                    dw, 12, buf, GS_SETREG_RGBA(0x5C, 0x66, 0x74, 0x80));
+                                    dw, 12, buf, LAND_DIM);
             }
         }
     }
