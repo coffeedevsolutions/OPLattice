@@ -2347,7 +2347,7 @@ function libDrawAlphabetPv(gridX, total, sel, cols) {
   for (let i = 0; i < LIBP.ALPHA_N; i++) {
     const col = i === near ? 0x3A2E22 : 0x8A806C, y = libAlphaY(i);
     if (named.has(i)) shelfText(ax, y, String.fromCharCode(65 + i), col, SHELF_FNT_LBL);
-    else R(ax + 2, y + 3, 2, 2, col);
+    else R(ax, y + 3, 2, 2, col);   // flush left with the caps, which start at ax
   }
   R(lx, my + 3, 9, 2, 0x3A2E22);
 }

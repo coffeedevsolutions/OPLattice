@@ -1133,9 +1133,12 @@ static void libDrawAlphabet(int gridX, int total)
             c[1] = '\0';
             fntRenderString(appsFontLabel, ax, y, ALIGN_NONE, 0, 0, c, col);
         } else {
-            /* Centred on where the cap would be, not on the glyph box: the box
-               top is y and a 9px cap sits about four pixels down it. */
-            rmDrawRect(ax + 2, y + 3, 2, 2, col);
+            /* Flush with the letters' left edge, not centred under them. Every
+               cap in this face reports bitmap_left 0 and is four pixels wide at
+               9px, so the ink starts exactly at ax and a dot at ax + 2 sat in
+               the letter's right half. Vertically it is centred on where the cap
+               would be rather than on the glyph box, whose top is y. */
+            rmDrawRect(ax, y + 3, 2, 2, col);
         }
     }
 
