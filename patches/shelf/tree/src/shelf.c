@@ -55,7 +55,6 @@ int gEnableShelfUI;
  * The cost is 4:3, where 12x16 is a little tall rather than square. That is the
  * right way round for a console wired to a widescreen panel over HDMI. */
 #define RAIL_ICON_W    12
-#define RAIL_ICON_H    16
 #define SHELF_PEEK     SHELF_RAIL_W
 
 /* Content starts after the rail on every page, so the rail can never sit on
@@ -243,16 +242,32 @@ static void shelfDrawRail(int active)
     rmDrawRect(0, 0, SHELF_RAIL_W, 480, LAND_BG);
     rmDrawRect(SHELF_RAIL_W, 0, 1, 480, LAND_RULE);
 
-    /* Brand mark. A filled slab with the letter knocked out of it, because a
-       lone glyph at this size reads as debris rather than as a mark. Ink on tan
-       now rather than white on near-black, so the letter is the tan. */
+    /* The button that opens this, drawn as the button. An "S" was a brand mark
+       for a shell nobody has a name for, and it answered a question nobody was
+       asking; the rail's one genuinely unguessable fact is which stick opens it.
+       18 by 24, because 18 across renders as wide as 24 down and the ring has to
+       read as round -- an ellipse here would look like a mistake rather than a
+       button. The table is a real ellipse sampled per scanline, not an octagon;
+       at this size the difference shows. */
     {
-        /* A square on screen, which means not a square in these coordinates. */
-        int bw = RAIL_ICON_W, bx = (SHELF_RAIL_W - bw) / 2;
-        int sw = fntCalcDimensions(appsFontSmall, "S");
-        rmDrawRect(bx, 14, bw, RAIL_ICON_H, LAND_INK);
-        fntRenderString(appsFontSmall, bx + (bw - sw) / 2, 16, ALIGN_NONE, 0, 0,
-                        "S", LAND_BG);
+        static const unsigned char l3ring[24][2] = {
+            {5, 2}, {4, 3}, {3, 3}, {2, 3}, {1, 3}, {1, 2},
+            {1, 1}, {0, 2}, {0, 2}, {0, 1}, {0, 1}, {0, 1},
+            {0, 1}, {0, 1}, {0, 1}, {0, 2}, {0, 2}, {1, 1},
+            {1, 2}, {1, 3}, {2, 3}, {3, 3}, {4, 3}, {5, 2}
+        };
+        const int bw = 18, bh = 24, by = 12;
+        int bx = (SHELF_RAIL_W - bw) / 2;
+        int tw = fntCalcDimensions(appsFontSmall, "L3");
+        int i;
+
+        for (i = 0; i < bh; i++) {
+            int lx = l3ring[i][0], run = l3ring[i][1];
+            rmDrawRect(bx + lx, by + i, run, 1, LAND_INK);
+            rmDrawRect(bx + bw - lx - run, by + i, run, 1, LAND_INK);
+        }
+        fntRenderString(appsFontSmall, bx + (bw - tw) / 2, by + (bh - 12) / 2,
+                        ALIGN_NONE, 0, 0, "L3", LAND_INK);
     }
 
     {
@@ -906,6 +921,12 @@ void shelfHandleInputApps(void)
 #define LIB_ART_H     (LIB_CELL_H - LIB_GAP - LIB_LABEL_H) /* 111 */
 #define LIB_PER       LIB_COLS
 #define LIB_HERO_H    196
+/* The hero's caption sits on the bottom of its own container, inset by the same
+   amount it is inset from the left -- CONTENT_X - SHELF_RAIL_W, which is 14.
+   Derived rather than written down, so it follows the rail if that moves again. */
+#define LIB_HERO_PAD  (CONTENT_X - SHELF_RAIL_W)
+#define LIB_HERO_META_Y (LIB_HERO_H - LIB_HERO_PAD - 12)
+#define LIB_HERO_TEXT_Y (LIB_HERO_META_Y - 11 - 17)
 /* The covers start where the scale beside them starts. It was 240 against an
    alphabet at 222, so the ruler began 18 pixels above the first thing it was
    measuring. Moving the grid rather than the scale is what keeps the second row
@@ -1234,13 +1255,16 @@ void shelfRenderLibrary(void)
         const char *name = libMetaName[0] ? libMetaName
                          : (libList && libList->itemGetName
                             ? libList->itemGetName(libList, libSel) : NULL);
+        /* Bottom-aligned, with the same 14 the text is inset from the container's
+           left edge (CONTENT_X - SHELF_RAIL_W). The metadata line is the one that
+           has to land on it, so it is placed first and the title hangs above. */
         if (name)
-            fntRenderString(FNT_DEFAULT, CONTENT_X, 100, ALIGN_NONE, 0, 0, name,
+            fntRenderString(FNT_DEFAULT, CONTENT_X, LIB_HERO_TEXT_Y, ALIGN_NONE, 0, 0, name,
                             GS_SETREG_RGBA(0xF2, 0xF5, 0xF8, 0x80));
         /* One line, not four. The full set belongs on the details page, which
            Square now opens; repeating it here only crowded the picture. */
         if (libMetaA[0])
-            fntRenderString(appsFontSmall, CONTENT_X, 128, ALIGN_NONE, 0, 0, libMetaA,
+            fntRenderString(appsFontSmall, CONTENT_X, LIB_HERO_META_Y, ALIGN_NONE, 0, 0, libMetaA,
                             GS_SETREG_RGBA(0x88, 0x94, 0xA2, 0x80));
     }
 
