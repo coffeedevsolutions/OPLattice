@@ -172,7 +172,7 @@ index dccdc44..70d12dc 100644
  int oplRecentCount(void);
  const char *oplRecentStartup(int index);
 diff --git a/include/renderman.h b/include/renderman.h
-index 6b1f380..1572e39 100644
+index 6b1f380..3130e71 100644
 --- a/include/renderman.h
 +++ b/include/renderman.h
 @@ -102,6 +102,15 @@ void rmDrawRect(int x, int y, int w, int h, u64 color);
@@ -191,12 +191,15 @@ index 6b1f380..1572e39 100644
  /** Starts the frame - first to call every frame */
  void rmStartFrame(void);
  
-@@ -118,6 +127,9 @@ void rmSetOverscan(int overscan);
+@@ -118,6 +127,12 @@ void rmSetOverscan(int overscan);
   * When set, it will treat all pixmap widths/heights (not positions) as scaled with the ratios provided */
  void rmSetAspectRatio(enum rm_aratio dar);
  
 +/** Drawn width of a SCALING_RATIO element declared `w` wide. */
 +int rmWidthScaled(int w);
++
++/** Declared width that will be drawn `w` wide. Inverse of rmWidthScaled. */
++int rmWidthUnscaled(int w);
 +
  /** Widescreen scaling */
  int rmWideScale(int x);
@@ -802,7 +805,7 @@ index 4389c39..65c029d 100644
      thmInit();
      guiInit();
 diff --git a/src/renderman.c b/src/renderman.c
-index 4d90251..ca8cea3 100644
+index 4d90251..a2ffefa 100644
 --- a/src/renderman.c
 +++ b/src/renderman.c
 @@ -10,6 +10,7 @@
@@ -909,7 +912,7 @@ index 4d90251..ca8cea3 100644
      gsKit_prim_quad_texture(gsGlobal, inlay,
                              quad.ul.x + ulx + fRenderXOff, quad.ul.y + uly + fRenderYOff,
                              0.0f, 0.0f,
-@@ -380,6 +435,19 @@ void rmDrawOverlayPixmap(GSTEXTURE *overlay, int x, int y, short aligned, int w,
+@@ -380,6 +435,28 @@ void rmDrawOverlayPixmap(GSTEXTURE *overlay, int x, int y, short aligned, int w,
      rmDrawQuad(&quad);
  }
  
@@ -924,6 +927,15 @@ index 4d90251..ca8cea3 100644
 +int rmWidthScaled(int w)
 +{
 +    return (w * iAspectWidth) >> 2;
++}
++
++/* The inverse: the declared width needed to draw `w` virtual pixels. Layout that
++   starts from the space available -- "five of these must fill 372" -- has to
++   work back to a declared width, and doing that with a hardcoded 4/3 is only
++   right in 16:9. */
++int rmWidthUnscaled(int w)
++{
++    return (w << 2) / iAspectWidth;
 +}
 +
  void rmDrawRect(int x, int y, int w, int h, u64 color)

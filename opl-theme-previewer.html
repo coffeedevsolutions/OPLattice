@@ -2284,6 +2284,24 @@ function renderShelfHome() {
   const games = gameList();
   const recent = games.slice(0, 8);
   const sel = Math.min(Math.max(S.gameIndex | 0, 0), Math.max(recent.length - 1, 0));
+  // shelf.c builds rounded corners from three inset bands -- there is no rounded
+  // primitive on the GS. Mirrored here so the silhouette matches, not approximated
+  // with a canvas roundRect that would look better than the console does.
+  const RR = (x, y, w, h, c, a) => {
+    const ins = [3, 2, 1];
+    for (let i = 0; i < 3; i++) {
+      R(x + ins[i], y + i, w - 2 * ins[i], 1, c, a);
+      R(x + ins[i], y + h - 1 - i, w - 2 * ins[i], 1, c, a);
+    }
+    R(x, y + 3, w, h - 6, c, a);
+  };
+  const RMask = (x, y, w, h, g) => {
+    const ins = [3, 2, 1];
+    for (let i = 0; i < 3; i++) {
+      R(x, y + i, ins[i], 1, g); R(x + w - ins[i], y + i, ins[i], 1, g);
+      R(x, y + h - 1 - i, ins[i], 1, g); R(x + w - ins[i], y + h - 1 - i, ins[i], 1, g);
+    }
+  };
   const R = (x, y, w, h, c, a) => {
     ctx.fillStyle = a === undefined ? rgbHex(c)
       : `rgba(${(c>>16)&255},${(c>>8)&255},${c&255},${a/128})`;
@@ -2291,7 +2309,7 @@ function renderShelfHome() {
   };
   const card = (x, y, w, h, label, phase) => {
     const dy = drift(phase, 2);
-    R(x, y + dy, w, h, 0x161A20); R(x, y + dy, w, 1, 0x2A3038);
+    RR(x, y + dy, w, h, 0x161A20); R(x + 3, y + dy, w - 6, 1, 0x2A3038);
     if (label) shelfText(x + 12, y + dy + 9, label, 0x5C6674, SHELF_FNT_LBL);
     return dy;
   };
@@ -2367,10 +2385,11 @@ function renderShelfHome() {
   const lift = focus === 0 ? 3 : 0;
   const hx0 = RX - lift, hy0 = 40 - lift + drift(45, lift ? 3 : 2);
   const hw0 = RW + 2 * lift, hh0 = HERO_H + 2 * lift;
-  R(hx0, hy0, hw0, hh0, 0x14171C);
+  RR(hx0, hy0, hw0, hh0, 0x14171C);
   const bg = recent[sel] && gameArt(recent[sel].serial, "BG");
   if (bg) ctx.drawImage(bg, hx0, hy0, hw0, hh0);
   gradV(hx0, hy0 + hh0 - 92, hw0, 92, 0x04, 0x6E, 0x0A0C0F);
+  RMask(hx0, hy0, hw0, hh0, 0x0A0C0F);
   const cov = recent[sel] && gameArt(recent[sel].serial, "COVHD");
   if (cov) ctx.drawImage(cov, hx0 + hw0 - 62, hy0 + 12, 42, 84);
   if (focus === 0) {
@@ -2387,15 +2406,19 @@ function renderShelfHome() {
             0xB4BEC8, SHELF_FNT_SM, "left", RW - 28);
 
   shelfText(RX, 188, "RECENTLY PLAYED", 0x5C6674, SHELF_FNT_LBL);
-  const tw2 = (RW - (COLS - 1) * 10) / COLS, dw2 = Math.round(tw2 * 3 / 4), th2 = dw2 * 2;
+  // Drawn width first, declared width from it -- the row must fill RW.
+  const GAP = 10;
+  const dw2 = Math.floor((RW - (COLS - 1) * GAP) / COLS);
+  const tw2 = Math.round(dw2 * 4 / 3), th2 = Math.round(tw2 * 3 / 2);
   for (let i = 0; i < TILES && i < recent.length; i++) {
     const on = focus === 1 && i === sel;
     const lf = on ? 3 : 0;
-    const cx = RX + (i % COLS) * (dw2 + 10) - lf;
+    const cx = RX + (i % COLS) * (dw2 + GAP) - lf;
     const ty = 202 + drift(i * 37, on ? 3 : 2) - lf;
     const tww = dw2 + 2 * lf, thh = th2 + 2 * lf;
     const b2 = gameArt(recent[i].serial, "COVHD");
-    if (b2) ctx.drawImage(b2, cx, ty, tww, thh); else R(cx, ty, tww, thh, 0x161A20);
+    if (b2) ctx.drawImage(b2, cx, ty, tww, thh); else RR(cx, ty, tww, thh, 0x161A20);
+    RMask(cx, ty, tww, thh, 0x0A0C0F);
     if (i === sel) {
       const a = on ? 0x40 + pulse / 4 : 0x50;
       R(cx, ty, tww, 2, 0xF2F5F8, a); R(cx, ty + thh - 2, tww, 2, 0xF2F5F8, a);

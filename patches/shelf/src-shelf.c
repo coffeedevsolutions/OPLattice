@@ -147,6 +147,40 @@ static int shelfFloat(int phase, int amp)
  *  dark background. Alpha runs 0..0x80 on the GS, so 2px bands put each step
  *  near one unit and the ramp reads as continuous. Sprites are cheap; the
  *  banding was not worth the primitives it saved. */
+/** A filled rect with its corners taken off.
+ *
+ *  There is no rounded primitive and no mask, so the shape is built from
+ *  horizontal bands whose ends step inward. Three bands is enough at this size:
+ *  more steps do not survive the framebuffer, and fewer read as a chamfer. */
+static void shelfRound(int x, int y, int w, int h, int r, u64 col)
+{
+    static const int inset[3] = {3, 2, 1};
+    int i;
+    if (r < 3) {
+        rmDrawRect(x, y, w, h, col);
+        return;
+    }
+    for (i = 0; i < 3; i++) {
+        rmDrawRect(x + inset[i], y + i, w - 2 * inset[i], 1, col);
+        rmDrawRect(x + inset[i], y + h - 1 - i, w - 2 * inset[i], 1, col);
+    }
+    rmDrawRect(x, y + 3, w, h - 6, col);
+}
+
+/** The same corners, but cut *out* of whatever was drawn underneath -- for art,
+ *  which cannot be masked. Only honest over a known flat ground. */
+static void shelfRoundMask(int x, int y, int w, int h, u64 ground)
+{
+    static const int inset[3] = {3, 2, 1};
+    int i;
+    for (i = 0; i < 3; i++) {
+        rmDrawRect(x, y + i, inset[i], 1, ground);
+        rmDrawRect(x + w - inset[i], y + i, inset[i], 1, ground);
+        rmDrawRect(x, y + h - 1 - i, inset[i], 1, ground);
+        rmDrawRect(x + w - inset[i], y + h - 1 - i, inset[i], 1, ground);
+    }
+}
+
 static void shelfGradV(int x, int y, int w, int h, int a0, int a1, u64 rgb)
 {
     int i, n = h / 2;
@@ -1112,6 +1146,7 @@ void shelfHandleInputLibrary(void)
 
 #define HOME_TILES   5
 #define HOME_COLS    5
+#define HOME_GAP     10
 #define HOME_HERO_H  132
 #define HOME_M       CONTENT_X
 #define HOME_COL_W   184
@@ -1274,8 +1309,8 @@ static GSTEXTURE *homeArt(image_cache_t *cache, int *ids, int *uids, int idx)
 static int homeCard(int x, int y, int w, int h, const char *label, int phase)
 {
     int dy = shelfFloat(phase, 2);
-    rmDrawRect(x, y + dy, w, h, GS_SETREG_RGBA(0x16, 0x1A, 0x20, 0x80));
-    rmDrawRect(x, y + dy, w, 1, GS_SETREG_RGBA(0x2A, 0x30, 0x38, 0x80));
+    shelfRound(x, y + dy, w, h, 4, GS_SETREG_RGBA(0x16, 0x1A, 0x20, 0x80));
+    rmDrawRect(x + 3, y + dy, w - 6, 1, GS_SETREG_RGBA(0x2A, 0x30, 0x38, 0x80));
     if (label)
         fntRenderString(appsFontLabel, x + 12, y + dy + 9, ALIGN_NONE, 0, 0, label,
                         GS_SETREG_RGBA(0x5C, 0x66, 0x74, 0x80));
@@ -1444,7 +1479,7 @@ void shelfRenderHome(void)
 
         /* The card *is* the artwork. A cover thumbnail on a flat panel was a list row
            wearing a hero's label; the BG is what the game looks like. */
-        rmDrawRect(hx0, hy0, hw0, hh0, GS_SETREG_RGBA(0x14, 0x17, 0x1C, 0x80));
+        shelfRound(hx0, hy0, hw0, hh0, 4, GS_SETREG_RGBA(0x14, 0x17, 0x1C, 0x80));
         if (bg)
             rmDrawPixmap(bg, hx0, hy0, ALIGN_NONE, hw0, hh0, SCALING_NONE, gDefaultCol);
         /* Scrim from the bottom, so the type sits on something whatever the art
@@ -1452,6 +1487,7 @@ void shelfRenderHome(void)
         shelfGradV(hx0, hy0 + hh0 - 92, hw0, 92,
                    0x04, 0x6E, GS_SETREG_RGBA(0x0A, 0x0C, 0x0F, 0));
 
+        shelfRoundMask(hx0, hy0, hw0, hh0, GS_SETREG_RGBA(0x0A, 0x0C, 0x0F, 0x80));
         if (cov)
             rmDrawPixmap(cov, hx0 + hw0 - 62, hy0 + 12, ALIGN_NONE, 56, 84,
                          SCALING_RATIO, gDefaultCol);
@@ -1490,25 +1526,33 @@ void shelfRenderHome(void)
                 fntRenderString(appsFontLabel, HOME_R_X, 188, ALIGN_NONE, 0, 0,
                         "RECENTLY PLAYED", GS_SETREG_RGBA(0x5C, 0x66, 0x74, 0x80));
         {
-            /* Declared width; SCALING_RATIO draws three quarters of it, and a
-               cover has to end up 1:2 in texels to display as 2:3. */
-            int tw = (HOME_R_W - (HOME_COLS - 1) * 10) / HOME_COLS;
-            int dw = rmWideScale(tw);
-            int th = dw * 2;                  /* 1:2 in texels = 2:3 displayed */
+            /* Work back from the space, not forward from a guess. The row has
+               to fill HOME_R_W, so the *drawn* width is what the arithmetic
+               starts from; the declared width follows from it. Doing it the
+               other way round left a quarter of the row empty, because a
+               declared width is a third larger than what gets drawn. */
+            int dw = (HOME_R_W - (HOME_COLS - 1) * HOME_GAP) / HOME_COLS;
+            int tw = rmWidthUnscaled(dw);
+            /* SCALING_RATIO makes declared dimensions display true, so a
+               cover is simply 2:3 in declared units -- the same 74x111 the
+               theme's own grid uses. */
+            int th = tw * 3 / 2;
             for (i = 0; i < HOME_TILES && i < total; i++) {
                 /* Each tile drifts on its own phase -- staggered by index so a
                    row does not move as one bar -- and the focused one lifts. */
                 int on = (homeFocus == 1 && i == homeSel);
                 int lift = on ? 3 : 0;
-                int cx = HOME_R_X + (i % HOME_COLS) * (dw + 10) - lift;
+                int cx = HOME_R_X + (i % HOME_COLS) * (dw + HOME_GAP) - lift;
                 int ty = 202 + shelfFloat(i * 37, on ? 3 : 2) - lift;
                 int tww = dw + 2 * lift, thh = th + 2 * lift;
                 GSTEXTURE *bg2 = homeArt(homeCover, homeCovId, homeCovUid, i);
                 config_set_t *c2 = homeCfgOf(i);
                 int m2 = 0;
 
-                if (bg2) rmDrawPixmap(bg2, cx, ty, ALIGN_NONE, tww, thh, SCALING_NONE, gDefaultCol);
-                else    rmDrawRect(cx, ty, tww, thh, GS_SETREG_RGBA(0x16, 0x1A, 0x20, 0x80));
+                if (bg2) rmDrawPixmap(bg2, cx, ty, ALIGN_NONE, rmWidthUnscaled(tww), thh,
+                                      SCALING_RATIO, gDefaultCol);
+                else    shelfRound(cx, ty, tww, thh, 4, GS_SETREG_RGBA(0x16, 0x1A, 0x20, 0x80));
+                shelfRoundMask(cx, ty, tww, thh, GS_SETREG_RGBA(0x0A, 0x0C, 0x0F, 0x80));
                 if (i == homeSel) {
                     u64 e = GS_SETREG_RGBA(0xF2, 0xF5, 0xF8,
                                            on ? 0x40 + shelfPulse(3 * FPS) / 4 : 0x50);
