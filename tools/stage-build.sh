@@ -78,6 +78,13 @@ done
 cp "$B/src/shelf.c" patches/shelf/src-shelf.c
 
 # --- 4. the binary, to all three places that must never disagree -------------
+#
+# _deploy/ is gitignored, so anything hand-authored under it is one `rm -rf`
+# from gone -- which is how APPS/OPL/title.cfg came to exist only in a card
+# backup. The authoritative copy lives in patches/build/ and is laid down here,
+# so a wiped _deploy is fully reconstructible from the repo.
+mkdir -p _deploy/APPS/OPL
+cp patches/build/APPS-OPL-title.cfg _deploy/APPS/OPL/title.cfg
 cp "$ELF" patches/build/OPNPS2LD-MMCE.ELF
 cp "$ELF" _deploy/APPS/OPNPS2LD.ELF
 cp "$ELF" _deploy/APPS/OPL/OPNPS2LD.ELF
