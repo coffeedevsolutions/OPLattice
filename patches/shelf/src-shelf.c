@@ -39,10 +39,23 @@ int gEnableShelfUI;
    Icons are drawn from rectangles. The pages load no art by design, and a glyph
    from the font would be at the mercy of whichever face the theme supplies. */
 #define SHELF_RAIL_W   28
-/* Every rail icon is drawn on a 13-wide grid, and centred rather than placed:
-   the corrected width differs by aspect, so a hardcoded x would only be centred
-   in one of them. */
-#define RAIL_ICON_W    16
+/* Rail icons are 12 wide and 16 tall, and that ratio is the correction.
+ *
+ * Virtual coordinates are not square: x is laid across 640 while y goes down
+ * 480, so on the 16:9 panel this console drives, twelve across renders as wide
+ * as sixteen down. Drawing 12x16 therefore puts a square on the screen.
+ *
+ * Scaling each rectangle by three quarters instead -- the obvious fix -- is what
+ * the previous attempt did, and it rounds every rect on its own: a 2px stroke
+ * collapsed to 1, a roof that should step evenly went 2,3,5,6,7,9,11,12, and the
+ * grid's dots landed on gaps of 1 and 2. Parts of one shape distorted by
+ * different amounts, which reads far worse than the uniform stretch it replaced.
+ * Choosing the height rounds nothing, because height is never scaled.
+ *
+ * The cost is 4:3, where 12x16 is a little tall rather than square. That is the
+ * right way round for a console wired to a widescreen panel over HDMI. */
+#define RAIL_ICON_W    12
+#define RAIL_ICON_H    16
 #define SHELF_PEEK     SHELF_RAIL_W
 
 /* Content starts after the rail on every page, so the rail can never sit on
@@ -96,68 +109,50 @@ static void shelfHoldCron(void);
 static void shelfSyncFonts(void);
 
 /** A 3x3 block of dots: Library. */
-/* A rect of a rail icon, corrected for anamorphic output.
- *
- * These icons are rectangles in virtual coordinates, and virtual coordinates are
- * not square: rmDrawRect lays x out across 640 while y goes down 480, so in 16:9
- * the console stretches everything horizontally by four thirds. Textures get this
- * for free through SCALING_RATIO and glyphs get it at rasterisation, where ws is
- * 0.75 -- primitives get nothing, so every icon here has been a third too wide on
- * a widescreen panel since the rail was written.
- *
- * Both edges are scaled rather than the offset and the width separately. Scaling
- * a width independently rounds it down a second time, and a shape assembled from
- * several of those loses a pixel at every seam; scaling edges means a run from a
- * to b still ends exactly where the next one begins. In 4:3 rmWideScale is the
- * identity and none of this does anything. */
+/* A rect of a rail icon. Plain, deliberately: see RAIL_ICON_W. */
 static void railR(int x, int y, int x0, int y0, int w, int h, u64 c)
 {
-    int a = rmWideScale(x0), b = rmWideScale(x0 + w);
-    /* Two, not one. Design coordinates are screen-proportional for position, but
-       a stroke does not survive the round trip: two design pixels scale to one
-       virtual, which comes back as 1.33 on screen against the 2 of a horizontal
-       bar of the same nominal weight, and the icon reads as half-drawn. Two
-       virtual overshoots to 2.67 instead, which is the error you cannot see. */
-    if (b - a < 2)
-        b = a + 2;
-    rmDrawRect(x + a, y + y0, b - a, h, c);
+    rmDrawRect(x + x0, y + y0, w, h, c);
 }
 
+/* Nine cells. 3 wide by 4 tall each, so a cell is square on screen too. */
 static void railGrid(int x, int y, u64 c)
 {
     int i, j;
     for (j = 0; j < 3; j++)
         for (i = 0; i < 3; i++)
-            railR(x, y, i * 6, j * 6, 4, 4, c);
+            railR(x, y, i * 4, j * 6, 3, 4, c);
 }
 
 /** A house: roof from stacked bars, then a body. Home. */
 static void railHome(int x, int y, u64 c)
 {
     int i;
-    for (i = 0; i < 8; i++)
-        railR(x, y, 7 - i, i, 2 + i * 2, 2, c);
-    railR(x, y, 3, 8, 10, 8, c);
+    /* Six even steps to a 12-wide base, then the body. Even because nothing is
+       being rounded any more. */
+    for (i = 0; i < 6; i++)
+        railR(x, y, 5 - i, i, 2 + i * 2, 2, c);
+    railR(x, y, 2, 6, 8, 10, c);
 }
 
 /** A pane split by a divider: Apps. */
 static void railPanel(int x, int y, u64 c)
 {
-    railR(x, y, 0, 0, 16, 2, c);
-    railR(x, y, 0, 14, 16, 2, c);
+    railR(x, y, 0, 0, 12, 2, c);
+    railR(x, y, 0, 14, 12, 2, c);
     railR(x, y, 0, 0, 2, 16, c);
-    railR(x, y, 14, 0, 2, 16, c);
-    railR(x, y, 7, 2, 2, 12, c);
+    railR(x, y, 10, 0, 2, 16, c);
+    railR(x, y, 5, 2, 2, 12, c);
 }
 
 /** A ring with four teeth: Settings. */
 static void railGear(int x, int y, u64 c)
 {
-    railR(x, y, 4, 1, 8, 2, c);
-    railR(x, y, 4, 13, 8, 2, c);
-    railR(x, y, 1, 4, 2, 8, c);
-    railR(x, y, 13, 4, 2, 8, c);
-    railR(x, y, 6, 6, 4, 4, c);
+    railR(x, y, 3, 0, 6, 2, c);
+    railR(x, y, 3, 14, 6, 2, c);
+    railR(x, y, 0, 4, 2, 8, c);
+    railR(x, y, 10, 4, 2, 8, c);
+    railR(x, y, 4, 6, 4, 4, c);
 }
 
 /** The collapsed rail: brand mark, the four destinations, and link state.
@@ -253,15 +248,15 @@ static void shelfDrawRail(int active)
        now rather than white on near-black, so the letter is the tan. */
     {
         /* A square on screen, which means not a square in these coordinates. */
-        int bw = rmWideScale(17), bx = (SHELF_RAIL_W - bw) / 2;
+        int bw = RAIL_ICON_W, bx = (SHELF_RAIL_W - bw) / 2;
         int sw = fntCalcDimensions(appsFontSmall, "S");
-        rmDrawRect(bx, 14, bw, 17, LAND_INK);
+        rmDrawRect(bx, 14, bw, RAIL_ICON_H, LAND_INK);
         fntRenderString(appsFontSmall, bx + (bw - sw) / 2, 16, ALIGN_NONE, 0, 0,
                         "S", LAND_BG);
     }
 
     {
-        int ix = (SHELF_RAIL_W - rmWideScale(RAIL_ICON_W)) / 2;
+        int ix = (SHELF_RAIL_W - RAIL_ICON_W) / 2;
         for (i = 0; i < 4; i++) {
             u64 c = (i == active) ? on : off;
             if (i == active)
@@ -278,8 +273,8 @@ static void shelfDrawRail(int active)
     /* Green stays green -- it means the network came up, and that is worth more
        than palette consistency. The dead state joins the sheet. */
     {
-        int dw = rmWideScale(5);
-        rmDrawRect((SHELF_RAIL_W - dw) / 2, 440, dw, 5,
+        int dw = 3;                 /* 3 by 4 is a square on screen */
+        rmDrawRect((SHELF_RAIL_W - dw) / 2, 440, dw, 4,
                    (gNetworkStartup == 0) ? GS_SETREG_RGBA(0x64, 0xC8, 0x78, 0x80)
                                           : LAND_DIM);
     }
