@@ -487,46 +487,58 @@ void shelfHandleInputPage(void)
 #define APPS_CH     170
 #define APPS_Y0     64
 
-/* The PS2 face buttons, drawn. The theme has cross.png and circle.png but the
-   SHELF pages are hardcoded and load no art, and spelling them out ("Cross
-   Launch") reads as a debug string rather than a control hint. Two primitives
-   each, in the buttons' own colours. Returns the width consumed so the caller
-   can lay a row out without measuring twice. */
+/* The PS2 face buttons, drawn small and in ink.
+ *
+ * Drawn, not typed, and that is not a style choice. None of the three faces on
+ * this card carries U+25CB, U+25A1 or U+25B3 -- SUSE Mono, Bitcount and the
+ * embedded PoeVetica all lack every one of them, so a footer written as text
+ * would come out as blanks on the console. It only looks right in a browser
+ * because the browser silently substitutes a system font. Two primitives each
+ * costs nothing and cannot fail that way.
+ *
+ * Monochrome. The buttons carried their own hues, which on a light sheet made
+ * the footer the most saturated thing on a page that has no other colour in it.
+ * The shape says which button it is; the colour was saying it twice.
+ *
+ * Sized to the 9px label rather than standing over it: the glyph box is nine
+ * pixels tall and so is each mark, so the row reads as one line of type.
+ *
+ * Returns the width consumed so a caller can lay a row out without measuring
+ * twice -- measured with the font it actually draws with, which it was not: it
+ * asked FNT_DEFAULT at 17px for the width of a string it drew at 12, and every
+ * hint row has been reserving about a third more space than it uses. */
 static int shelfHint(int x, int y, int kind, const char *label)
 {
-    int cy = y + 8, w;
-    /* The buttons keep their identities but not their brightness. These are the
-       pastel versions Sony puts on black; on tan they wash out to about the same
-       value as the ground and the row stops reading as controls. Same hues,
-       taken down to something that has contrast against a light sheet. */
-    u64 col = (kind == 0) ? GS_SETREG_RGBA(0x2F, 0x5A, 0xA8, 0x80)   /* cross  */
-            : (kind == 2) ? GS_SETREG_RGBA(0x9B, 0x3B, 0x85, 0x80)   /* square */
-                          : GS_SETREG_RGBA(0xB0, 0x2A, 0x40, 0x80);  /* circle */
-    if (kind == 2) {
-        rmDrawRect(x, cy - 5, 11, 2, col);
-        rmDrawRect(x, cy + 4, 11, 2, col);
-        rmDrawRect(x, cy - 5, 2, 11, col);
-        rmDrawRect(x + 9, cy - 5, 2, 11, col);
-    } else if (kind == 0) {
-        /* Two bars crossed. Cheaper and crisper at this size than a glyph. */
-        int i;
-        for (i = 0; i < 11; i++) {
-            rmDrawRect(x + i, cy - 5 + i, 2, 2, col);
-            rmDrawRect(x + 10 - i, cy - 5 + i, 2, 2, col);
+    /* One row per scanline of the ring: left edge and run length, mirrored to
+       the right except at the caps. An octagon at this size is a circle. */
+    static const unsigned char ring[9][2] = {
+        {3, 3}, {1, 2}, {0, 1}, {0, 1}, {0, 1}, {0, 1}, {0, 1}, {1, 2}, {3, 3}
+    };
+    const u64 col = LAND_INK;
+    int cy = y + 4;          /* centre of the 9px label's glyph box */
+    int i, w;
+
+    if (kind == 2) {         /* square */
+        rmDrawRect(x, cy - 4, 9, 1, col);
+        rmDrawRect(x, cy + 4, 9, 1, col);
+        rmDrawRect(x, cy - 4, 1, 9, col);
+        rmDrawRect(x + 8, cy - 4, 1, 9, col);
+    } else if (kind == 0) {  /* cross */
+        for (i = 0; i < 9; i++) {
+            rmDrawRect(x + i, cy - 4 + i, 1, 1, col);
+            rmDrawRect(x + 8 - i, cy - 4 + i, 1, 1, col);
         }
-    } else {
-        int i;
-        for (i = 0; i < 12; i++) {
-            int t = (i < 3 || i > 8) ? 3 : 2;
-            rmDrawRect(x + (i < 3 ? 3 : (i > 8 ? 3 : 0)), cy - 6 + i, t, 2, col);
-            rmDrawRect(x + 11 - (i < 3 ? 3 : (i > 8 ? 3 : 0)) - t, cy - 6 + i, t, 2, col);
+    } else {                 /* circle */
+        for (i = 0; i < 9; i++) {
+            int lx = ring[i][0], t = ring[i][1];
+            rmDrawRect(x + lx, cy - 4 + i, t, 1, col);
+            if (i != 0 && i != 8)
+                rmDrawRect(x + 9 - lx - t, cy - 4 + i, t, 1, col);
         }
-        rmDrawRect(x + 3, cy - 6, 6, 2, col);
-        rmDrawRect(x + 3, cy + 4, 6, 2, col);
     }
-    fntRenderString(appsFontSmall, x + 18, y, ALIGN_NONE, 0, 0, label, LAND_TEXT);
-    w = 18 + fntCalcDimensions(FNT_DEFAULT, label);
-    return w + 22;
+    fntRenderString(appsFontLabel, x + 14, y, ALIGN_NONE, 0, 0, label, LAND_TEXT);
+    w = 14 + fntCalcDimensions(appsFontLabel, label);
+    return w + 18;
 }
 
 /* Hold OPL's auto-start countdown while the shelf owns the screen.

@@ -2352,24 +2352,29 @@ function libGridConst() {
 
 /** shelf.c's shelfHint: a drawn face button and a label. Returns width used. */
 function shelfHintPv(x, y, kind, label) {
-  // Same hues, taken down for a light ground -- see shelfHint in shelf.c.
-  const col = { cross: 0x2F5AA8, square: 0x9B3B85, circle: 0xB02A40 }[kind];
-  const cy = y + 8;
-  ctx.fillStyle = rgbHex(col);
+  // Drawn, not typed. None of the three faces on the card carries U+25CB,
+  // U+25A1 or U+25B3, so a footer written as text renders as blanks on the
+  // console and looks fine here only because the browser substitutes. Ink, and
+  // sized to the 9px label, so the row reads as one line of type.
+  const ring = [[3,3],[1,2],[0,1],[0,1],[0,1],[0,1],[0,1],[1,2],[3,3]];
+  const cy = y + 4;
+  ctx.fillStyle = rgbHex(0x3A2E22);
   if (kind === "square") {
-    ctx.fillRect(x, cy - 5, 11, 2); ctx.fillRect(x, cy + 4, 11, 2);
-    ctx.fillRect(x, cy - 5, 2, 11); ctx.fillRect(x + 9, cy - 5, 2, 11);
+    ctx.fillRect(x, cy - 4, 9, 1); ctx.fillRect(x, cy + 4, 9, 1);
+    ctx.fillRect(x, cy - 4, 1, 9); ctx.fillRect(x + 8, cy - 4, 1, 9);
   } else if (kind === "cross") {
-    for (let i = 0; i < 11; i++) {
-      ctx.fillRect(x + i, cy - 5 + i, 2, 2);
-      ctx.fillRect(x + 10 - i, cy - 5 + i, 2, 2);
+    for (let i = 0; i < 9; i++) {
+      ctx.fillRect(x + i, cy - 4 + i, 1, 1);
+      ctx.fillRect(x + 8 - i, cy - 4 + i, 1, 1);
     }
   } else {
-    ctx.beginPath(); ctx.lineWidth = 2; ctx.strokeStyle = rgbHex(col);
-    ctx.arc(x + 5.5, cy, 5, 0, Math.PI * 2); ctx.stroke();
+    ring.forEach(([lx, t], i) => {
+      ctx.fillRect(x + lx, cy - 4 + i, t, 1);
+      if (i !== 0 && i !== 8) ctx.fillRect(x + 9 - lx - t, cy - 4 + i, t, 1);
+    });
   }
-  shelfText(x + 18, y, label, 0x3A2E22, SHELF_FNT_SM);
-  return 18 + textWidth(label, SHELF_FNT) + 22;
+  shelfText(x + 14, y, label, 0x3A2E22, SHELF_FNT_LBL);
+  return 14 + textWidth(label, SHELF_FNT_LBL) + 18;
 }
 
 /* ------------------------------------------------ SHELF Home (mirrors shelf.c)
@@ -2777,8 +2782,11 @@ function renderShelfApps() {
 
   /* footer hints */
   ctx.fillStyle = rgbHex(SHELF_PAL.rule); ctx.fillRect(M, 438, SCREEN_W - 2 * M, 1);
-  shelfText(M, 458, "✕  Launch", SHELF_PAL.muted);
-  shelfText(M + 110, 458, "○  Back", SHELF_PAL.muted);
+  {
+    let hx = M;
+    hx += shelfHintPv(hx, 454, "cross", "Launch");
+    shelfHintPv(hx, 454, "circle", "Back");
+  }
   ctx.restore();
   octx.clearRect(0, 0, SCREEN_W, SCREEN_H);
   applyViewport();
