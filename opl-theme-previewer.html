@@ -2333,11 +2333,14 @@ function libDrawAlphabetPv(gridX, total, sel, cols) {
   R(lx + 3, LIBP.ALPHA_Y0, 1, span + 8, 0x726756);
   let near = Math.round((my - LIBP.ALPHA_Y0) * (LIBP.ALPHA_N - 1) / span);
   near = Math.max(0, Math.min(LIBP.ALPHA_N - 1, near));
-  // Every fifth letter named -- five divides 25, so A and Z both land on a label
-  // -- and a dot for the rest. See LIB_ALPHA_STEP in shelf.c.
+  // A D G J M P S V Z -- every third, with the count spread across the span so
+  // both ends land on a label. See LIB_ALPHA_LABELS in shelf.c.
+  const LABELS = 9;
+  const named = new Set(Array.from({ length: LABELS },
+    (_, k) => Math.floor(k * (LIBP.ALPHA_N - 1) / (LABELS - 1))));
   for (let i = 0; i < LIBP.ALPHA_N; i++) {
     const col = i === near ? 0x3A2E22 : 0x8A806C, y = libAlphaY(i);
-    if (i % 5 === 0) shelfText(ax, y, String.fromCharCode(65 + i), col, SHELF_FNT_LBL);
+    if (named.has(i)) shelfText(ax, y, String.fromCharCode(65 + i), col, SHELF_FNT_LBL);
     else R(ax + 2, y + 3, 2, 2, col);
   }
   R(lx, my + 3, 9, 2, 0x3A2E22);

@@ -874,12 +874,12 @@ void shelfHandleInputApps(void)
 #define LIB_ALPHA_Y1  440
 #define LIB_ALPHA_DX  22            /* left of the grid, which moves with aspect */
 #define LIB_ALPHA_N   26
-/* Only every fifth letter is named; the rest are dots. Five divides 25, so the
-   named ones are A F K P U Z -- both ends of the alphabet land on a label, which
-   they would not at every sixth. Twenty-six letters at this pitch read as a
-   texture rather than as a scale; six read as a scale, and the dots keep the
-   spacing honest about what sits between them. */
-#define LIB_ALPHA_STEP 5
+/* Nine letters named, the rest dots: A D G J M P S V Z. That is every third,
+   except that three does not divide twenty-five, so a plain step lands on Y and
+   never reaches the letter the scale is supposed to run to. Spreading a fixed
+   count across the span instead puts a label on both ends and pays for it with
+   one gap of four at the bottom rather than a missing Z. */
+#define LIB_ALPHA_LABELS 9
 #define LIB_FTR_TEXT  454
 
 static image_cache_t *libCache;
@@ -1067,6 +1067,18 @@ static int libAlphaY(int i)
     return LIB_ALPHA_Y0 + i * (LIB_ALPHA_Y1 - LIB_ALPHA_Y0) / (LIB_ALPHA_N - 1);
 }
 
+/* Whether mark i carries its letter. Integer division lands k=0 on A and
+   k=LABELS-1 exactly on Z, which is the whole reason for counting labels rather
+   than stepping letters. */
+static int libAlphaLabelled(int i)
+{
+    int k;
+    for (k = 0; k < LIB_ALPHA_LABELS; k++)
+        if (k * (LIB_ALPHA_N - 1) / (LIB_ALPHA_LABELS - 1) == i)
+            return 1;
+    return 0;
+}
+
 static void libDrawAlphabet(int gridX, int total)
 {
     int ax = gridX - LIB_ALPHA_DX;      /* letters */
@@ -1104,7 +1116,7 @@ static void libDrawAlphabet(int gridX, int total)
     for (i = 0; i < LIB_ALPHA_N; i++) {
         u64 col = (i == near) ? LAND_TEXT : LAND_DIM;
         int y = libAlphaY(i);
-        if (i % LIB_ALPHA_STEP == 0) {
+        if (libAlphaLabelled(i)) {
             char c[2];
             c[0] = (char)('A' + i);
             c[1] = '\0';
