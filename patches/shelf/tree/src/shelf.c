@@ -2112,8 +2112,6 @@ void shelfHandleInputHome(void)
        rather than the thing you booted into. L3 opens the panel; the panel is
        the whole of the navigation. Details and Settings keep theirs, because
        those you genuinely did arrive at from somewhere. */
-    if (total <= 0)
-        return;
 
     if (homeView == 0) {
         /* The landing has one control. Cross is the same as Down here, because
@@ -2129,7 +2127,29 @@ void shelfHandleInputHome(void)
             homeView = 0;          /* already at the top of a column */
         else
             homeFocus = 0;
-    } else if (getKeyOn(KEY_DOWN) && homeFocus < 2 && total > 1) {
+        return;
+    }
+
+    /* Everything past here needs something to point at. The recent list is empty
+       on a console that has not launched anything yet -- which is now the first
+       thing anyone sees, because Home is the boot screen. This guard used to sit
+       at the top of the function, where it swallowed the scroll as well and left
+       a new setup on the landing with the dashboard unreachable: the clock, the
+       two buttons and the system panel were all perfectly able to draw, and none
+       of them could be got to. The panel still opened, so it was never a trap,
+       just a page that appeared to be the whole of the shell. */
+    if (total <= 0) {
+        /* The buttons work regardless: they are how you reach the pages that
+           would give this list something to have in it. */
+        if (getKeyOn(KEY_LEFT) || getKeyOn(KEY_RIGHT))
+            homeFocus = (homeFocus == 2) ? 3 : 2;
+        else if (homeFocus >= 2 && getKeyOn(KEY_CROSS))
+            guiSwitchScreen(homeFocus == 2 ? GUI_SCREEN_SHELF_LIBRARY
+                                           : GUI_SCREEN_SHELF_APPS);
+        return;
+    }
+
+    if (getKeyOn(KEY_DOWN) && homeFocus < 2 && total > 1) {
         homeFocus = 1;
     } else if (getKeyOn(KEY_LEFT)) {
         /* Left crosses into the button column, then walks it. */
