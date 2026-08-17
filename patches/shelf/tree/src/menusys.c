@@ -66,23 +66,32 @@ static menu_list_t *selected_item;
    SHELF page can hand a game to a screen that only knows about submenu items --
    the info page reads selected_item->item->current, not an index. pagestart
    follows so returning to the classic grid does not land somewhere unrelated. */
+/* Select the menu entry for item `n`, where n indexes the SUPPORT's item list.
+ *
+ * It used to walk n places down the submenu, which is a different ordering
+ * entirely: the submenu is built in whatever order gSortMode asks for, while n
+ * comes from the device. The two agree only when the sort happens to be the
+ * device's own order, so opening a game's details from the shell landed on an
+ * unrelated title -- and the Library made that certain rather than likely, since
+ * it keeps its own A-Z permutation.
+ *
+ * item.id is the item-list index -- it is what the classic screen passes to
+ * itemGetNameLength, itemRename and itemDelete -- so matching on it is the only
+ * thing that means the same on both sides. */
 int menuSelectIndex(int n)
 {
     submenu_list_t *cur;
-    int i = 0;
 
     if (!selected_item || !selected_item->item)
         return 0;
-    cur = selected_item->item->submenu;
-    while (cur && i < n) {
-        cur = cur->next;
-        i++;
+    for (cur = selected_item->item->submenu; cur; cur = cur->next) {
+        if (cur->item.id == n) {
+            selected_item->item->current = cur;
+            selected_item->item->pagestart = cur;
+            return 1;
+        }
     }
-    if (!cur)
-        return 0;
-    selected_item->item->current = cur;
-    selected_item->item->pagestart = cur;
-    return 1;
+    return 0;
 }
 
 item_list_t *menuGetActiveList(void)

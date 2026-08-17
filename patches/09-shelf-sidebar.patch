@@ -396,7 +396,7 @@ index e82bd2c..5267b07 100644
  
  void guiIntroLoop(void)
 diff --git a/src/menusys.c b/src/menusys.c
-index 9cc2a8a..80d9c22 100644
+index 9cc2a8a..330cc9d 100644
 --- a/src/menusys.c
 +++ b/src/menusys.c
 @@ -6,6 +6,7 @@
@@ -407,7 +407,7 @@ index 9cc2a8a..80d9c22 100644
  #include "include/iosupport.h"
  #include "include/renderman.h"
  #include "include/fntsys.h"
-@@ -57,6 +58,40 @@ enum GAME_MENU_IDs {
+@@ -57,6 +58,49 @@ enum GAME_MENU_IDs {
  static menu_list_t *menu;
  static menu_list_t *selected_item;
  
@@ -419,23 +419,32 @@ index 9cc2a8a..80d9c22 100644
 +   SHELF page can hand a game to a screen that only knows about submenu items --
 +   the info page reads selected_item->item->current, not an index. pagestart
 +   follows so returning to the classic grid does not land somewhere unrelated. */
++/* Select the menu entry for item `n`, where n indexes the SUPPORT's item list.
++ *
++ * It used to walk n places down the submenu, which is a different ordering
++ * entirely: the submenu is built in whatever order gSortMode asks for, while n
++ * comes from the device. The two agree only when the sort happens to be the
++ * device's own order, so opening a game's details from the shell landed on an
++ * unrelated title -- and the Library made that certain rather than likely, since
++ * it keeps its own A-Z permutation.
++ *
++ * item.id is the item-list index -- it is what the classic screen passes to
++ * itemGetNameLength, itemRename and itemDelete -- so matching on it is the only
++ * thing that means the same on both sides. */
 +int menuSelectIndex(int n)
 +{
 +    submenu_list_t *cur;
-+    int i = 0;
 +
 +    if (!selected_item || !selected_item->item)
 +        return 0;
-+    cur = selected_item->item->submenu;
-+    while (cur && i < n) {
-+        cur = cur->next;
-+        i++;
++    for (cur = selected_item->item->submenu; cur; cur = cur->next) {
++        if (cur->item.id == n) {
++            selected_item->item->current = cur;
++            selected_item->item->pagestart = cur;
++            return 1;
++        }
 +    }
-+    if (!cur)
-+        return 0;
-+    selected_item->item->current = cur;
-+    selected_item->item->pagestart = cur;
-+    return 1;
++    return 0;
 +}
 +
 +item_list_t *menuGetActiveList(void)
@@ -448,7 +457,7 @@ index 9cc2a8a..80d9c22 100644
  static int actionStatus;
  static int itemConfigId;
  static config_set_t *itemConfig;
-@@ -683,6 +718,18 @@ static void menuNextH()
+@@ -683,6 +727,18 @@ static void menuNextH()
      }
  }
  
@@ -467,7 +476,7 @@ index 9cc2a8a..80d9c22 100644
  static void menuPrevH()
  {
      struct menu_list *prev = selected_item->prev;
-@@ -1133,6 +1180,31 @@ void menuHandleInputMain()
+@@ -1133,6 +1189,31 @@ void menuHandleInputMain()
       */
      int grid = menuRowStep() > 1;
  
@@ -499,7 +508,7 @@ index 9cc2a8a..80d9c22 100644
      if (getKey(KEY_LEFT)) {
          if (grid)
              menuPrevItem();
-@@ -1212,7 +1284,7 @@ void menuHandleInputInfo()
+@@ -1212,7 +1293,7 @@ void menuHandleInputInfo()
  {
      if (getKeyOn(KEY_CROSS)) {
          if (gSelectButton == KEY_CIRCLE)
@@ -508,7 +517,7 @@ index 9cc2a8a..80d9c22 100644
          else
              selected_item->item->execCross(selected_item->item);
      } else if (getKey(KEY_UP)) {
-@@ -1221,7 +1293,7 @@ void menuHandleInputInfo()
+@@ -1221,7 +1302,7 @@ void menuHandleInputInfo()
          menuNextV();
      } else if (getKeyOn(KEY_CIRCLE)) {
          if (gSelectButton == KEY_CROSS)
