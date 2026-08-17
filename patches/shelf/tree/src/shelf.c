@@ -211,11 +211,18 @@ static int shelfPulse(int period)
 
 static void shelfGradV(int x, int y, int w, int h, int a0, int a1, u64 rgb)
 {
+    /* Bands are three tall on a pitch of two, which looks like a mistake and is
+       not. rmDrawRect scales height as well as position, and Y_SCALE truncates:
+       at 448 lines a 2px band becomes 1 physical pixel while the pitch advances
+       1.87, so every band was followed by a gap and the "gradient" came out a
+       comb. Asking for 3 rounds to 2, which covers the pitch. The one-pixel
+       overlap that leaves is invisible -- consecutive bands differ by about one
+       level of alpha. */
     int i, n = h / 2;
     if (n < 2)
         n = 2;
     for (i = 0; i < n; i++)
-        rmDrawRect(x, y + i * 2, w, 2,
+        rmDrawRect(x, y + i * 2, w, 3,
                    rgb | ((u64)(a0 + (a1 - a0) * i / (n - 1)) << 24));
 }
 
@@ -1005,7 +1012,12 @@ void shelfHandleInputApps(void)
 #define LIB_ART_W     (LIB_CELL_W - LIB_GAP)             /* 74 declared */
 #define LIB_ART_H     (LIB_CELL_H - LIB_GAP - LIB_LABEL_H) /* 111 */
 #define LIB_PER       LIB_COLS
-#define LIB_HERO_H    196
+/* 244, not 196. The rect is 612 virtual wide, which displays 816, so at 196 it
+   was 4.16:1 against source art that is 3.10:1 -- and filling that meant cutting
+   a quarter of the picture's height away. At 244 the rect is 3.34:1 and the crop
+   is down to seven percent. The grid moves down with it and gives up padding to
+   pay for it, so the second row still shows more than half a cover. */
+#define LIB_HERO_H    244
 /* The hero's caption sits on the bottom of its own container, inset by the same
    amount it is inset from the left -- CONTENT_X - SHELF_RAIL_W, which is 14.
    Derived rather than written down, so it follows the rail if that moves again. */
@@ -1016,7 +1028,7 @@ void shelfHandleInputApps(void)
    alphabet at 222, so the ruler began 18 pixels above the first thing it was
    measuring. Moving the grid rather than the scale is what keeps the second row
    showing more of itself above the footer. */
-#define LIB_GRID_Y    222
+#define LIB_GRID_Y    256
 /* The theme's own footer: botbar is a 30px strip at y=-30, and HintText sits at
    y=-26 in font2 (12px) #8894A2. Matched rather than invented, so the shelf and
    the screen the console boots into agree about where the bottom of the page is. */
@@ -1538,7 +1550,12 @@ void shelfHandleInputLibrary(void)
         /* The theme's info page, not a second rendering of it. menuSelectIndex
            hands the selection to the classic screen, which owns that layout. */
         if (menuSelectIndex(libAt(libSel)))
+            {
+            guiSetInfoReturn(guiShelfPageIndex() >= 0
+                             ? GUI_SCREEN_SHELF_HOME + guiShelfPageIndex()
+                             : GUI_SCREEN_MAIN);
             guiSwitchScreen(GUI_SCREEN_INFO);
+        }
     } else if (getKeyOn(SHELF_OK) && libList && libList->itemLaunch && libList->itemGetConfig)
         libList->itemLaunch(libList, libAt(libSel),
                             libList->itemGetConfig(libList, libAt(libSel)));
@@ -1752,14 +1769,13 @@ static int homeLocalTime(int *hh, int *mm, int *days)
 
     if (!sceCdReadClock(&c))
         return 0;
-    /* A PS2 whose RTC backup battery is flat reads zero at every boot and counts
-       up from there, which is how this clock came to show 00:14 on a console
-       that had been on for fourteen minutes. The year is the tell: the machine
-       did not exist before 2000, so anything below that is an unset clock rather
-       than a time. Saying nothing is better than saying something confident and
-       wrong -- and no software can fix a dead battery. */
-    if (btoi(c.year) < 1)
-        return 0;
+    /* The year test that used to live here is gone.
+       It was right about the diagnosis -- year reads 0, so the RTC backup
+       battery is flat and the clock restarts at every power-on -- and wrong
+       about the remedy. Hiding the clock did not make the console know the
+       time; it just removed the panel. An elapsed-time clock is at least
+       monotonic and says something true about this session. The actual fix is a
+       CR2032 on the motherboard, which is not ours to make. */
     *days = homeDaysFromCivil(2000 + btoi(c.year), btoi(c.month & 0x7F), btoi(c.day));
     minutes = btoi(c.hour) * 60 + btoi(c.minute) - 540 + configGetTimezone();
     while (minutes < 0)     { minutes += 1440; (*days)--; }
@@ -2280,10 +2296,14 @@ void shelfHandleInputHome(void)
     if (getKeyOn(KEY_DOWN) && homeFocus < 2 && total > 1) {
         homeFocus = 1;
     } else if (getKeyOn(KEY_LEFT)) {
-        /* Left crosses into the button column, then walks it. */
-        if (homeFocus < 2)          homeFocus = 3;
+        /* Walk the strip first, and only cross into the buttons once there is
+           nothing left of it. The strip test used to sit third, behind
+           `homeFocus < 2` -- which is true for the strip -- so it was
+           unreachable and Left jumped straight past the leftmost cover to
+           Apps. */
+        if (homeFocus == 1 && homeSel > 1) homeSel--;
+        else if (homeFocus < 2)     homeFocus = 3;
         else if (homeFocus == 3)    homeFocus = 2;
-        else if (homeFocus == 1 && homeSel > 1) homeSel--;
     } else if (getKeyOn(KEY_RIGHT)) {
         if (homeFocus == 2)         homeFocus = 3;
         else if (homeFocus == 3)    homeFocus = 0;
@@ -2299,7 +2319,12 @@ void shelfHandleInputHome(void)
     else if (getKeyOn(SHELF_ALT)) {
         idx = homeIndexOf(oplRecentStartup(homeFocus == 0 ? 0 : homeSel));
         if (idx >= 0 && menuSelectIndex(idx))
+            {
+            guiSetInfoReturn(guiShelfPageIndex() >= 0
+                             ? GUI_SCREEN_SHELF_HOME + guiShelfPageIndex()
+                             : GUI_SCREEN_MAIN);
             guiSwitchScreen(GUI_SCREEN_INFO);
+        }
     } else if (getKeyOn(SHELF_OK)) {
         item_list_t *list = menuGetActiveList();
         idx = homeIndexOf(oplRecentStartup(homeFocus == 0 ? 0 : homeSel));

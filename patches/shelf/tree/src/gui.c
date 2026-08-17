@@ -153,6 +153,24 @@ void guiReloadScreenExtents()
  * something was picked there, which is the "settings screen, then the theme"
  * anyone booting this sees. This lets opl.c say otherwise once it knows enough
  * to be right. */
+/* Where the details page goes back to.
+ *
+ * menuHandleInputInfo hardcoded GUI_SCREEN_MAIN, so opening a game's details
+ * from the shell and pressing back dropped you onto the classic list -- a screen
+ * you had not been on, in a style the shell had replaced. The shell sets this
+ * before it switches; anything that does not set it gets the old behaviour. */
+static int guiInfoReturn = GUI_SCREEN_MAIN;
+
+void guiSetInfoReturn(int screen)
+{
+    guiInfoReturn = screen;
+}
+
+int guiGetInfoReturn(void)
+{
+    return guiInfoReturn;
+}
+
 void guiSetStartScreen(int screen)
 {
     if (screen >= 0 &&

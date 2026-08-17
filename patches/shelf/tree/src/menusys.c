@@ -1284,7 +1284,7 @@ void menuHandleInputInfo()
 {
     if (getKeyOn(KEY_CROSS)) {
         if (gSelectButton == KEY_CIRCLE)
-            guiSwitchScreen(GUI_SCREEN_MAIN);
+            guiSwitchScreen(guiGetInfoReturn());
         else
             selected_item->item->execCross(selected_item->item);
     } else if (getKey(KEY_UP)) {
@@ -1293,7 +1293,7 @@ void menuHandleInputInfo()
         menuNextV();
     } else if (getKeyOn(KEY_CIRCLE)) {
         if (gSelectButton == KEY_CROSS)
-            guiSwitchScreen(GUI_SCREEN_MAIN);
+            guiSwitchScreen(guiGetInfoReturn());
         else
             selected_item->item->execCircle(selected_item->item);
     } else if (getKey(KEY_L1)) {

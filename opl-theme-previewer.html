@@ -2319,7 +2319,7 @@ const RAIL_W = 28, CONTENT_X = RAIL_W + 14, RAIL_ICON_W = 12;
 // GRID_Y and ALPHA_Y0 are the same number on purpose: the covers start where
 // the scale beside them starts. FTR_TEXT is derived from the height, as shelf.c
 // derives LIB_FTR_TEXT -- a 26px bar with a 9px hint row centres at +((26-9)/2).
-const LIBP = { HERO_H: 196, GRID_Y: 222, FTR_H: 26, FTR_Y: 480 - 26,
+const LIBP = { HERO_H: 244, GRID_Y: 256, FTR_H: 26, FTR_Y: 480 - 26,
                FTR_TEXT: (480 - 26) + ((26 - 9) >> 1),
                ALPHA_Y0: 222, ALPHA_Y1: 428, ALPHA_DX: 22, ALPHA_N: 26 };
 
@@ -2777,7 +2777,7 @@ function renderShelfLibrary() {
     // 2px bands, as shelfGradV does. Twelve strips of eleven pixels is not a
     // gradient, it is a stack of rectangles, and on a photograph it looked it.
     ctx.fillStyle = "rgba(30,24,18," + ((4 + i * (0x53 - 4) / 65) / 128) + ")";
-    ctx.fillRect(RAIL_W, LIBP.HERO_H - 132 + i * 2, SCREEN_W - RAIL_W, 2);
+    ctx.fillRect(RAIL_W, LIBP.HERO_H - 132 + i * 2, SCREEN_W - RAIL_W, 3);
   }
 
   // Bottom-aligned with the same inset it has from the left: CONTENT_X - RAIL_W.

@@ -57,7 +57,7 @@ import sys
 TARGET_W, TARGET_H = 418, 180        # texels
 DISPLAY_W = 557                      # what those texels look like at 16:9
 if "--hero" in sys.argv:
-    TARGET_W, TARGET_H = 612, 196
+    TARGET_W, TARGET_H = 612, 244
     DISPLAY_W = 816                  # 612 at 4:3 texels reads 816 wide at 16:9
     sys.argv.remove("--hero")
 SUFFIX = "HERO" if TARGET_W == 612 else "BG"
@@ -114,6 +114,27 @@ for key, serial in sorted(pairs, key=lambda p: p[1]):
         subprocess.run(["magick", src, "-filter", "Lanczos",
                         "-resize", f"{TARGET_W}x{TARGET_H}!", "-strip", dst], check=True)
         resized.append((serial, f"{sw}x{sh}"))
+    elif SUFFIX == "HERO":
+        # The hero fills its rect, cropping height rather than width.
+        #
+        # Padding is right for BG, whose frame is 3.09:1 and matches the source.
+        # The hero rect is 4.16:1 as displayed, so fitting a 3.10:1 original into
+        # it left 78 columns of dead background at each edge -- a quarter of the
+        # panel showing nothing.
+        #
+        # Cropping height is the safe direction on this art. These are already
+        # letterboxed 3.1:1 banners with the subject on the horizon, so taking a
+        # quarter off the top and bottom loses sky and floor; taking it off the
+        # width is what removes a character, and that is the bug this script was
+        # written to undo. cover-fit, centred.
+        scale = max(DISPLAY_W / sw, TARGET_H / sh)
+        fw_disp, fh = max(1, round(sw * scale)), max(1, round(sh * scale))
+        fw = max(1, round(fw_disp * SQUEEZE))
+        subprocess.run(["magick", src, "-filter", "Lanczos",
+                        "-resize", f"{fw}x{fh}!",
+                        "-gravity", "center",
+                        "-extent", f"{TARGET_W}x{TARGET_H}", "-strip", dst], check=True)
+        resized.append((serial, f"{sw}x{sh} cover"))
     else:
         # Fit inside the frame, then pad. Never crop -- that is the bug this
         # script exists to undo. Fitting is computed against the *display*

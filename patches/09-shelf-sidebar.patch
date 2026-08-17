@@ -74,10 +74,10 @@ index a0699e9..bb9e7ae 100644
      CFG_ETHPREFIX,
      CFG_HDDSPINDOWN,
 diff --git a/include/gui.h b/include/gui.h
-index 79f256f..32bbf30 100644
+index 79f256f..5a15b31 100644
 --- a/include/gui.h
 +++ b/include/gui.h
-@@ -59,12 +59,22 @@ extern int guiFrameId;
+@@ -59,12 +59,24 @@ extern int guiFrameId;
  #define GUI_SCREEN_GAME_MENU 3
  #define GUI_SCREEN_APP_MENU  4
  
@@ -97,6 +97,8 @@ index 79f256f..32bbf30 100644
  /** Initializes the GUI */
  void guiInit();
 +void guiSetStartScreen(int screen);
++void guiSetInfoReturn(int screen);
++int guiGetInfoReturn(void);
  
  /** Clean-up the GUI */
  void guiEnd();
@@ -244,7 +246,7 @@ index 35f50f1..3a56105 100644
  
      if (aligned & ALIGN_VCENTER) {
 diff --git a/src/gui.c b/src/gui.c
-index e82bd2c..8e058a7 100644
+index e82bd2c..5267b07 100644
 --- a/src/gui.c
 +++ b/src/gui.c
 @@ -16,6 +16,7 @@
@@ -301,7 +303,7 @@ index e82bd2c..8e058a7 100644
  static int transIndex;
  
  // Helper perlin noise data
-@@ -113,6 +145,21 @@ void guiReloadScreenExtents()
+@@ -113,6 +145,39 @@ void guiReloadScreenExtents()
      rmGetScreenExtents(&screenWidth, &screenHeight);
  }
  
@@ -313,6 +315,24 @@ index e82bd2c..8e058a7 100644
 + * something was picked there, which is the "settings screen, then the theme"
 + * anyone booting this sees. This lets opl.c say otherwise once it knows enough
 + * to be right. */
++/* Where the details page goes back to.
++ *
++ * menuHandleInputInfo hardcoded GUI_SCREEN_MAIN, so opening a game's details
++ * from the shell and pressing back dropped you onto the classic list -- a screen
++ * you had not been on, in a style the shell had replaced. The shell sets this
++ * before it switches; anything that does not set it gets the old behaviour. */
++static int guiInfoReturn = GUI_SCREEN_MAIN;
++
++void guiSetInfoReturn(int screen)
++{
++    guiInfoReturn = screen;
++}
++
++int guiGetInfoReturn(void)
++{
++    return guiInfoReturn;
++}
++
 +void guiSetStartScreen(int screen)
 +{
 +    if (screen >= 0 &&
@@ -323,7 +343,7 @@ index e82bd2c..8e058a7 100644
  void guiInit(void)
  {
      guiFrameId = 0;
-@@ -541,6 +588,7 @@ void guiShowConfig()
+@@ -541,6 +606,7 @@ void guiShowConfig()
      diaSetInt(diaConfig, CFG_HDDSPINDOWN, gHDDSpindown);
      diaSetString(diaConfig, CFG_BDMPREFIX, gBDMPrefix);
      diaSetString(diaConfig, CFG_ETHPREFIX, gETHPrefix);
@@ -331,7 +351,7 @@ index e82bd2c..8e058a7 100644
      diaSetInt(diaConfig, CFG_PLAYSTATS, gEnablePlayStats);
      diaSetVisible(diaConfig, CFG_LBL_PLAYSTATS, gEnableWrite);
      diaSetVisible(diaConfig, CFG_PLAYSTATS, gEnableWrite);
-@@ -566,6 +614,7 @@ void guiShowConfig()
+@@ -566,6 +632,7 @@ void guiShowConfig()
          diaGetString(diaConfig, CFG_EXITTO, gExitPath, sizeof(gExitPath));
          diaGetInt(diaConfig, CFG_ENWRITEOP, &gEnableWrite);
          diaGetInt(diaConfig, CFG_PLAYSTATS, &gEnablePlayStats);
@@ -339,7 +359,7 @@ index e82bd2c..8e058a7 100644
          diaGetInt(diaConfig, CFG_HDDSPINDOWN, &gHDDSpindown);
          diaGetString(diaConfig, CFG_BDMPREFIX, gBDMPrefix, sizeof(gBDMPrefix));
          diaGetString(diaConfig, CFG_ETHPREFIX, gETHPrefix, sizeof(gETHPrefix));
-@@ -1550,6 +1599,18 @@ static void guiReadPads()
+@@ -1550,6 +1617,18 @@ static void guiReadPads()
  // screen handlers. Fade transition code written by Maximus32
  static void guiShow()
  {
@@ -358,7 +378,7 @@ index e82bd2c..8e058a7 100644
      // is there a transmission effect going on or are
      // we in a normal rendering state?
      if (screenHandlerTarget) {
-@@ -1581,6 +1642,16 @@ static void guiShow()
+@@ -1581,6 +1660,16 @@ static void guiShow()
      } else
          // render with the set screen handler
          screenHandler->renderScreen();
@@ -376,7 +396,7 @@ index e82bd2c..8e058a7 100644
  
  void guiIntroLoop(void)
 diff --git a/src/menusys.c b/src/menusys.c
-index 9cc2a8a..980f8f4 100644
+index 9cc2a8a..80d9c22 100644
 --- a/src/menusys.c
 +++ b/src/menusys.c
 @@ -6,6 +6,7 @@
@@ -479,6 +499,24 @@ index 9cc2a8a..980f8f4 100644
      if (getKey(KEY_LEFT)) {
          if (grid)
              menuPrevItem();
+@@ -1212,7 +1284,7 @@ void menuHandleInputInfo()
+ {
+     if (getKeyOn(KEY_CROSS)) {
+         if (gSelectButton == KEY_CIRCLE)
+-            guiSwitchScreen(GUI_SCREEN_MAIN);
++            guiSwitchScreen(guiGetInfoReturn());
+         else
+             selected_item->item->execCross(selected_item->item);
+     } else if (getKey(KEY_UP)) {
+@@ -1221,7 +1293,7 @@ void menuHandleInputInfo()
+         menuNextV();
+     } else if (getKeyOn(KEY_CIRCLE)) {
+         if (gSelectButton == KEY_CROSS)
+-            guiSwitchScreen(GUI_SCREEN_MAIN);
++            guiSwitchScreen(guiGetInfoReturn());
+         else
+             selected_item->item->execCircle(selected_item->item);
+     } else if (getKey(KEY_L1)) {
 diff --git a/src/opl.c b/src/opl.c
 index 4a037f6..fc23ef4 100644
 --- a/src/opl.c
