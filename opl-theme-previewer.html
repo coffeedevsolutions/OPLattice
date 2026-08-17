@@ -2280,7 +2280,7 @@ function homeFormatTimePv(mins) {
 
 function renderShelfHome() {
   const M = CONTENT_X, COLW = 184, RX = M + COLW + 12, RW = SCREEN_W - RX - 24;
-  const HERO_H = 132, TILES = 4, COLS = 4;
+  const HERO_H = 132, TILES = 5, COLS = 5;
   const games = gameList();
   const recent = games.slice(0, 8);
   const sel = Math.min(Math.max(S.gameIndex | 0, 0), Math.max(recent.length - 1, 0));
@@ -2295,9 +2295,11 @@ function renderShelfHome() {
     if (label) shelfText(x + 12, y + dy + 9, label, 0x5C6674, SHELF_FNT_LBL);
     return dy;
   };
-  const gradV = (x, y, w, h, n, a0, a1, c) => {
-    const st = Math.max(1, Math.floor(h / n));
-    for (let i = 0; i < n; i++) R(x, y + i * st, w, st, c, a0 + (a1 - a0) * i / (n - 1));
+  // 2px bands, matching shelf.c. The step count used to be a parameter set far
+  // too low, which showed as stripes on any dark scrim.
+  const gradV = (x, y, w, h, a0, a1, c) => {
+    const n = Math.max(2, Math.floor(h / 2));
+    for (let i = 0; i < n; i++) R(x, y + i * 2, w, 2, c, a0 + (a1 - a0) * i / (n - 1));
   };
   const fmt = m => m <= 0 ? "" : m < 60 ? m + " m" : Math.floor(m / 60) + " h";
   // shelf.c animates off guiFrameId; the previewer has no frame loop, so the
@@ -2331,7 +2333,7 @@ function renderShelfHome() {
 
   // clock card, with the evening tint and the display face
   const dyA = card(M, 40, COLW, 122, "CLOCK", 0);
-  gradV(M, 41, COLW, 120, 10, 0x48, 0x00, 0x3A2C52);
+  gradV(M, 41 + dyA, COLW, 120, 0x48, 0x00, 0x3A2C52);
   shelfText(M + 12, 66 + dyA, "Good evening", 0xB4BEC8, SHELF_FNT_SM);
   const BIG = { size: 46, family: SHELF_FNT.family };
   shelfText(M + 10, 86 + dyA, "21", 0xF2F5F8, BIG);
@@ -2368,7 +2370,7 @@ function renderShelfHome() {
   R(hx0, hy0, hw0, hh0, 0x14171C);
   const bg = recent[sel] && gameArt(recent[sel].serial, "BG");
   if (bg) ctx.drawImage(bg, hx0, hy0, hw0, hh0);
-  gradV(hx0, hy0 + hh0 - 92, hw0, 92, 11, 0x06, 0x6A, 0x0A0C0F);
+  gradV(hx0, hy0 + hh0 - 92, hw0, 92, 0x04, 0x6E, 0x0A0C0F);
   const cov = recent[sel] && gameArt(recent[sel].serial, "COVHD");
   if (cov) ctx.drawImage(cov, hx0 + hw0 - 62, hy0 + 12, 42, 84);
   if (focus === 0) {
@@ -2385,11 +2387,11 @@ function renderShelfHome() {
             0xB4BEC8, SHELF_FNT_SM, "left", RW - 28);
 
   shelfText(RX, 188, "RECENTLY PLAYED", 0x5C6674, SHELF_FNT_LBL);
-  const tw2 = (RW - (COLS - 1) * 12) / COLS, dw2 = Math.round(tw2 * 3 / 4), th2 = dw2 * 2;
+  const tw2 = (RW - (COLS - 1) * 10) / COLS, dw2 = Math.round(tw2 * 3 / 4), th2 = dw2 * 2;
   for (let i = 0; i < TILES && i < recent.length; i++) {
     const on = focus === 1 && i === sel;
     const lf = on ? 3 : 0;
-    const cx = RX + (i % COLS) * (dw2 + 12) - lf;
+    const cx = RX + (i % COLS) * (dw2 + 10) - lf;
     const ty = 202 + drift(i * 37, on ? 3 : 2) - lf;
     const tww = dw2 + 2 * lf, thh = th2 + 2 * lf;
     const b2 = gameArt(recent[i].serial, "COVHD");

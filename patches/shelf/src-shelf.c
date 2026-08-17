@@ -139,13 +139,21 @@ static int shelfFloat(int phase, int amp)
     return (shelfWave(7 * FPS, phase) - 128) * amp / 128;
 }
 
-/** A vertical ramp between two alphas, for scrims and glows. */
-static void shelfGradV(int x, int y, int w, int h, int n, int a0, int a1, u64 rgb)
+/** A vertical ramp between two alphas, for scrims and glows.
+ *
+ *  Two-pixel bands, always. The step count used to be a parameter and it was
+ *  set far too low -- eleven bands across ninety pixels is an eight percent
+ *  opacity jump every eight pixels, which is plainly visible as stripes on a
+ *  dark background. Alpha runs 0..0x80 on the GS, so 2px bands put each step
+ *  near one unit and the ramp reads as continuous. Sprites are cheap; the
+ *  banding was not worth the primitives it saved. */
+static void shelfGradV(int x, int y, int w, int h, int a0, int a1, u64 rgb)
 {
-    int i, step = h / n;
-    if (step < 1) step = 1;
+    int i, n = h / 2;
+    if (n < 2)
+        n = 2;
     for (i = 0; i < n; i++)
-        rmDrawRect(x, y + i * step, w, step,
+        rmDrawRect(x, y + i * 2, w, 2,
                    rgb | ((u64)(a0 + (a1 - a0) * i / (n - 1)) << 24));
 }
 
@@ -1102,8 +1110,8 @@ void shelfHandleInputLibrary(void)
    not a layout one, and none is fixed by drawing a box for it.
 */
 
-#define HOME_TILES   4
-#define HOME_COLS    4
+#define HOME_TILES   5
+#define HOME_COLS    5
 #define HOME_HERO_H  132
 #define HOME_M       CONTENT_X
 #define HOME_COL_W   184
@@ -1334,7 +1342,7 @@ void shelfRenderHome(void)
                  : hh < 18 ? GS_SETREG_RGBA(0x1E, 0x44, 0x50, 0)
                            : GS_SETREG_RGBA(0x3A, 0x2C, 0x52, 0);
         int hw;
-        shelfGradV(HOME_M, 41, HOME_COL_W, 120, 10, 0x48, 0x00, tint);
+        shelfGradV(HOME_M, 41 + dyA, HOME_COL_W, 120, 0x48, 0x00, tint);
         fntRenderString(appsFontSmall, HOME_M + 12, 66 + dyA, ALIGN_NONE, 0, 0, greet,
                         GS_SETREG_RGBA(0xB4, 0xBE, 0xC8, 0x80));
         /* Hours, colon and minutes drawn separately so the colon can breathe
@@ -1441,8 +1449,8 @@ void shelfRenderHome(void)
             rmDrawPixmap(bg, hx0, hy0, ALIGN_NONE, hw0, hh0, SCALING_NONE, gDefaultCol);
         /* Scrim from the bottom, so the type sits on something whatever the art
            does. Everything above it has to stay readable over a white sky. */
-        shelfGradV(hx0, hy0 + hh0 - 92, hw0, 92, 11,
-                   0x06, 0x6A, GS_SETREG_RGBA(0x0A, 0x0C, 0x0F, 0));
+        shelfGradV(hx0, hy0 + hh0 - 92, hw0, 92,
+                   0x04, 0x6E, GS_SETREG_RGBA(0x0A, 0x0C, 0x0F, 0));
 
         if (cov)
             rmDrawPixmap(cov, hx0 + hw0 - 62, hy0 + 12, ALIGN_NONE, 56, 84,
@@ -1484,7 +1492,7 @@ void shelfRenderHome(void)
         {
             /* Declared width; SCALING_RATIO draws three quarters of it, and a
                cover has to end up 1:2 in texels to display as 2:3. */
-            int tw = (HOME_R_W - (HOME_COLS - 1) * 12) / HOME_COLS;
+            int tw = (HOME_R_W - (HOME_COLS - 1) * 10) / HOME_COLS;
             int dw = rmWideScale(tw);
             int th = dw * 2;                  /* 1:2 in texels = 2:3 displayed */
             for (i = 0; i < HOME_TILES && i < total; i++) {
@@ -1492,7 +1500,7 @@ void shelfRenderHome(void)
                    row does not move as one bar -- and the focused one lifts. */
                 int on = (homeFocus == 1 && i == homeSel);
                 int lift = on ? 3 : 0;
-                int cx = HOME_R_X + (i % HOME_COLS) * (dw + 12) - lift;
+                int cx = HOME_R_X + (i % HOME_COLS) * (dw + 10) - lift;
                 int ty = 202 + shelfFloat(i * 37, on ? 3 : 2) - lift;
                 int tww = dw + 2 * lift, thh = th + 2 * lift;
                 GSTEXTURE *bg2 = homeArt(homeCover, homeCovId, homeCovUid, i);
