@@ -1156,7 +1156,10 @@ void shelfHandleInputLibrary(void)
 static image_cache_t *homeCover, *homeHero;
 static int homeCovId[OPL_RECENT_MAX], homeCovUid[OPL_RECENT_MAX];
 static int homeHeroId[OPL_RECENT_MAX], homeHeroUid[OPL_RECENT_MAX];
-static int homeSel;
+/* Index into the recent list for the *strip*, which starts at 1: entry 0 is
+   the hero, and a page that showed the same game twice would be listing it
+   rather than featuring it. */
+static int homeSel = 1;
 /* 0 = the Continue card, 1 = the recent strip. Which section the cursor is
    on, as distinct from which game is selected -- both sections show the
    same game, so selection alone could not say where the cursor was. */
@@ -1325,10 +1328,8 @@ void shelfRenderHome(void)
     char buf[96], t[24], when[24];
 
     homeScan();
-    if (total > 0) {
-        if (homeSel >= total) homeSel = total - 1;
-        if (homeSel < 0)      homeSel = 0;
-    }
+    if (homeSel >= total) homeSel = total - 1;
+    if (homeSel < 1)      homeSel = 1;
     if (!homeCover) {
         for (i = 0; i < OPL_RECENT_MAX; i++)
             homeCovId[i] = homeCovUid[i] = homeHeroId[i] = homeHeroUid[i] = -1;
@@ -1457,10 +1458,10 @@ void shelfRenderHome(void)
                         "Launch something and it appears here.",
                         GS_SETREG_RGBA(0x5C, 0x66, 0x74, 0x80));
     } else {
-        GSTEXTURE *bg  = homeArt(homeHero, homeHeroId, homeHeroUid, homeSel);
-        GSTEXTURE *cov = homeArt(homeCover, homeCovId, homeCovUid, homeSel);
-        config_set_t *cfg = homeCfgOf(homeSel);
-        const char *title = oplRecentTitle(homeSel);
+        GSTEXTURE *bg  = homeArt(homeHero, homeHeroId, homeHeroUid, 0);
+        GSTEXTURE *cov = homeArt(homeCover, homeCovId, homeCovUid, 0);
+        config_set_t *cfg = homeCfgOf(0);
+        const char *title = oplRecentTitle(0);
         int mins = 0, plays = 0;
 
         if (cfg) {
@@ -1502,8 +1503,7 @@ void shelfRenderHome(void)
 
         fntRenderString(appsFontLabel, hx0 + 14, hy0 + hh0 - 84,
                         ALIGN_NONE, 0, 0,
-                        homeSel == 0 ? "CONTINUE PLAYING" : "RECENTLY PLAYED",
-                        GS_SETREG_RGBA(0xB4, 0xBE, 0xC8, 0x80));
+                        "CONTINUE PLAYING", GS_SETREG_RGBA(0xB4, 0xBE, 0xC8, 0x80));
         if (title)
             fntRenderString(FNT_DEFAULT, hx0 + 14, hy0 + hh0 - 68,
                             ALIGN_NONE, HOME_R_W - 84, 24, title,
@@ -1537,23 +1537,27 @@ void shelfRenderHome(void)
                cover is simply 2:3 in declared units -- the same 74x111 the
                theme's own grid uses. */
             int th = tw * 3 / 2;
-            for (i = 0; i < HOME_TILES && i < total; i++) {
+            for (i = 0; i < HOME_TILES && i + 1 < total; i++) {
                 /* Each tile drifts on its own phase -- staggered by index so a
                    row does not move as one bar -- and the focused one lifts. */
-                int on = (homeFocus == 1 && i == homeSel);
+                int idx = i + 1;               /* entry 0 is the hero */
+                int on = (homeFocus == 1 && idx == homeSel);
                 int lift = on ? 3 : 0;
                 int cx = HOME_R_X + (i % HOME_COLS) * (dw + HOME_GAP) - lift;
-                int ty = 202 + shelfFloat(i * 37, on ? 3 : 2) - lift;
+                int ty = 202 + shelfFloat(idx * 37, on ? 3 : 2) - lift;
                 int tww = dw + 2 * lift, thh = th + 2 * lift;
-                GSTEXTURE *bg2 = homeArt(homeCover, homeCovId, homeCovUid, i);
-                config_set_t *c2 = homeCfgOf(i);
+                GSTEXTURE *bg2 = homeArt(homeCover, homeCovId, homeCovUid, idx);
+                config_set_t *c2 = homeCfgOf(idx);
                 int m2 = 0;
 
                 if (bg2) rmDrawPixmap(bg2, cx, ty, ALIGN_NONE, rmWidthUnscaled(tww), thh,
                                       SCALING_RATIO, gDefaultCol);
-                else    shelfRound(cx, ty, tww, thh, 4, GS_SETREG_RGBA(0x16, 0x1A, 0x20, 0x80));
-                shelfRoundMask(cx, ty, tww, thh, GS_SETREG_RGBA(0x0A, 0x0C, 0x0F, 0x80));
-                if (i == homeSel) {
+                /* Square, deliberately. A cover is a printed object with square
+                   corners; rounding it makes it look like a UI tile rather than
+                   like the thing it is a picture of. The panels around it round,
+                   the artwork does not. */
+                else    rmDrawRect(cx, ty, tww, thh, GS_SETREG_RGBA(0x16, 0x1A, 0x20, 0x80));
+                if (idx == homeSel) {
                     u64 e = GS_SETREG_RGBA(0xF2, 0xF5, 0xF8,
                                            on ? 0x40 + shelfPulse(3 * FPS) / 4 : 0x50);
                     rmDrawRect(cx, ty, tww, 2, e);
@@ -1562,7 +1566,7 @@ void shelfRenderHome(void)
                     rmDrawRect(cx + tww - 2, ty, 2, thh, e);
                 }
                 {
-                    const char *nm = oplRecentTitle(i);
+                    const char *nm = oplRecentTitle(idx);
                     if (nm)
                         fntRenderString(appsFontSmall, cx + lift, ty + thh + 6, ALIGN_NONE,
                                         dw, 12, nm,
@@ -1587,7 +1591,7 @@ void shelfRenderHome(void)
     {
         int hx = CONTENT_X;
         if (total > 0) {
-            hx += shelfHint(hx, LIB_FTR_TEXT, 0, homeSel == 0 ? "Resume" : "Play");
+            hx += shelfHint(hx, LIB_FTR_TEXT, 0, homeFocus == 0 ? "Resume" : "Play");
             hx += shelfHint(hx, LIB_FTR_TEXT, 2, "Details");
         }
         shelfHint(hx, LIB_FTR_TEXT, 1, "Back");
@@ -1619,20 +1623,20 @@ void shelfHandleInputHome(void)
 
     if (getKeyOn(KEY_UP))
         homeFocus = 0;
-    else if (getKeyOn(KEY_DOWN))
+    else if (getKeyOn(KEY_DOWN) && total > 1)
         homeFocus = 1;
-    else if (homeFocus == 1 && getKeyOn(KEY_LEFT) && homeSel > 0)
+    else if (homeFocus == 1 && getKeyOn(KEY_LEFT) && homeSel > 1)
         homeSel--;
     else if (homeFocus == 1 && getKeyOn(KEY_RIGHT)
-             && homeSel < total - 1 && homeSel < HOME_TILES - 1)
+             && homeSel < total - 1 && homeSel < HOME_TILES)
         homeSel++;
     else if (getKeyOn(KEY_SQUARE)) {
-        idx = homeIndexOf(oplRecentStartup(homeSel));
+        idx = homeIndexOf(oplRecentStartup(homeFocus == 0 ? 0 : homeSel));
         if (idx >= 0 && menuSelectIndex(idx))
             guiSwitchScreen(GUI_SCREEN_INFO);
     } else if (getKeyOn(KEY_CROSS)) {
         item_list_t *list = menuGetActiveList();
-        idx = homeIndexOf(oplRecentStartup(homeSel));
+        idx = homeIndexOf(oplRecentStartup(homeFocus == 0 ? 0 : homeSel));
         if (idx >= 0 && list && list->itemLaunch && list->itemGetConfig)
             list->itemLaunch(list, idx, list->itemGetConfig(list, idx));
     }

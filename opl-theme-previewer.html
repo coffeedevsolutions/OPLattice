@@ -2283,7 +2283,8 @@ function renderShelfHome() {
   const HERO_H = 132, TILES = 5, COLS = 5;
   const games = gameList();
   const recent = games.slice(0, 8);
-  const sel = Math.min(Math.max(S.gameIndex | 0, 0), Math.max(recent.length - 1, 0));
+  // Entry 0 is the hero; the strip starts at 1 so no game appears twice.
+  const sel = Math.min(Math.max(S.gameIndex | 0, 1), Math.max(recent.length - 1, 1));
   // shelf.c builds rounded corners from three inset bands -- there is no rounded
   // primitive on the GS. Mirrored here so the silhouette matches, not approximated
   // with a canvas roundRect that would look better than the console does.
@@ -2386,23 +2387,22 @@ function renderShelfHome() {
   const hx0 = RX - lift, hy0 = 40 - lift + drift(45, lift ? 3 : 2);
   const hw0 = RW + 2 * lift, hh0 = HERO_H + 2 * lift;
   RR(hx0, hy0, hw0, hh0, 0x14171C);
-  const bg = recent[sel] && gameArt(recent[sel].serial, "BG");
+  const bg = recent[0] && gameArt(recent[0].serial, "BG");
   if (bg) ctx.drawImage(bg, hx0, hy0, hw0, hh0);
   gradV(hx0, hy0 + hh0 - 92, hw0, 92, 0x04, 0x6E, 0x0A0C0F);
   RMask(hx0, hy0, hw0, hh0, 0x0A0C0F);
-  const cov = recent[sel] && gameArt(recent[sel].serial, "COVHD");
+  const cov = recent[0] && gameArt(recent[0].serial, "COVHD");
   if (cov) ctx.drawImage(cov, hx0 + hw0 - 62, hy0 + 12, 42, 84);
   if (focus === 0) {
     const e = 0xF2F5F8, a = (0x40 + pulse / 4);
     R(hx0, hy0, hw0, 2, e, a); R(hx0, hy0 + hh0 - 2, hw0, 2, e, a);
     R(hx0, hy0, 2, hh0, e, a); R(hx0 + hw0 - 2, hy0, 2, hh0, e, a);
   }
-  shelfText(hx0 + 14, hy0 + hh0 - 84, sel === 0 ? "CONTINUE PLAYING" : "RECENTLY PLAYED",
-            0xB4BEC8, SHELF_FNT_LBL);
-  shelfText(hx0 + 14, hy0 + hh0 - 68, (recent[sel] || {}).title || "—",
+  shelfText(hx0 + 14, hy0 + hh0 - 84, "CONTINUE PLAYING", 0xB4BEC8, SHELF_FNT_LBL);
+  shelfText(hx0 + 14, hy0 + hh0 - 68, (recent[0] || {}).title || "—",
             0xF2F5F8, SHELF_FNT, "left", RW - 84);
   shelfText(hx0 + 14, hy0 + hh0 - 38,
-            `Last played yesterday  ·  ${fmt(PLAYTIME_MOCK[sel] || 0)} total  ·  14 launches`,
+            `Last played yesterday  ·  ${fmt(PLAYTIME_MOCK[0] || 0)} total  ·  14 launches`,
             0xB4BEC8, SHELF_FNT_SM, "left", RW - 28);
 
   shelfText(RX, 188, "RECENTLY PLAYED", 0x5C6674, SHELF_FNT_LBL);
@@ -2410,30 +2410,32 @@ function renderShelfHome() {
   const GAP = 10;
   const dw2 = Math.floor((RW - (COLS - 1) * GAP) / COLS);
   const tw2 = Math.round(dw2 * 4 / 3), th2 = Math.round(tw2 * 3 / 2);
-  for (let i = 0; i < TILES && i < recent.length; i++) {
-    const on = focus === 1 && i === sel;
+  for (let i = 0; i < TILES && i + 1 < recent.length; i++) {
+    const idx = i + 1;
+    const on = focus === 1 && idx === sel;
     const lf = on ? 3 : 0;
     const cx = RX + (i % COLS) * (dw2 + GAP) - lf;
-    const ty = 202 + drift(i * 37, on ? 3 : 2) - lf;
+    const ty = 202 + drift(idx * 37, on ? 3 : 2) - lf;
     const tww = dw2 + 2 * lf, thh = th2 + 2 * lf;
-    const b2 = gameArt(recent[i].serial, "COVHD");
-    if (b2) ctx.drawImage(b2, cx, ty, tww, thh); else RR(cx, ty, tww, thh, 0x161A20);
-    RMask(cx, ty, tww, thh, 0x0A0C0F);
-    if (i === sel) {
+    const b2 = gameArt(recent[idx].serial, "COVHD");
+    // Square: a cover is a printed object, and rounding it makes it read as a
+    // UI tile rather than as the thing it pictures.
+    if (b2) ctx.drawImage(b2, cx, ty, tww, thh); else R(cx, ty, tww, thh, 0x161A20);
+    if (idx === sel) {
       const a = on ? 0x40 + pulse / 4 : 0x50;
       R(cx, ty, tww, 2, 0xF2F5F8, a); R(cx, ty + thh - 2, tww, 2, 0xF2F5F8, a);
       R(cx, ty, 2, thh, 0xF2F5F8, a); R(cx + tww - 2, ty, 2, thh, 0xF2F5F8, a);
     }
-    shelfText(cx + lf, ty + thh + 6, recent[i].title, i === sel ? 0xF2F5F8 : 0x8894A2,
+    shelfText(cx + lf, ty + thh + 6, recent[idx].title, i === sel ? 0xF2F5F8 : 0x8894A2,
               SHELF_FNT_SM, "left", dw2);
-    const m = PLAYTIME_MOCK[i] || 0;
-    shelfText(cx + lf, ty + thh + 20, m ? `${i + 1}d ago · ${fmt(m)}` : `${i + 1}d ago`,
+    const m = PLAYTIME_MOCK[idx] || 0;
+    shelfText(cx + lf, ty + thh + 20, m ? `${idx}d ago · ${fmt(m)}` : `${idx}d ago`,
               0x5C6674, SHELF_FNT_SM, "left", dw2);
   }
 
   R(RAIL_W, LIBP.FTR_Y, SCREEN_W - RAIL_W, SCREEN_H - LIBP.FTR_Y, 0x14171C);
   let hx = CONTENT_X;
-  hx += shelfHintPv(hx, LIBP.FTR_TEXT, "cross", sel === 0 ? "Resume" : "Play");
+  hx += shelfHintPv(hx, LIBP.FTR_TEXT, "cross", focus === 0 ? "Resume" : "Play");
   hx += shelfHintPv(hx, LIBP.FTR_TEXT, "square", "Details");
   hx += shelfHintPv(hx, LIBP.FTR_TEXT, "circle", "Back");
 
