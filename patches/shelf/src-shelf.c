@@ -29,6 +29,8 @@
 #include "include/system.h"
 #include "include/themes.h"
 #include "include/sound.h"
+#include "include/guigame.h"
+#include <time.h>
 
 int gEnableShelfUI;
 
@@ -227,19 +229,14 @@ static int shelfPulse(int period)
 
 static void shelfGradV(int x, int y, int w, int h, int a0, int a1, u64 rgb)
 {
-    /* Bands are three tall on a pitch of two, which looks like a mistake and is
-       not. rmDrawRect scales height as well as position, and Y_SCALE truncates:
-       at 448 lines a 2px band becomes 1 physical pixel while the pitch advances
-       1.87, so every band was followed by a gap and the "gradient" came out a
-       comb. Asking for 3 rounds to 2, which covers the pitch. The one-pixel
-       overlap that leaves is invisible -- consecutive bands differ by about one
-       level of alpha. */
-    int i, n = h / 2;
-    if (n < 2)
-        n = 2;
-    for (i = 0; i < n; i++)
-        rmDrawRect(x, y + i * 2, w, 3,
-                   rgb | ((u64)(a0 + (a1 - a0) * i / (n - 1)) << 24));
+    /* One primitive now, not a stack of them -- see rmDrawGradV, which is where
+       the band-height arithmetic that used to live here finally went away. The
+       signature is unchanged so the three scrims that call it did not have to
+       be touched: they still name an alpha at the top and an alpha at the
+       bottom, and the hardware does the rest. */
+    rmDrawGradV(x, y, w, h,
+                rgb | ((u64)a0 << 24),
+                rgb | ((u64)a1 << 24));
 }
 
 /* The sheet's palette. Declared here rather than with the landing page, which
@@ -1658,13 +1655,8 @@ void shelfHandleInputLibrary(void)
         sfxPlay(SFX_CONFIRM);
         /* The theme's info page, not a second rendering of it. menuSelectIndex
            hands the selection to the classic screen, which owns that layout. */
-        if (menuSelectIndex(libAt(libSel)))
-            {
-            guiSetInfoReturn(guiShelfPageIndex() >= 0
-                             ? GUI_SCREEN_SHELF_HOME + guiShelfPageIndex()
-                             : GUI_SCREEN_MAIN);
-            guiSwitchScreen(GUI_SCREEN_INFO);
-        }
+        shelfInfoOpen(libAt(libSel), GUI_SCREEN_SHELF_LIBRARY);
+        guiSwitchScreen(GUI_SCREEN_SHELF_INFO);
     } else if (getKeyOn(SHELF_OK) && libList && libList->itemLaunch && libList->itemGetConfig) {
         sfxPlay(SFX_CONFIRM);
         libList->itemLaunch(libList, libAt(libSel),
@@ -1672,6 +1664,366 @@ void shelfHandleInputLibrary(void)
         return;
     }
     shelfSfxMoved(was, libSel);
+}
+
+
+/* Home owns the clock and the play-history formatting, and the details page
+   wants all three. Declared rather than moved: they belong with Home, and a
+   forward declaration is cheaper than shuffling two hundred lines to satisfy
+   the order of a file. */
+static int homeLocalTime(int *hh, int *mm, int *days);
+static void homeWhen(char *out, size_t n, config_set_t *cfg, int todayDays);
+static void homeFormatTime(char *out, size_t n, int minutes);
+
+/* ------------------------------------------------------------- Details page
+ *
+ * The theme's own info chain drew this before, which meant a tan shell handing
+ * you a dark slab the moment you asked about a game. This is the same data on
+ * the same sheet.
+ *
+ * Laid out as three columns rather than one long list. Two carry the game's
+ * attributes and the third carries how much of your life it has had, which is a
+ * different question and reads better as its own column than as four more rows
+ * of the same stack. Underneath: the description, then the two things you can
+ * actually do here.
+ *
+ * Play is a control on the page now, not a line in the footer. A footer hint is
+ * a caption -- it tells you a button does something -- and the page needed a
+ * second verb (the per-game settings, which is where cheats live and was
+ * otherwise reachable only by backing out to the classic list and pressing
+ * triangle). Two verbs want two controls, so the footer keeps only Back.
+ *
+ * Everything shown is read, not invented, and a field with no value costs no
+ * row: the attribute cells are collected first and then dealt into the two
+ * columns, so a game missing its developer leaves no hole.
+ *
+ * Lessons this page is built on, all of them paid for earlier:
+ *   - fntCalcDimensions is PHYSICAL and layout is VIRTUAL, so alignment goes
+ *     through ALIGN_RIGHT/HCENTER and any measured width that advances a pen
+ *     goes through rmUnscaleX
+ *   - declared texture dimensions display true under SCALING_RATIO, so a cover
+ *     declared 120x180 looks 2:3 and needs no correction
+ *   - raw primitives are NOT square: 12 across renders as wide as 16 down
+ *   - shelfGradV, never a hand-rolled band loop
+ */
+#define INF_HERO_H   150
+#define INF_COV_W    120                  /* declared; displays 2:3 at 180 tall */
+#define INF_COV_H    180
+#define INF_COV_Y    162
+#define INF_COL_X    (CONTENT_X + INF_COV_W + 18)   /* 180 */
+#define INF_COL_W    ((640 - INF_COL_X - 24) / 3)   /* 145 */
+#define INF_ROW_H    24                   /* label over value, stacked */
+#define INF_COL_ROWS 4
+#define INF_BTN_Y    412
+#define INF_BTN_H    26
+#define INF_BTN_W    132
+#define INF_BTN_GAP  12
+#define INF_CELLS    8                    /* attribute cells the two columns hold */
+
+static int infIdx = -1;                   /* item-list index being shown */
+static int infBack = GUI_SCREEN_SHELF_LIBRARY;
+static int infRail;                       /* which rail icon stays lit */
+static int infWide = -1;                  /* -1 unknown, 0 no patch, 1 patch */
+static int infBtn;                        /* 0 Play, 1 Settings */
+
+/* The attribute cells, gathered before they are placed. Values are copied
+   rather than pointed at: configGetStr hands back a pointer into the config
+   set, and libReadMeta may re-read that set between gathering and drawing. */
+static char infCellLabel[INF_CELLS][12];
+static char infCellValue[INF_CELLS][40];
+static int infCellN;
+
+int shelfInfoRailPage(void)
+{
+    return infRail;
+}
+
+/* Does this game have a widescreen patch on the device it lives on?
+ *
+ * Exactly the path sbLoadCheats builds -- "%sCHT/%s.cht" against the support
+ * object's own prefix -- so the answer is the same one the cheat engine will
+ * reach for at launch, rather than a guess about where cheats might live. */
+static void infCheckWidescreen(void)
+{
+    item_list_t *list = menuGetActiveList();
+    char path[128], *prefix, *startup;
+    int fd;
+
+    infWide = 0;
+    if (!list || !list->itemGetPrefix || !list->itemGetStartup)
+        return;
+    prefix = list->itemGetPrefix(list);
+    startup = list->itemGetStartup(list, infIdx);
+    if (!prefix || !startup)
+        return;
+    snprintf(path, sizeof(path), "%sCHT/%s.cht", prefix, startup);
+    fd = open(path, O_RDONLY);
+    if (fd >= 0) {
+        close(fd);
+        infWide = 1;
+    }
+}
+
+void shelfInfoOpen(int idx, int back)
+{
+    infIdx = idx;
+    infBack = back;
+    infRail = (guiShelfPageIndex() >= 0) ? guiShelfPageIndex() : 1;
+    infWide = -1;
+    infBtn = 0;
+    libMetaIdx = -1;                      /* force a re-read for this item */
+}
+
+static void infCell(const char *label, const char *value)
+{
+    if (!value || !value[0] || infCellN >= INF_CELLS)
+        return;
+    snprintf(infCellLabel[infCellN], sizeof(infCellLabel[0]), "%s", label);
+    snprintf(infCellValue[infCellN], sizeof(infCellValue[0]), "%s", value);
+    infCellN++;
+}
+
+/* One cell: the field name small and dim above, the value beneath it. Stacked
+   rather than side by side because three columns across 435 pixels leaves 145
+   each, and a label-then-value pair on one line inside 145 either truncates the
+   value or crowds it against the next column. */
+static void infDrawCell(int x, int y, const char *label, const char *value)
+{
+    fntRenderString(appsFontLabel, x, y, ALIGN_NONE, 0, 0, label, LAND_DIM);
+    fntRenderString(appsFontSmall, x, y + 11, ALIGN_NONE, INF_COL_W - 8, 0,
+                    value, LAND_TEXT);
+}
+
+/* A button. Filled when it has the selection, outlined when it does not -- the
+   same ink either way, so the page does not gain a second colour just to say
+   where the cursor is. The label is centred with ALIGN_HCENTER rather than by
+   hand: fntCalcDimensions is physical and the layout is virtual, and centring
+   a string by subtracting half its measured width is exactly how that bites. */
+static void infDrawButton(int x, const char *label, int on)
+{
+    if (on)
+        rmDrawRect(x, INF_BTN_Y, INF_BTN_W, INF_BTN_H, LAND_INK);
+    else {
+        rmDrawRect(x, INF_BTN_Y, INF_BTN_W, 1, LAND_RULE);
+        rmDrawRect(x, INF_BTN_Y + INF_BTN_H - 1, INF_BTN_W, 1, LAND_RULE);
+        rmDrawRect(x, INF_BTN_Y, 1, INF_BTN_H, LAND_RULE);
+        rmDrawRect(x + INF_BTN_W - 1, INF_BTN_Y, 1, INF_BTN_H, LAND_RULE);
+    }
+    fntRenderString(appsFontSmall, x + INF_BTN_W / 2, INF_BTN_Y + 8,
+                    ALIGN_HCENTER, 0, 0, label,
+                    on ? GS_SETREG_RGBA(0xC9, 0xBF, 0xA6, 0x80) : LAND_TEXT);
+}
+
+void shelfRenderInfo(void)
+{
+    config_set_t *cfg = NULL;
+    item_list_t *list = menuGetActiveList();
+    char buf[160], when[32];
+    const char *v = NULL;
+    int i, y, days = 0, hh = 0, mm = 0;
+    int total = libSync();
+
+    if (infIdx < 0 || infIdx >= total || !list) {
+        guiSwitchScreen(infBack);
+        return;
+    }
+    libReadMeta(infIdx);
+    if (infWide < 0)
+        infCheckWidescreen();
+    if (list->itemGetConfig)
+        cfg = list->itemGetConfig(list, infIdx);
+
+    rmDrawRect(0, 0, 640, 480, LAND_BG);
+
+    /* ---- hero band, with the title on it ---------------------------------- */
+    {
+        GSTEXTURE *hero = libHero(infIdx);
+        const u64 lit = GS_SETREG_RGBA(0xE8, 0xE2, 0xD2, 0x80);
+        const u64 dim = GS_SETREG_RGBA(0xE8, 0xE2, 0xD2, 0x58);
+
+        if (hero)
+            rmDrawPixmap(hero, SHELF_RAIL_W, 0, ALIGN_NONE, 640 - SHELF_RAIL_W,
+                         INF_HERO_H, SCALING_NONE, gDefaultCol);
+        else
+            rmDrawRect(SHELF_RAIL_W, 0, 640 - SHELF_RAIL_W, INF_HERO_H, LAND_INK);
+        shelfGradV(SHELF_RAIL_W, INF_HERO_H - 96, 640 - SHELF_RAIL_W, 96,
+                   0x04, 0x6E, GS_SETREG_RGBA(0x1E, 0x18, 0x12, 0));
+        /* The logo goes right, because the title now occupies the left of the
+           scrim and two names for the same game stacked on each other is one
+           more than the page needs. */
+        {
+            GSTEXTURE *logo = libLogo(infIdx);
+            if (logo)
+                rmDrawPixmap(logo, 640 - 24 - 100, INF_HERO_H - 76, ALIGN_NONE,
+                             100, 60, SCALING_RATIO, gDefaultCol);
+        }
+        v = libMetaName[0] ? libMetaName
+                           : (list->itemGetName ? list->itemGetName(list, infIdx) : NULL);
+        if (v)
+            fntRenderString(FNT_DEFAULT, CONTENT_X, INF_HERO_H - 48, ALIGN_NONE,
+                            420, 0, v, lit);
+        if (list->itemGetStartup) {
+            char *st = list->itemGetStartup(list, infIdx);
+            if (st)
+                fntRenderString(appsFontLabel, CONTENT_X, INF_HERO_H - 22,
+                                ALIGN_NONE, 0, 0, st, dim);
+        }
+    }
+    rmDrawRect(SHELF_RAIL_W, INF_HERO_H, 640 - SHELF_RAIL_W, 1, LAND_RULE);
+
+    /* ---- cover ----------------------------------------------------------- */
+    {
+        GSTEXTURE *cov = libCover(infIdx);
+        if (cov)
+            rmDrawPixmap(cov, CONTENT_X, INF_COV_Y, ALIGN_NONE, INF_COV_W,
+                         INF_COV_H, SCALING_RATIO, gDefaultCol);
+        else
+            rmDrawRect(CONTENT_X, INF_COV_Y, rmWideScale(INF_COV_W), INF_COV_H,
+                       LAND_FAINT);
+    }
+
+    /* ---- columns one and two: the game ------------------------------------ */
+    infCellN = 0;
+    if (cfg) {
+        static const struct { const char *label, *key; } rows[] = {
+            {"GENRE",     "Genre"},
+            {"RELEASED",  "Release"},
+            {"DEVELOPER", "Developer"},
+            {"RATING",    "Rating"},
+            {"MEDIA",     CONFIG_ITEM_MEDIA},
+            {"FORMAT",    CONFIG_ITEM_FORMAT},
+        };
+        for (i = 0; i < (int)(sizeof(rows) / sizeof(rows[0])); i++) {
+            v = NULL;
+            if (configGetStr(cfg, rows[i].key, &v) && v && v[0])
+                infCell(rows[i].label, v);
+        }
+        {
+            int size = 0;
+            if (configGetInt(cfg, CONFIG_ITEM_SIZE, &size) && size > 0) {
+                snprintf(buf, sizeof(buf), "%d MiB", size);
+                infCell("SIZE", buf);
+            }
+        }
+    }
+    /* The one line the classic page never had: whether the cheat engine will
+       find a widescreen patch for this game on this device. */
+    infCell("WIDESCREEN", infWide ? "on device" : "none");
+
+    fntRenderString(appsFontHead, INF_COL_X, INF_COV_Y, ALIGN_NONE, 0, 0,
+                    "DETAILS", LAND_DIM);
+    rmDrawRect(INF_COL_X, INF_COV_Y + 14, INF_COL_W * 2 - 10, 1, LAND_FAINT);
+    for (i = 0; i < infCellN; i++)
+        infDrawCell(INF_COL_X + (i / INF_COL_ROWS) * INF_COL_W,
+                    INF_COV_Y + 24 + (i % INF_COL_ROWS) * INF_ROW_H,
+                    infCellLabel[i], infCellValue[i]);
+
+    /* ---- column three: the history ---------------------------------------- */
+    {
+        int cx = INF_COL_X + 2 * INF_COL_W;
+        int count = 0, mins = 0;
+
+        when[0] = '\0';
+        if (cfg) {
+            homeLocalTime(&hh, &mm, &days);
+            homeWhen(when, sizeof(when), cfg, days);
+            configGetInt(cfg, "PlayCount", &count);
+            configGetInt(cfg, "Playtime", &mins);
+        }
+        fntRenderString(appsFontHead, cx, INF_COV_Y, ALIGN_NONE, 0, 0,
+                        "PLAY HISTORY", LAND_DIM);
+        rmDrawRect(cx, INF_COV_Y + 14, INF_COL_W - 10, 1, LAND_FAINT);
+        y = INF_COV_Y + 24;
+        if (count > 0 || mins > 0 || when[0]) {
+            if (when[0]) {
+                infDrawCell(cx, y, "LAST PLAYED", when);
+                y += INF_ROW_H;
+            }
+            if (mins > 0) {
+                homeFormatTime(buf, sizeof(buf), mins);
+                infDrawCell(cx, y, "PLAYTIME", buf);
+                y += INF_ROW_H;
+            }
+            if (count > 0) {
+                snprintf(buf, sizeof(buf), "%d", count);
+                infDrawCell(cx, y, "LAUNCHES", buf);
+            }
+        } else
+            fntRenderString(appsFontSmall, cx, y + 11, ALIGN_NONE, 0, 0,
+                            "never played", LAND_FAINT);
+    }
+
+    /* ---- description ------------------------------------------------------ */
+    if (libMetaDesc[0]) {
+        /* fntFitString takes a VIRTUAL width and rewrites the string in place,
+           inserting newlines that fntRenderString then honours. The copy is
+           re-made every frame, so wrapping in place cannot accumulate. */
+        char wrapped[sizeof(libMetaDesc)];
+        snprintf(wrapped, sizeof(wrapped), "%s", libMetaDesc);
+        fntFitString(appsFontSmall, wrapped, 640 - CONTENT_X - 24);
+        fntRenderString(appsFontSmall, CONTENT_X, INF_COV_Y + INF_COV_H + 14,
+                        ALIGN_NONE, 640 - CONTENT_X - 24,
+                        INF_BTN_Y - (INF_COV_Y + INF_COV_H + 14) - 8, wrapped,
+                        LAND_MUTE);
+    }
+
+    /* ---- the two things you can do here ------------------------------------ */
+    infDrawButton(CONTENT_X, "Play", infBtn == 0);
+    infDrawButton(CONTENT_X + INF_BTN_W + INF_BTN_GAP, "Game Settings", infBtn == 1);
+
+    /* ---- footer: Back only, now that Play is a control -------------------- */
+    rmDrawRect(SHELF_RAIL_W, LIB_FTR_Y, 640 - SHELF_RAIL_W, 480 - LIB_FTR_Y, LAND_BG);
+    rmDrawRect(SHELF_RAIL_W, LIB_FTR_Y, 640 - SHELF_RAIL_W, 1, LAND_RULE);
+    shelfHint(CONTENT_X, LIB_FTR_TEXT, HINT_BACK, "Back");
+
+    shelfDrawRail(infRail);
+}
+
+void shelfHandleInputInfo(void)
+{
+    item_list_t *list = menuGetActiveList();
+    int was = infBtn;
+
+    shelfHoldCron();
+    if (shelfHasInput()) {
+        shelfHandleInput();
+        return;
+    }
+    if (shelfTrigger(0))
+        return;
+
+    if (getKeyOn(KEY_LEFT) && infBtn > 0)
+        infBtn--;
+    else if (getKeyOn(KEY_RIGHT) && infBtn < 1)
+        infBtn++;
+    /* Details keeps its Back, because unlike the three top-level pages this one
+       is somewhere you arrived at from a page that still exists behind it. On
+       this console SHELF_BACK is cross and SHELF_OK is circle; both come from
+       gSelectButton so the marks in the footer cannot disagree with these. */
+    else if (getKeyOn(SHELF_BACK)) {
+        sfxPlay(SFX_CANCEL);
+        guiSwitchScreen(infBack);
+        return;
+    } else if (getKeyOn(SHELF_OK) && list) {
+        if (infBtn == 0 && list->itemLaunch && list->itemGetConfig) {
+            sfxPlay(SFX_CONFIRM);
+            list->itemLaunch(list, infIdx, list->itemGetConfig(list, infIdx));
+        } else if (infBtn == 1 && menuSelectIndex(infIdx)) {
+            /* OPL's own per-game menu, which is the only door to the cheat
+               settings -- including the Global tier, which that dialog edits
+               by removing the per-game key rather than by living anywhere of
+               its own. Reached here so it is not behind triangle on a list the
+               shell replaced. guiSetInfoReturn is what brings you back to this
+               page instead of dropping you into the classic list. */
+            sfxPlay(SFX_CONFIRM);
+            guiSetInfoReturn(GUI_SCREEN_SHELF_INFO);
+            menuInitGameMenu();
+            guiSwitchScreen(GUI_SCREEN_GAME_MENU);
+            guiGameLoadConfig(list, gameMenuLoadConfig(NULL));
+        }
+        return;
+    }
+    shelfSfxMoved(was, infBtn);
 }
 
 /* ------------------------------------------------------------------ Home page
@@ -1875,23 +2227,68 @@ static int homeDaysFromCivil(int y, int m, int d)
  *  region, and configGetTimezone() is the offset from GMT the owner already set
  *  in the OSD -- so no new setting is needed, and a wrong clock is the console's
  *  own to fix. Returns 0 if the RTC is unreadable. */
+static int homeDateOk;          /* is the RTC's DATE real, or a flat battery? */
+
+/** Local time, sampled rather than polled.
+ *
+ *  This used to call sceCdReadClock straight out of the render path, twice per
+ *  frame -- once from shelfRenderHome and once from homeDrawDash -- which is a
+ *  hundred and twenty synchronous SIF RPCs into the IOP every second, for a
+ *  value that changes once a minute. It is also the only CDVD traffic this
+ *  shell generates, it only happens on Home, and Home is where the console sat
+ *  when it locked up with the pad dead. That is not proof, but a blocking IOP
+ *  round trip issued from inside a frame is worth removing on its own terms,
+ *  and it is the one thing here that fits "idle on Home for a minute".
+ *
+ *  So: read the RTC every thirty seconds and carry the clock forward from the
+ *  EE's own counter in between. Same displayed time, 1/1800th of the traffic.
+ *
+ *  It also makes the clock survive a console that cannot keep time. The RTC
+ *  backup battery here is flat, so the date reads as zero and the time restarts
+ *  at 00:00 at every power-on. Rather than return 0 and leave the panel blank,
+ *  an unreadable or unset clock falls back to time-since-boot, which is at
+ *  least monotonic and true about this session. homeDateOk records which of the
+ *  two we got, because "3d ago" from a garbage date would be a lie where a
+ *  counting clock is not.
+ *
+ *  Always returns 1: there is always a clock to draw. */
 static int homeLocalTime(int *hh, int *mm, int *days)
 {
-    sceCdCLOCK c;
-    int minutes;
+    static int haveSample = 0;      /* has the RTC ever answered? */
+    static int sampleMin = 0;       /* minutes-of-day at the sample */
+    static int sampleDay = 0;
+    static int sampleSec = -1;      /* EE seconds when it was taken */
+    int nowSec = (int)(clock() / CLOCKS_PER_SEC);
+    int minutes, drift;
 
-    if (!sceCdReadClock(&c))
-        return 0;
-    /* The year test that used to live here is gone.
-       It was right about the diagnosis -- year reads 0, so the RTC backup
-       battery is flat and the clock restarts at every power-on -- and wrong
-       about the remedy. Hiding the clock did not make the console know the
-       time; it just removed the panel. An elapsed-time clock is at least
-       monotonic and says something true about this session. The actual fix is a
-       CR2032 on the motherboard, which is not ours to make. */
-    *days = homeDaysFromCivil(2000 + btoi(c.year), btoi(c.month & 0x7F), btoi(c.day));
-    minutes = btoi(c.hour) * 60 + btoi(c.minute) - 540 + configGetTimezone();
-    while (minutes < 0)     { minutes += 1440; (*days)--; }
+    if (sampleSec < 0 || nowSec - sampleSec >= 30 || nowSec < sampleSec) {
+        sceCdCLOCK c;
+        sampleSec = nowSec;
+        if (sceCdReadClock(&c)) {
+            int mo = btoi(c.month & 0x7F), dy = btoi(c.day);
+            /* JST whatever the region; configGetTimezone() is the offset from
+               GMT the owner already set in the OSD, so no new setting. */
+            minutes = btoi(c.hour) * 60 + btoi(c.minute) - 540 + configGetTimezone();
+            homeDateOk = (mo >= 1 && mo <= 12 && dy >= 1 && dy <= 31);
+            sampleDay = homeDateOk
+                      ? homeDaysFromCivil(2000 + btoi(c.year), mo, dy) : 0;
+            while (minutes < 0)     { minutes += 1440; sampleDay--; }
+            while (minutes >= 1440) { minutes -= 1440; sampleDay++; }
+            sampleMin = minutes;
+            haveSample = 1;
+        } else if (!haveSample) {
+            /* Nothing to correct against. Count from boot. */
+            homeDateOk = 0;
+            sampleMin = 0;
+            sampleDay = 0;
+        }
+    }
+
+    /* Carry forward from the sample. drift is whole minutes since it was taken,
+       so the displayed value steps exactly once a minute either way. */
+    drift = (nowSec - sampleSec) / 60;
+    minutes = sampleMin + drift;
+    *days = sampleDay;
     while (minutes >= 1440) { minutes -= 1440; (*days)++; }
     *hh = minutes / 60;
     *mm = minutes % 60;
@@ -1906,7 +2303,9 @@ static void homeWhen(char *out, size_t n, config_set_t *cfg, int todayDays)
     int d, m, y, ago;
 
     out[0] = '\0';
-    if (!cfg || !configGetStr(cfg, "LastPlayed", &v) || !v)
+    /* No date on the console, no "3d ago" -- the elapsed-time fallback in
+       homeLocalTime gives a usable clock but a meaningless calendar. */
+    if (!homeDateOk || !cfg || !configGetStr(cfg, "LastPlayed", &v) || !v)
         return;
     if (sscanf(v, "%d-%d-%d", &d, &m, &y) != 3 || m < 1 || m > 12 || d < 1 || d > 31)
         return;
@@ -1924,6 +2323,14 @@ static void homeFormatTime(char *out, size_t n, int minutes)
     else                     snprintf(out, n, "%d h", minutes / 60);
 }
 
+static int homeIndexOf(const char *startup);
+
+/* oplRecentPrune's test, in the shape it wants. */
+static int homeResolves(const char *startup)
+{
+    return homeIndexOf(startup) >= 0;
+}
+
 static void homeScan(void)
 {
     item_list_t *list = menuGetActiveList();
@@ -1934,6 +2341,11 @@ static void homeScan(void)
         return;
     homeScanList = list;
     homeScanCount = count;
+    /* The device changed under us, so the remembered list is worth re-checking.
+       Entries that name nothing this device holds are dropped here rather than
+       drawn as titles that open nothing -- which is what Home had been doing
+       ever since the games moved from the microSD to the HDD. */
+    oplRecentPrune(homeResolves);
     homeTotalMinutes = homeTotalTitles = homeTotalPlayed = 0;
     for (k = 0; k < HOME_TOP_N; k++) { homeTopMins[k] = 0; homeTopName[k][0] = '\0'; }
     if (!list->itemGetConfig || !list->itemGetName)
@@ -2070,12 +2482,15 @@ static int homeCard(int x, int y, int w, int h, const char *label, int phase)
 
 static void homeDrawDash(void)
 {
-    int total = oplRecentCount();
+    int total;
     int hh = 0, mm = 0, days = 0, haveClock;
     int i, y, dyA = 0, dyB = 0, dyC = 0, dyH;
     char buf[96], t[24], when[24];
 
+    /* After homeScan, not before: it prunes the recent list, and a count read
+       on the far side of that is a count of what is actually there. */
     homeScan();
+    total = oplRecentCount();
     haveClock = homeLocalTime(&hh, &mm, &days);
     if (homeSel >= total) homeSel = total - 1;
     if (homeSel < 1)      homeSel = 1;
@@ -2442,12 +2857,9 @@ void shelfHandleInputHome(void)
     else if (getKeyOn(SHELF_ALT)) {
         sfxPlay(SFX_CONFIRM);
         idx = homeIndexOf(oplRecentStartup(homeFocus == 0 ? 0 : homeSel));
-        if (idx >= 0 && menuSelectIndex(idx))
-            {
-            guiSetInfoReturn(guiShelfPageIndex() >= 0
-                             ? GUI_SCREEN_SHELF_HOME + guiShelfPageIndex()
-                             : GUI_SCREEN_MAIN);
-            guiSwitchScreen(GUI_SCREEN_INFO);
+        if (idx >= 0) {
+            shelfInfoOpen(idx, GUI_SCREEN_SHELF_HOME);
+            guiSwitchScreen(GUI_SCREEN_SHELF_INFO);
         }
     } else if (getKeyOn(SHELF_OK)) {
         sfxPlay(SFX_CONFIRM);

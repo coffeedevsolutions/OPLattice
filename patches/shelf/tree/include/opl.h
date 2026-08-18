@@ -156,6 +156,9 @@ void oplRecentLoad(void);
 int oplRecentCount(void);
 const char *oplRecentStartup(int index);
 const char *oplRecentTitle(int index);
+/// Forget remembered entries whose startup id no longer names a visible game.
+void oplRecentPrune(int (*resolves)(const char *startup));
+
 /// Position of `startup` in the recent list, or OPL_RECENT_MAX when absent.
 int oplRecentRank(const char *startup);
 extern int gAutoRefresh;

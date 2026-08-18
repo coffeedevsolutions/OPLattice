@@ -91,7 +91,8 @@ static gui_screen_handler_t screenHandlers[] = {{&menuHandleInputMain, &menuRend
                                                 {&menuHandleInputAppMenu, &menuRenderAppMenu, 1},
                                                 {&shelfHandleInputHome, &shelfRenderHome, 1},
                                                 {&shelfHandleInputLibrary, &shelfRenderLibrary, 1},
-                                                {&shelfHandleInputApps, &shelfRenderApps, 1}};
+                                                {&shelfHandleInputApps, &shelfRenderApps, 1},
+                                                {&shelfHandleInputInfo, &shelfRenderInfo, 1}};
 
 // default screen handler (menu screen)
 static gui_screen_handler_t *screenHandler = &screenHandlers[GUI_SCREEN_MENU];
@@ -118,6 +119,10 @@ int guiShelfPageIndex(void)
     int i = (int)(screenHandler - &screenHandlers[0]);
     if (i >= GUI_SCREEN_SHELF_HOME && i <= GUI_SCREEN_SHELF_APPS)
         return i - GUI_SCREEN_SHELF_HOME;
+    /* Details keeps the rail marking wherever it was opened from, so the shell
+       does not appear to lose its place while you are reading about a game. */
+    if (i == GUI_SCREEN_SHELF_INFO)
+        return shelfInfoRailPage();
     return -1;
 }
 

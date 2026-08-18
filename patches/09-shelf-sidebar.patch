@@ -74,10 +74,10 @@ index a0699e9..bb9e7ae 100644
      CFG_ETHPREFIX,
      CFG_HDDSPINDOWN,
 diff --git a/include/gui.h b/include/gui.h
-index 79f256f..5a15b31 100644
+index 79f256f..9544e9f 100644
 --- a/include/gui.h
 +++ b/include/gui.h
-@@ -59,12 +59,24 @@ extern int guiFrameId;
+@@ -59,12 +59,28 @@ extern int guiFrameId;
  #define GUI_SCREEN_GAME_MENU 3
  #define GUI_SCREEN_APP_MENU  4
  
@@ -86,6 +86,10 @@ index 79f256f..5a15b31 100644
 +#define GUI_SCREEN_SHELF_HOME    5
 +#define GUI_SCREEN_SHELF_LIBRARY 6
 +#define GUI_SCREEN_SHELF_APPS    7
++/* The details page. Deliberately NOT between HOME and APPS: guiShelfPageIndex
++   reports which of the three top-level pages the rail should mark, and details
++   is not one of them -- it is a place you arrived at from one. */
++#define GUI_SCREEN_SHELF_INFO    8
 +
  void guiSwitchScreen(int target);
 +int guiOnMainScreen(void);
@@ -116,11 +120,32 @@ index e2ef117..e284fb0 100644
  void menuInit();
  void menuEnd();
  void menuReinitMainMenu(void);
+diff --git a/include/opl.h b/include/opl.h
+index 70d12dc..41e805b 100644
+--- a/include/opl.h
++++ b/include/opl.h
+@@ -156,6 +156,9 @@ void oplRecentLoad(void);
+ int oplRecentCount(void);
+ const char *oplRecentStartup(int index);
+ const char *oplRecentTitle(int index);
++/// Forget remembered entries whose startup id no longer names a visible game.
++void oplRecentPrune(int (*resolves)(const char *startup));
++
+ /// Position of `startup` in the recent list, or OPL_RECENT_MAX when absent.
+ int oplRecentRank(const char *startup);
+ extern int gAutoRefresh;
 diff --git a/include/renderman.h b/include/renderman.h
-index 6b1f380..d610783 100644
+index 6b1f380..3cbb454 100644
 --- a/include/renderman.h
 +++ b/include/renderman.h
-@@ -102,6 +102,15 @@ void rmDrawRect(int x, int y, int w, int h, u64 color);
+@@ -98,10 +98,22 @@ void rmDrawOverlayPixmap(GSTEXTURE *overlay, int x, int y, short aligned, int w,
+ 
+ /** Queues a opaque rectangle to be rendered */
+ void rmDrawRect(int x, int y, int w, int h, u64 color);
++/** A vertical ramp from c0 at the top to c1 at the bottom, as one gouraud
++ *  quad. Both colours carry their own alpha; the GS interpolates it. */
++void rmDrawGradV(int x, int y, int w, int h, u64 c0, u64 c1);
+ 
  /** Queues a single color line to be rendered */
  void rmDrawLine(int x1, int y1, int x2, int y2, u64 color);
  
@@ -136,7 +161,7 @@ index 6b1f380..d610783 100644
  /** Starts the frame - first to call every frame */
  void rmStartFrame(void);
  
-@@ -111,6 +120,11 @@ void rmEndFrame(void);
+@@ -111,6 +123,11 @@ void rmEndFrame(void);
  /** Sets the display offset in units of pixels */
  void rmSetDisplayOffset(int x, int y);
  
@@ -148,7 +173,7 @@ index 6b1f380..d610783 100644
  /** Set overscan in percentage/10 */
  void rmSetOverscan(int overscan);
  
-@@ -118,6 +132,13 @@ void rmSetOverscan(int overscan);
+@@ -118,6 +135,13 @@ void rmSetOverscan(int overscan);
   * When set, it will treat all pixmap widths/heights (not positions) as scaled with the ratios provided */
  void rmSetAspectRatio(enum rm_aratio dar);
  
@@ -246,7 +271,7 @@ index 35f50f1..3a56105 100644
  
      if (aligned & ALIGN_VCENTER) {
 diff --git a/src/gui.c b/src/gui.c
-index e82bd2c..5267b07 100644
+index e82bd2c..199180b 100644
 --- a/src/gui.c
 +++ b/src/gui.c
 @@ -16,6 +16,7 @@
@@ -257,7 +282,7 @@ index e82bd2c..5267b07 100644
  #include "include/ethsupport.h"
  #include "include/compatupd.h"
  #include "include/pggsm.h"
-@@ -87,13 +88,44 @@ static gui_screen_handler_t screenHandlers[] = {{&menuHandleInputMain, &menuRend
+@@ -87,13 +88,49 @@ static gui_screen_handler_t screenHandlers[] = {{&menuHandleInputMain, &menuRend
                                                  {&menuHandleInputMenu, &menuRenderMenu, 1},
                                                  {&menuHandleInputInfo, &menuRenderInfo, 1},
                                                  {&menuHandleInputGameMenu, &menuRenderGameMenu, 1},
@@ -265,7 +290,8 @@ index e82bd2c..5267b07 100644
 +                                                {&menuHandleInputAppMenu, &menuRenderAppMenu, 1},
 +                                                {&shelfHandleInputHome, &shelfRenderHome, 1},
 +                                                {&shelfHandleInputLibrary, &shelfRenderLibrary, 1},
-+                                                {&shelfHandleInputApps, &shelfRenderApps, 1}};
++                                                {&shelfHandleInputApps, &shelfRenderApps, 1},
++                                                {&shelfHandleInputInfo, &shelfRenderInfo, 1}};
  
  // default screen handler (menu screen)
  static gui_screen_handler_t *screenHandler = &screenHandlers[GUI_SCREEN_MENU];
@@ -292,6 +318,10 @@ index e82bd2c..5267b07 100644
 +    int i = (int)(screenHandler - &screenHandlers[0]);
 +    if (i >= GUI_SCREEN_SHELF_HOME && i <= GUI_SCREEN_SHELF_APPS)
 +        return i - GUI_SCREEN_SHELF_HOME;
++    /* Details keeps the rail marking wherever it was opened from, so the shell
++       does not appear to lose its place while you are reading about a game. */
++    if (i == GUI_SCREEN_SHELF_INFO)
++        return shelfInfoRailPage();
 +    return -1;
 +}
 +
@@ -303,7 +333,7 @@ index e82bd2c..5267b07 100644
  static int transIndex;
  
  // Helper perlin noise data
-@@ -113,6 +145,39 @@ void guiReloadScreenExtents()
+@@ -113,6 +150,39 @@ void guiReloadScreenExtents()
      rmGetScreenExtents(&screenWidth, &screenHeight);
  }
  
@@ -343,7 +373,7 @@ index e82bd2c..5267b07 100644
  void guiInit(void)
  {
      guiFrameId = 0;
-@@ -541,6 +606,7 @@ void guiShowConfig()
+@@ -541,6 +611,7 @@ void guiShowConfig()
      diaSetInt(diaConfig, CFG_HDDSPINDOWN, gHDDSpindown);
      diaSetString(diaConfig, CFG_BDMPREFIX, gBDMPrefix);
      diaSetString(diaConfig, CFG_ETHPREFIX, gETHPrefix);
@@ -351,7 +381,7 @@ index e82bd2c..5267b07 100644
      diaSetInt(diaConfig, CFG_PLAYSTATS, gEnablePlayStats);
      diaSetVisible(diaConfig, CFG_LBL_PLAYSTATS, gEnableWrite);
      diaSetVisible(diaConfig, CFG_PLAYSTATS, gEnableWrite);
-@@ -566,6 +632,7 @@ void guiShowConfig()
+@@ -566,6 +637,7 @@ void guiShowConfig()
          diaGetString(diaConfig, CFG_EXITTO, gExitPath, sizeof(gExitPath));
          diaGetInt(diaConfig, CFG_ENWRITEOP, &gEnableWrite);
          diaGetInt(diaConfig, CFG_PLAYSTATS, &gEnablePlayStats);
@@ -359,7 +389,7 @@ index e82bd2c..5267b07 100644
          diaGetInt(diaConfig, CFG_HDDSPINDOWN, &gHDDSpindown);
          diaGetString(diaConfig, CFG_BDMPREFIX, gBDMPrefix, sizeof(gBDMPrefix));
          diaGetString(diaConfig, CFG_ETHPREFIX, gETHPrefix, sizeof(gETHPrefix));
-@@ -1550,6 +1617,18 @@ static void guiReadPads()
+@@ -1550,6 +1622,18 @@ static void guiReadPads()
  // screen handlers. Fade transition code written by Maximus32
  static void guiShow()
  {
@@ -378,7 +408,7 @@ index e82bd2c..5267b07 100644
      // is there a transmission effect going on or are
      // we in a normal rendering state?
      if (screenHandlerTarget) {
-@@ -1581,6 +1660,16 @@ static void guiShow()
+@@ -1581,6 +1665,16 @@ static void guiShow()
      } else
          // render with the set screen handler
          screenHandler->renderScreen();
@@ -396,7 +426,7 @@ index e82bd2c..5267b07 100644
  
  void guiIntroLoop(void)
 diff --git a/src/menusys.c b/src/menusys.c
-index 9cc2a8a..330cc9d 100644
+index 9cc2a8a..2b5dd8c 100644
 --- a/src/menusys.c
 +++ b/src/menusys.c
 @@ -6,6 +6,7 @@
@@ -526,8 +556,20 @@ index 9cc2a8a..330cc9d 100644
          else
              selected_item->item->execCircle(selected_item->item);
      } else if (getKey(KEY_L1)) {
+@@ -1363,7 +1444,10 @@ void menuHandleInputGameMenu()
+     }
+ 
+     if (getKeyOn(KEY_START) || getKeyOn(gSelectButton == KEY_CIRCLE ? KEY_CROSS : KEY_CIRCLE)) {
+-        guiSwitchScreen(GUI_SCREEN_MAIN);
++        /* Back to whoever opened it. The shell's details page sets this before
++           it switches, the same way it already does for the info screen; the
++           classic list sets nothing and gets GUI_SCREEN_MAIN as before. */
++        guiSwitchScreen(guiGetInfoReturn());
+     }
+ }
+ 
 diff --git a/src/opl.c b/src/opl.c
-index 4a037f6..fc23ef4 100644
+index 4a037f6..5c2df6c 100644
 --- a/src/opl.c
 +++ b/src/opl.c
 @@ -20,6 +20,7 @@
@@ -538,7 +580,18 @@ index 4a037f6..fc23ef4 100644
  #include "include/util.h"
  #include "include/compatupd.h"
  #include "include/extern_irx.h"
-@@ -950,6 +951,7 @@ static void _loadConfig()
+@@ -334,6 +335,10 @@ static void itemExecTriangle(struct menu_item *curMenu)
+     if (support) {
+         if (!(support->flags & MODE_FLAG_NO_COMPAT)) {
+             if (menuCheckParentalLock() == 0) {
++                /* Explicit, because the shell's details page also opens this
++                   menu and points the return somewhere else. Whoever opens it
++                   names where Back goes. */
++                guiSetInfoReturn(GUI_SCREEN_MAIN);
+                 menuInitGameMenu();
+                 guiSwitchScreen(GUI_SCREEN_GAME_MENU);
+                 guiGameLoadConfig(support, gameMenuLoadConfig(NULL));
+@@ -950,6 +955,7 @@ static void _loadConfig()
              configGetStrCopy(configOPL, CONFIG_OPL_ETH_PREFIX, gETHPrefix, sizeof(gETHPrefix));
              configGetInt(configOPL, CONFIG_OPL_REMEMBER_LAST, &gRememberLastPlayed);
              configGetInt(configOPL, CONFIG_OPL_PLAY_STATS, &gEnablePlayStats);
@@ -546,7 +599,7 @@ index 4a037f6..fc23ef4 100644
              configGetInt(configOPL, CONFIG_OPL_AUTOSTART_LAST, &gAutoStartLastPlayed);
              configGetInt(configOPL, CONFIG_OPL_BDM_MODE, &gBDMStartMode);
              configGetInt(configOPL, CONFIG_OPL_HDD_MODE, &gHDDStartMode);
-@@ -1122,6 +1124,7 @@ static void _saveConfig()
+@@ -1122,6 +1128,7 @@ static void _saveConfig()
          configSetStr(configOPL, CONFIG_OPL_ETH_PREFIX, gETHPrefix);
          configSetInt(configOPL, CONFIG_OPL_REMEMBER_LAST, gRememberLastPlayed);
          configSetInt(configOPL, CONFIG_OPL_PLAY_STATS, gEnablePlayStats);
@@ -554,7 +607,44 @@ index 4a037f6..fc23ef4 100644
          configSetInt(configOPL, CONFIG_OPL_AUTOSTART_LAST, gAutoStartLastPlayed);
          configSetInt(configOPL, CONFIG_OPL_BDM_MODE, gBDMStartMode);
          configSetInt(configOPL, CONFIG_OPL_HDD_MODE, gHDDStartMode);
-@@ -2029,6 +2032,7 @@ static void setDefaults(void)
+@@ -1741,6 +1748,36 @@ void oplRecentLoad(void)
+     }
+ }
+ 
++/** Drop every remembered entry that no longer names a game the active device
++ *  can see.
++ *
++ *  The recent list is persisted by startup id in conf_last.cfg and is never
++ *  checked against reality on load, so it survived the games moving off the
++ *  microSD and onto the HDD: Home went on offering titles that resolved to
++ *  nothing, and a genuinely-played game could not get in past them because the
++ *  list was already full of ghosts. This is the cheap fix -- an id that no
++ *  device holds is not a recent game, whatever the file says -- and it means the
++ *  list heals itself on the next boot rather than needing the card in a reader.
++ *
++ *  Called once the device lists are populated, not from a render path. */
++void oplRecentPrune(int (*resolves)(const char *startup))
++{
++    int i, k = 0;
++
++    if (!resolves)
++        return;
++    for (i = 0; i < recentCount; i++) {
++        if (!resolves(recentStartup[i]))
++            continue;
++        if (k != i) {
++            memcpy(recentStartup[k], recentStartup[i], sizeof(recentStartup[0]));
++            memcpy(recentTitle[k], recentTitle[i], sizeof(recentTitle[0]));
++        }
++        k++;
++    }
++    recentCount = k;
++}
++
+ /* ------------------------------------------------------------------ stats */
+ 
+ /** The support driver whose list currently contains this startup id.
+@@ -2029,6 +2066,7 @@ static void setDefaults(void)
      gEnableWrite = 0;
      gRememberLastPlayed = 0;
      gEnablePlayStats = 0;
@@ -562,7 +652,7 @@ index 4a037f6..fc23ef4 100644
      gAutoStartLastPlayed = 9;
      gSelectButton = KEY_CIRCLE; // Default to Japan.
      gMMCEPrefix[0] = '\0';
-@@ -2091,6 +2095,7 @@ static void init(void)
+@@ -2091,6 +2129,7 @@ static void init(void)
      configInit(NULL);
  
      rmInit();
@@ -570,7 +660,7 @@ index 4a037f6..fc23ef4 100644
      lngInit();
      thmInit();
      guiInit();
-@@ -2346,6 +2351,21 @@ int main(int argc, char *argv[])
+@@ -2346,6 +2385,21 @@ int main(int argc, char *argv[])
      // queue deffered init which shuts down the intro screen later
      ioPutRequest(IO_CUSTOM_SIMPLEACTION, &deferredInit);
  
@@ -593,7 +683,7 @@ index 4a037f6..fc23ef4 100644
      guiMainLoop();
  
 diff --git a/src/renderman.c b/src/renderman.c
-index 0a83587..41738c9 100644
+index 0a83587..65a064b 100644
 --- a/src/renderman.c
 +++ b/src/renderman.c
 @@ -79,6 +79,10 @@ static int iDisplayYOff;
@@ -724,7 +814,52 @@ index 0a83587..41738c9 100644
  void rmDrawRect(int x, int y, int w, int h, u64 color)
  {
      float fx = X_SCALE(x) + fRenderXOff;
-@@ -410,6 +498,31 @@ void rmDrawLine(int x1, int y1, int x2, int y2, u64 color)
+@@ -398,6 +486,44 @@ void rmDrawRect(int x, int y, int w, int h, u64 color)
+     order++;
+ }
+ 
++/* A vertical alpha ramp as ONE primitive, interpolated by the GS.
++ *
++ * This replaces a stack of translucent sprites, and the stack was never going to
++ * work. The first attempt used eleven bands and read as eleven flat rectangles.
++ * The second went to 2px bands, and to survive Y_SCALE truncation at 448 lines
++ * it drew each band 3 tall on a pitch of 2 -- which fixed the gaps at 448 and
++ * created a worse artefact everywhere else: at 480 lines Y_SCALE is the
++ * identity, so every band overlapped its neighbour by a pixel, and an overlap
++ * of two translucent sprites is not the same colour as one. 1-(1-a)^2 against a
++ * is a large step, so the ramp came out as alternating light and dark scanlines.
++ * That is what "the bars still aren't connected" was: not gaps, seams.
++ *
++ * Stacking translucent sprites cannot express a ramp, because the seam between
++ * any two of them is either a gap or a double blend and never neither. So this
++ * does what the hardware is for: one gouraud quad, RGBA interpolated per pixel
++ * by the rasteriser, with the GS's own dithering on the result. No seams to get
++ * wrong, no band count to tune, and one primitive instead of sixty.
++ *
++ * gsKit emits the four vertices as a triangle strip -- (v1,v2,v3), (v2,v3,v4) --
++ * so the order here is top-left, top-right, bottom-left, bottom-right, and the
++ * two top vertices carry c0 while the two bottom ones carry c1. */
++void rmDrawGradV(int x, int y, int w, int h, u64 c0, u64 c1)
++{
++    float fx = X_SCALE(x) + fRenderXOff;
++    float fy = Y_SCALE(y) + fRenderYOff;
++    float fw = X_SCALE(w);
++    float fh = Y_SCALE(h);
++
++    gsGlobal->PrimAlphaEnable = GS_SETTING_ON;
++    gsKit_prim_quad_gouraud(gsGlobal,
++                            fx, fy,
++                            fx + fw, fy,
++                            fx, fy + fh,
++                            fx + fw, fy + fh,
++                            order, c0, c0, c1, c1);
++    order++;
++}
++
+ void rmDrawLine(int x1, int y1, int x2, int y2, u64 color)
+ {
+     float fx1 = X_SCALE(x1) + fRenderXOff;
+@@ -410,6 +536,31 @@ void rmDrawLine(int x1, int y1, int x2, int y2, u64 color)
      order++;
  }
  
@@ -756,7 +891,7 @@ index 0a83587..41738c9 100644
  void rmSetDisplayOffset(int x, int y)
  {
      gsKit_set_display_offset(gsGlobal, x * rm_mode_table[vmode].VCK, y);
-@@ -488,6 +601,8 @@ void rmSetOverscan(int overscan)
+@@ -488,6 +639,8 @@ void rmSetOverscan(int overscan)
  
      fRenderXOff = (float)iDisplayXOff - 0.5f;
      fRenderYOff = (float)iDisplayYOff - 0.5f;

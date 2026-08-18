@@ -335,6 +335,10 @@ static void itemExecTriangle(struct menu_item *curMenu)
     if (support) {
         if (!(support->flags & MODE_FLAG_NO_COMPAT)) {
             if (menuCheckParentalLock() == 0) {
+                /* Explicit, because the shell's details page also opens this
+                   menu and points the return somewhere else. Whoever opens it
+                   names where Back goes. */
+                guiSetInfoReturn(GUI_SCREEN_MAIN);
                 menuInitGameMenu();
                 guiSwitchScreen(GUI_SCREEN_GAME_MENU);
                 guiGameLoadConfig(support, gameMenuLoadConfig(NULL));
@@ -1742,6 +1746,36 @@ void oplRecentLoad(void)
 
         recentCount++;
     }
+}
+
+/** Drop every remembered entry that no longer names a game the active device
+ *  can see.
+ *
+ *  The recent list is persisted by startup id in conf_last.cfg and is never
+ *  checked against reality on load, so it survived the games moving off the
+ *  microSD and onto the HDD: Home went on offering titles that resolved to
+ *  nothing, and a genuinely-played game could not get in past them because the
+ *  list was already full of ghosts. This is the cheap fix -- an id that no
+ *  device holds is not a recent game, whatever the file says -- and it means the
+ *  list heals itself on the next boot rather than needing the card in a reader.
+ *
+ *  Called once the device lists are populated, not from a render path. */
+void oplRecentPrune(int (*resolves)(const char *startup))
+{
+    int i, k = 0;
+
+    if (!resolves)
+        return;
+    for (i = 0; i < recentCount; i++) {
+        if (!resolves(recentStartup[i]))
+            continue;
+        if (k != i) {
+            memcpy(recentStartup[k], recentStartup[i], sizeof(recentStartup[0]));
+            memcpy(recentTitle[k], recentTitle[i], sizeof(recentTitle[0]));
+        }
+        k++;
+    }
+    recentCount = k;
 }
 
 /* ------------------------------------------------------------------ stats */

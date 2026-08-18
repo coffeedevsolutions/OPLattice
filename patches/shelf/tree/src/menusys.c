@@ -1444,7 +1444,10 @@ void menuHandleInputGameMenu()
     }
 
     if (getKeyOn(KEY_START) || getKeyOn(gSelectButton == KEY_CIRCLE ? KEY_CROSS : KEY_CIRCLE)) {
-        guiSwitchScreen(GUI_SCREEN_MAIN);
+        /* Back to whoever opened it. The shell's details page sets this before
+           it switches, the same way it already does for the info screen; the
+           classic list sets nothing and gets GUI_SCREEN_MAIN as before. */
+        guiSwitchScreen(guiGetInfoReturn());
     }
 }
 

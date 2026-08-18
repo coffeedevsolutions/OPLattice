@@ -64,6 +64,10 @@ extern int guiFrameId;
 #define GUI_SCREEN_SHELF_HOME    5
 #define GUI_SCREEN_SHELF_LIBRARY 6
 #define GUI_SCREEN_SHELF_APPS    7
+/* The details page. Deliberately NOT between HOME and APPS: guiShelfPageIndex
+   reports which of the three top-level pages the rail should mark, and details
+   is not one of them -- it is a place you arrived at from one. */
+#define GUI_SCREEN_SHELF_INFO    8
 
 void guiSwitchScreen(int target);
 int guiOnMainScreen(void);

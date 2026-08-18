@@ -98,6 +98,9 @@ void rmDrawOverlayPixmap(GSTEXTURE *overlay, int x, int y, short aligned, int w,
 
 /** Queues a opaque rectangle to be rendered */
 void rmDrawRect(int x, int y, int w, int h, u64 color);
+/** A vertical ramp from c0 at the top to c1 at the bottom, as one gouraud
+ *  quad. Both colours carry their own alpha; the GS interpolates it. */
+void rmDrawGradV(int x, int y, int w, int h, u64 c0, u64 c1);
 
 /** Queues a single color line to be rendered */
 void rmDrawLine(int x1, int y1, int x2, int y2, u64 color);

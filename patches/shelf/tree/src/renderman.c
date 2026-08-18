@@ -486,6 +486,44 @@ void rmDrawRect(int x, int y, int w, int h, u64 color)
     order++;
 }
 
+/* A vertical alpha ramp as ONE primitive, interpolated by the GS.
+ *
+ * This replaces a stack of translucent sprites, and the stack was never going to
+ * work. The first attempt used eleven bands and read as eleven flat rectangles.
+ * The second went to 2px bands, and to survive Y_SCALE truncation at 448 lines
+ * it drew each band 3 tall on a pitch of 2 -- which fixed the gaps at 448 and
+ * created a worse artefact everywhere else: at 480 lines Y_SCALE is the
+ * identity, so every band overlapped its neighbour by a pixel, and an overlap
+ * of two translucent sprites is not the same colour as one. 1-(1-a)^2 against a
+ * is a large step, so the ramp came out as alternating light and dark scanlines.
+ * That is what "the bars still aren't connected" was: not gaps, seams.
+ *
+ * Stacking translucent sprites cannot express a ramp, because the seam between
+ * any two of them is either a gap or a double blend and never neither. So this
+ * does what the hardware is for: one gouraud quad, RGBA interpolated per pixel
+ * by the rasteriser, with the GS's own dithering on the result. No seams to get
+ * wrong, no band count to tune, and one primitive instead of sixty.
+ *
+ * gsKit emits the four vertices as a triangle strip -- (v1,v2,v3), (v2,v3,v4) --
+ * so the order here is top-left, top-right, bottom-left, bottom-right, and the
+ * two top vertices carry c0 while the two bottom ones carry c1. */
+void rmDrawGradV(int x, int y, int w, int h, u64 c0, u64 c1)
+{
+    float fx = X_SCALE(x) + fRenderXOff;
+    float fy = Y_SCALE(y) + fRenderYOff;
+    float fw = X_SCALE(w);
+    float fh = Y_SCALE(h);
+
+    gsGlobal->PrimAlphaEnable = GS_SETTING_ON;
+    gsKit_prim_quad_gouraud(gsGlobal,
+                            fx, fy,
+                            fx + fw, fy,
+                            fx, fy + fh,
+                            fx + fw, fy + fh,
+                            order, c0, c0, c1, c1);
+    order++;
+}
+
 void rmDrawLine(int x1, int y1, int x2, int y2, u64 color)
 {
     float fx1 = X_SCALE(x1) + fRenderXOff;
