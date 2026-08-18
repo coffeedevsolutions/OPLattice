@@ -1711,10 +1711,26 @@ static void homeFormatTime(char *out, size_t n, int minutes);
  *   - shelfGradV, never a hand-rolled band loop
  */
 #define INF_HERO_H   244                 /* == LIB_HERO_H; see the note below */
-#define INF_COV_W    120                  /* declared; displays 2:3 at 180 tall */
-#define INF_COV_H    180
+/* The cover, in the three widths it has at once.
+ *
+ * INF_COV_DW is what it occupies on the page. INF_COV_W is what gets DECLARED,
+ * which is four thirds of that, because SCALING_RATIO draws three quarters of a
+ * declared width. And the height is twice the drawn width, not one and a half:
+ * the virtual 640x480 space is stretched to fill 16:9, so a rect W wide by H
+ * tall displays at (W/640*16):(H/480*9), and a 2:3 cover therefore needs H = 2W
+ * in virtual units. Getting that wrong is what makes art look right in the
+ * previewer and wrong on the television.
+ *
+ * The drawn width and the column origin moved together: the cover was 90 wide
+ * against columns starting at 180, which left a 48-pixel channel doing nothing.
+ * Widening the cover alone would have crowded the name; moving the columns alone
+ * would have left the cover looking undersized beside a 244-tall band. Both, by
+ * about half each, closes the gap to the same 16 the rest of the page uses. */
+#define INF_COV_DW   108                  /* what it occupies on the page */
+#define INF_COV_W    (INF_COV_DW * 4 / 3) /* declared: SCALING_RATIO draws 3/4 */
+#define INF_COV_H    (INF_COV_DW * 2)     /* 2:3 on screen is H = 2W in virtual */
 #define INF_PAD      12                   /* the one gap this page repeats */
-#define INF_COL_X    (CONTENT_X + INF_COV_W + 18)   /* 180 */
+#define INF_COL_X    (CONTENT_X + INF_COV_DW + 16)
 #define INF_COL_W    ((640 - INF_COL_X - 24) / 3)   /* 145 */
 #define INF_HEAD_Y   254
 #define INF_ROW_H    24                   /* label over value, stacked */
@@ -1820,6 +1836,44 @@ static void infDrawCell(int x, int y, const char *label, const char *value)
  * for anamorphic, which is what made the hand-drawn PlayStation logo distort
  * along its own curves; a block placed at 45 degrees is still an axis-aligned
  * rectangle and comes out clean. */
+/* The settings mark, loaded from the theme the same way the PlayStation logo
+ * is: white with the icon as its alpha so it takes the sheet's ink at draw
+ * time, asked for exactly once per theme, and never retried on failure --
+ * retrying a failed open every frame is how the font loader used to stall the
+ * renderer.
+ *
+ * 72 by 96 texels for an 18 by 24 rect. Four times pslogo's density, and
+ * deliberately: pslogo is flat shapes and holds up texel for texel, while a cog
+ * is curves and 18 texels across cannot describe one. Drawing declared 24 by 24
+ * with SCALING_RATIO puts it in an 18-wide rect that displays square. */
+static GSTEXTURE gearIcon;
+static int gearState;            /* 0 untried, 1 loaded, -1 absent */
+static int gearTheme = -1;
+
+static GSTEXTURE *shelfGearIcon(void)
+{
+    int themeId = thmGetGuiValue();
+
+    if (themeId != gearTheme) {
+        gearTheme = themeId;
+        gearState = 0;
+    }
+    if (gearState == 0) {
+        char path[192];
+        char *dir = thmGetFilePath(themeId);
+
+        gearState = -1;
+        if (dir) {
+            snprintf(path, sizeof(path), "%ssettings", dir);
+            if (texDiscoverLoad(&gearIcon, path, -1) == 0)
+                gearState = 1;
+        }
+    }
+    return (gearState == 1) ? &gearIcon : NULL;
+}
+
+/* Kept as the fallback for a theme that ships no settings icon, so the button is
+   never an empty box. */
 static void infDrawGear(int x, int y, u64 col, u64 bg)
 {
     static const unsigned char gearRow[19][3] = {
@@ -2051,8 +2105,15 @@ void shelfRenderInfo(void)
                         CONTENT_X + (gx - INF_BTN_GAP - CONTENT_X) / 2,
                         INF_BTN_Y + 11, ALIGN_HCENTER, 0, 0, "Play", ink);
         ink = infDrawButton(gx, INF_GEAR_W, infBtn == 1);
-        infDrawGear(gx + 3, INF_BTN_Y + 4, ink,
-                    infBtn == 1 ? LAND_INK : LAND_BG);
+        {
+            GSTEXTURE *ico = shelfGearIcon();
+            if (ico)
+                rmDrawPixmap(ico, gx + 3, INF_BTN_Y + 4, ALIGN_NONE, 24, 24,
+                             SCALING_RATIO, ink);
+            else
+                infDrawGear(gx + 3, INF_BTN_Y + 4, ink,
+                            infBtn == 1 ? LAND_INK : LAND_BG);
+        }
     }
 
     /* ---- footer: Back only, now that Play is a control -------------------- */

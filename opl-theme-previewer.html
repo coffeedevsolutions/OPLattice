@@ -2848,9 +2848,9 @@ function renderShelfLibrary() {
 /* shelf.c's details page. Same sheet as the rest of the shell: the theme's info
    chain used to draw this, which meant a tan shell handing you a dark slab the
    moment you asked about a game. Constants mirror INF_* in shelf.c. */
-const INFP = { HERO_H: 244, COV_W: 120, COV_H: 180, HEAD_Y: 254, PAD: 12,
+const INFP = { HERO_H: 244, COV_DW: 108, COV_H: 216, HEAD_Y: 254, PAD: 12,
                ROW_H: 24, COL_ROWS: 4, BTN_H: 32, BTN_GAP: 6, GEAR_W: 24 };
-const INF_COL_X = CONTENT_X + INFP.COV_W + 18;
+const INF_COL_X = CONTENT_X + INFP.COV_DW + 16;
 const INF_COL_W = Math.floor((SCREEN_W - INF_COL_X - 24) / 3);
 const INF_CELL_Y = INFP.HEAD_Y + 20;
 const INF_GRID_BOT = INF_CELL_Y + INFP.COL_ROWS * INFP.ROW_H;
@@ -2863,6 +2863,12 @@ const GEAR_ROW = [[9,0,0],[6,6,0],[5,8,0],[4,10,0],[3,12,0],[3,12,0],[2,14,1],
 const GEAR_TOOTH = [[15,10,4,3],[13,18,3,3],[8,21,3,4],[2,18,3,3],
   [0,11,4,3],[2,3,3,3],[7,0,3,4],[13,3,3,3]];
 let infBtn = 0;                        // 0 Play, 1 Game Settings
+
+(function loadGearIcon() {
+  const i = new Image();
+  i.onload = () => { S.gearIcon = i; render(); };
+  i.src = "themes/thm_GridHard/settings.png";
+})();
 
 function renderShelfInfo() {
   const games = gameList();
@@ -2891,8 +2897,8 @@ function renderShelfInfo() {
   // it overlaps instead of being ruled straight through
   R(RAIL_W, INFP.HERO_H, SCREEN_W - RAIL_W, 1, 0x726756);
   const cov = realArt("COVHD");
-  if (cov) ctx.drawImage(cov, CONTENT_X, INF_COV_Y, 90, INFP.COV_H);
-  else R(CONTENT_X, INF_COV_Y, 90, INFP.COV_H, 0xAA9F89);
+  if (cov) ctx.drawImage(cov, CONTENT_X, INF_COV_Y, INFP.COV_DW, INFP.COV_H);
+  else R(CONTENT_X, INF_COV_Y, INFP.COV_DW, INFP.COV_H, 0xAA9F89);
   shelfText(INF_COL_X, INFP.HERO_H - 58, g.title || "—", 0xE8E2D2, SHELF_FNT);
   shelfText(INF_COL_X, INFP.HERO_H - 28, g.serial || "", 0xE8E2D2, SHELF_FNT_LBL);
 
@@ -2948,7 +2954,7 @@ function renderShelfInfo() {
     GEAR_ROW.forEach((r,i)=>{ if (r[2]) R(x+9-r[2], y+3+i, r[2]*2, 2, bg); });
   };
   {
-    const roww = 90;                       // the cover's drawn width
+    const roww = INFP.COV_DW;              // the cover's drawn width
     const gx = CONTENT_X + roww - INFP.GEAR_W;
     const pw = gx - INFP.BTN_GAP - CONTENT_X;
     let ink = button(CONTENT_X, pw, infBtn === 0);
@@ -2956,7 +2962,15 @@ function renderShelfInfo() {
     const w = textWidth("Play", SHELF_FNT_SM);
     shelfText(CONTENT_X + pw / 2 - w / 2, INF_BTN_Y + 11, "Play", ink, SHELF_FNT_SM);
     ink = button(gx, INFP.GEAR_W, infBtn === 1);
-    gear(gx + 3, INF_BTN_Y + 4, ink, infBtn === 1 ? 0x3A2E22 : 0xC9BFA6);
+    const ico = S.gearIcon;
+    if (ico && ico.complete && ico.naturalWidth) {
+      ctx.save();                        // white-with-alpha, tinted at draw time
+      ctx.drawImage(ico, gx + 3, INF_BTN_Y + 4, 18, 24);
+      ctx.globalCompositeOperation = "source-atop";
+      ctx.fillStyle = rgbHex(ink);
+      ctx.fillRect(gx + 3, INF_BTN_Y + 4, 18, 24);
+      ctx.restore();
+    } else gear(gx + 3, INF_BTN_Y + 4, ink, infBtn === 1 ? 0x3A2E22 : 0xC9BFA6);
   }
 
   // description, full width
