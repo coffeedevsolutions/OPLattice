@@ -1087,6 +1087,21 @@ void shelfHandleInputApps(void)
  * A D G J M P S V Z as before, since the letters were never the crowded part. */
 #define LIB_ALPHA_LABELS 9
 #define LIB_ALPHA_N   (LIB_ALPHA_LABELS * 2 - 1)
+/* The footer is FILLED four pixels taller than it is, and the extra four fall
+   off the bottom of the screen where the scissor eats them.
+ *
+   Because rmDrawRect scales the position and the height separately and Y_SCALE
+   truncates both, the bottom edge lands at Y_SCALE(454) + Y_SCALE(26), which is
+   not Y_SCALE(480). At 448 lines that is 423 + 24 = 447 against a last row of
+   447 -- one row short. At 540, which is what 1080i FRAME mode scans, it is
+   510 + 29 = 539 against 539: short again. Both leave a one-pixel window with
+   the grid still visible through it, and 480p and 720p happen to divide evenly
+   so the bug hides on exactly the modes it is easiest to test on.
+ *
+   Overshooting is the fix rather than arithmetic, because the correct bottom
+   edge is "the bottom of the screen" and no amount of rounding at 454 can be
+   made to say that on every mode. */
+#define LIB_FTR_H_DRAWN (480 - LIB_FTR_Y + 4)
 #define LIB_FTR_TEXT  (LIB_FTR_Y + (LIB_FTR_H - 9) / 2)
 
 static image_cache_t *libCache;
@@ -1098,6 +1113,8 @@ static image_cache_t *libLogoCache;
 static int *libLogoId, *libLogoUid;
 static int libHeroLast = -1;
 static int *libCacheId, *libCacheUid;
+static image_cache_t *infCoverCache;
+static int *infCoverId, *infCoverUid;
 static item_list_t *libList;          /* what the arrays were sized against */
 static int libCount, libSel;
 /* Display order. libSel and the grid's own indices are POSITIONS in this array;
@@ -1241,8 +1258,11 @@ static int libSync(void)
         free(libBgId);
         free(libBgUid);
         free(libOrder);
+        free(infCoverId);
+        free(infCoverUid);
         libCacheId = libCacheUid = libHeroId = libHeroUid = NULL;
         libLogoId = libLogoUid = libBgId = libBgUid = libOrder = NULL;
+        infCoverId = infCoverUid = NULL;
         if (count > 0) {
             libCacheId = malloc(count * sizeof(int));
             libCacheUid = malloc(count * sizeof(int));
@@ -1253,8 +1273,11 @@ static int libSync(void)
             libBgId = malloc(count * sizeof(int));
             libBgUid = malloc(count * sizeof(int));
             libOrder = malloc(count * sizeof(int));
+            infCoverId = malloc(count * sizeof(int));
+            infCoverUid = malloc(count * sizeof(int));
             if (libCacheId && libCacheUid && libHeroId && libHeroUid &&
-                libLogoId && libLogoUid && libBgId && libBgUid && libOrder) {
+                libLogoId && libLogoUid && libBgId && libBgUid && libOrder &&
+                infCoverId && infCoverUid) {
                 memset(libCacheId, -1, count * sizeof(int));
                 memset(libCacheUid, -1, count * sizeof(int));
                 memset(libHeroId, -1, count * sizeof(int));
@@ -1263,6 +1286,8 @@ static int libSync(void)
                 memset(libBgId, -1, count * sizeof(int));
                 memset(libBgUid, -1, count * sizeof(int));
                 memset(libHeroUid, -1, count * sizeof(int));
+                memset(infCoverId, -1, count * sizeof(int));
+                memset(infCoverUid, -1, count * sizeof(int));
                 libSortOrder(list, count);
             } else {
                 free(libCacheId); free(libCacheUid);
@@ -1270,6 +1295,8 @@ static int libSync(void)
                 free(libLogoId); free(libLogoUid);
                 free(libBgId); free(libBgUid);
                 free(libOrder);
+                free(infCoverId); free(infCoverUid);
+                infCoverId = infCoverUid = NULL;
                 libLogoId = libLogoUid = libBgId = libBgUid = libOrder = NULL;
                 libCacheId = libCacheUid = libHeroId = libHeroUid = NULL;
                 count = 0;
@@ -1301,11 +1328,22 @@ static int libSync(void)
     }
 
     /* Allocated on first use, so with SHELF UI off nothing is ever built. */
-    if (!libCache && count > 0)
+    if (!libCache && count > 0) {
         /* Suffix, not filename fragment: mmceGetImage builds "%s%s/%s_%s" and
            texDiscoverLoad appends ".png", so passing "_COV" asked for
            SERIAL__COV.png and nothing ever loaded. */
         libCache = cacheInitCache(0, "ART", 1, "COV", LIB_PER + LIB_COLS);
+        /* COVXL exists for the same reason HERO does. libCover hands back COV,
+           which is 100x150 texels sized for a 55-wide grid cell, and the details
+           page was drawing it into a rect three times that -- 108 virtual wide
+           is 324 physical at 1080i, so a 100-texel cover was being stretched
+           3.24x while the grid beside it upscales only 1.65x. That is the whole
+           of "the details art is not full quality": right picture, wrong file.
+           216x432 brings it to 1.50x, sharper than the grid, from the same
+           600x900 masters. Two entries, because the page shows one game and the
+           second absorbs moving between them. */
+        infCoverCache = cacheInitCache(6, "ART", 1, "COVXL", 2);
+    }
 
     return count;
 }
@@ -1367,6 +1405,28 @@ static GSTEXTURE *libLogo(int idx)
     if (!startup)
         return NULL;
     return cacheGetTexture(libLogoCache, libList, &libLogoId[idx], &libLogoUid[idx], startup);
+}
+
+/* The big cover, for the one page that draws one. Falls back to the grid's COV
+   when a device has no COVXL yet -- a soft cover beats an empty rect, and it is
+   what this page drew before the pattern existed. */
+static GSTEXTURE *libCover(int idx);
+
+static GSTEXTURE *infCover(int idx)
+{
+    char *startup;
+    if (!infCoverCache || !infCoverId || !libList || !libList->itemGetStartup)
+        return libCover(idx);
+    startup = libList->itemGetStartup(libList, idx);
+    if (!startup)
+        return NULL;
+    {
+        GSTEXTURE *tex = cacheGetTexture(infCoverCache, libList, &infCoverId[idx],
+                                         &infCoverUid[idx], startup);
+        if (tex)
+            return tex;
+    }
+    return libCover(idx);
 }
 
 static GSTEXTURE *libCover(int idx)
@@ -1597,7 +1657,7 @@ void shelfRenderLibrary(void)
     libDrawAlphabet(x0, total);
 
     /* Drawn last, so the bottom row of tiles runs under it. */
-    rmDrawRect(SHELF_RAIL_W, LIB_FTR_Y, 640 - SHELF_RAIL_W, 480 - LIB_FTR_Y, LAND_BG);
+    rmDrawRect(SHELF_RAIL_W, LIB_FTR_Y, 640 - SHELF_RAIL_W, LIB_FTR_H_DRAWN, LAND_BG);
     rmDrawRect(SHELF_RAIL_W, LIB_FTR_Y, 640 - SHELF_RAIL_W, 1, LAND_RULE);
     {
         int hx = CONTENT_X, w, rx = 605;
@@ -1981,7 +2041,7 @@ void shelfRenderInfo(void)
            hero and the name starts where the cover ends, so the two read as one
            block rather than as a picture with a caption somewhere else. */
         {
-            GSTEXTURE *cov = libCover(infIdx);
+            GSTEXTURE *cov = infCover(infIdx);
             if (cov)
                 rmDrawPixmap(cov, CONTENT_X, INF_COV_Y, ALIGN_NONE, INF_COV_W,
                              INF_COV_H, SCALING_RATIO, gDefaultCol);
@@ -2117,7 +2177,7 @@ void shelfRenderInfo(void)
     }
 
     /* ---- footer: Back only, now that Play is a control -------------------- */
-    rmDrawRect(SHELF_RAIL_W, LIB_FTR_Y, 640 - SHELF_RAIL_W, 480 - LIB_FTR_Y, LAND_BG);
+    rmDrawRect(SHELF_RAIL_W, LIB_FTR_Y, 640 - SHELF_RAIL_W, LIB_FTR_H_DRAWN, LAND_BG);
     rmDrawRect(SHELF_RAIL_W, LIB_FTR_Y, 640 - SHELF_RAIL_W, 1, LAND_RULE);
     shelfHint(CONTENT_X, LIB_FTR_TEXT, HINT_BACK, "Back");
 
@@ -2555,7 +2615,7 @@ void shelfRenderHome(void)
     rmSetScrollY(0);
 
     /* Chrome does not scroll. */
-    rmDrawRect(SHELF_RAIL_W, LIB_FTR_Y, 640 - SHELF_RAIL_W, 480 - LIB_FTR_Y,
+    rmDrawRect(SHELF_RAIL_W, LIB_FTR_Y, 640 - SHELF_RAIL_W, LIB_FTR_H_DRAWN,
                GS_SETREG_RGBA(0x3A, 0x2E, 0x22, 0x1A));
     rmDrawRect(SHELF_RAIL_W, LIB_FTR_Y, 640 - SHELF_RAIL_W, 1, LAND_RULE);
     {

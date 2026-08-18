@@ -103,6 +103,12 @@ RECIPES = {
     "HERO":  (612, 244, "quant"),   # the SHELF Library hero, 640 - SHELF_RAIL_W wide
     "COV":   (None, None, "quant"),  # classic grid; sized by stage-device.sh
     "COVHD": (90,  180, "quant"),   # declared 120, RATIO -> 90
+    # The details page's cover, and the reason it is not COVHD: that rect is 108
+    # virtual wide, which is 324 PHYSICAL at 1080i, so 90 texels was a 3.6x
+    # stretch while the grid beside it upscales 1.65x. 216 brings it to 1.50x.
+    # A separate pattern rather than a bigger COVHD because Home caches seven
+    # COVHD at a 42-wide rect, where 216 would be a megabyte of VRAM for nothing.
+    "COVXL": (216, 432, "quant"),
     "SCR":   (101, 101, "quant"),   # declared 135, RATIO -> 101
     "SCR2":  (101, 101, "quant"),
     "LGO":   (150, 120, "keep"),    # 236 alpha levels; see the docstring
