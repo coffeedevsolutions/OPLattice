@@ -2848,12 +2848,20 @@ function renderShelfLibrary() {
 /* shelf.c's details page. Same sheet as the rest of the shell: the theme's info
    chain used to draw this, which meant a tan shell handing you a dark slab the
    moment you asked about a game. Constants mirror INF_* in shelf.c. */
-const INFP = { HERO_H: 244, COV_W: 120, COV_H: 180, COV_Y: 94, HEAD_Y: 254,
-               ROW_H: 24, COL_ROWS: 4, BTN_H: 26, BTN_Y: 288, BTN_GAP: 6 };
+const INFP = { HERO_H: 244, COV_W: 120, COV_H: 180, HEAD_Y: 254, PAD: 12,
+               ROW_H: 24, COL_ROWS: 4, BTN_H: 32, BTN_GAP: 6, GEAR_W: 24 };
 const INF_COL_X = CONTENT_X + INFP.COV_W + 18;
 const INF_COL_W = Math.floor((SCREEN_W - INF_COL_X - 24) / 3);
 const INF_CELL_Y = INFP.HEAD_Y + 20;
-const INF_DESC_Y = INF_CELL_Y + INFP.COL_ROWS * INFP.ROW_H + 12;
+const INF_GRID_BOT = INF_CELL_Y + INFP.COL_ROWS * INFP.ROW_H;
+const INF_BTN_Y = INF_GRID_BOT - INFP.BTN_H;
+const INF_COV_Y = INF_BTN_Y - INFP.PAD - INFP.COV_H;
+const INF_DESC_Y = INF_GRID_BOT + INFP.PAD;
+const GEAR_ROW = [[9,0,0],[6,6,0],[5,8,0],[4,10,0],[3,12,0],[3,12,0],[2,14,1],
+  [2,14,2],[2,14,2],[2,14,3],[2,14,2],[2,14,2],[2,14,1],[3,12,0],[3,12,0],
+  [4,10,0],[5,8,0],[6,6,0],[9,0,0]];
+const GEAR_TOOTH = [[15,10,4,3],[13,18,3,3],[8,21,3,4],[2,18,3,3],
+  [0,11,4,3],[2,3,3,3],[7,0,3,4],[13,3,3,3]];
 let infBtn = 0;                        // 0 Play, 1 Game Settings
 
 function renderShelfInfo() {
@@ -2879,13 +2887,14 @@ function renderShelfInfo() {
   const lgo = realArt("LGO");
   if (lgo) ctx.drawImage(lgo, SCREEN_W - 24 - 75, INFP.HERO_H - 76, 75, 60);
 
-  // cover, hanging off the bottom of the hero; the name starts where it ends
+  // the band's rule goes down BEFORE the cover, so the cover occludes the span
+  // it overlaps instead of being ruled straight through
+  R(RAIL_W, INFP.HERO_H, SCREEN_W - RAIL_W, 1, 0x726756);
   const cov = realArt("COVHD");
-  if (cov) ctx.drawImage(cov, CONTENT_X, INFP.COV_Y, 90, INFP.COV_H);
-  else R(CONTENT_X, INFP.COV_Y, 90, INFP.COV_H, 0xAA9F89);
+  if (cov) ctx.drawImage(cov, CONTENT_X, INF_COV_Y, 90, INFP.COV_H);
+  else R(CONTENT_X, INF_COV_Y, 90, INFP.COV_H, 0xAA9F89);
   shelfText(INF_COL_X, INFP.HERO_H - 58, g.title || "—", 0xE8E2D2, SHELF_FNT);
   shelfText(INF_COL_X, INFP.HERO_H - 28, g.serial || "", 0xE8E2D2, SHELF_FNT_LBL);
-  R(RAIL_W, INFP.HERO_H, SCREEN_W - RAIL_W, 1, 0x726756);
 
   const cell = (x, y, label, value) => {
     shelfText(x, y, label, 0x8A806C, SHELF_FNT_LBL);
@@ -2922,23 +2931,33 @@ function renderShelfInfo() {
     }
   }
 
-  // the two things you can do, stacked under the cover so the bottom strip is
-  // free for the description at full width
-  const button = (y, label, on) => {
-    if (on) R(CONTENT_X, y, INFP.COV_W, INFP.BTN_H, 0x3A2E22);
-    else {
-      R(CONTENT_X, y, INFP.COV_W, 1, 0x726756);
-      R(CONTENT_X, y + INFP.BTN_H - 1, INFP.COV_W, 1, 0x726756);
-      R(CONTENT_X, y, 1, INFP.BTN_H, 0x726756);
-      R(CONTENT_X + INFP.COV_W - 1, y, 1, INFP.BTN_H, 0x726756);
-    }
-    useFont(SHELF_FNT_SM);
-    const w = textWidth(label, SHELF_FNT_SM);
-    shelfText(CONTENT_X + INFP.COV_W / 2 - w / 2, y + 8, label,
-              on ? 0xC9BFA6 : 0x3A2E22, SHELF_FNT_SM);
+  // one row, as wide as the cover above it and level with the grid's bottom.
+  // Settings is a square -- 24 by 32, which displays square -- and Play takes
+  // what is left, because a word wants width and a cog does not.
+  const button = (x, w, on) => {
+    if (on) { R(x, INF_BTN_Y, w, INFP.BTN_H, 0x3A2E22); return 0xC9BFA6; }
+    R(x, INF_BTN_Y, w, 1, 0x726756);
+    R(x, INF_BTN_Y + INFP.BTN_H - 1, w, 1, 0x726756);
+    R(x, INF_BTN_Y, 1, INFP.BTN_H, 0x726756);
+    R(x + w - 1, INF_BTN_Y, 1, INFP.BTN_H, 0x726756);
+    return 0x3A2E22;
   };
-  button(INFP.BTN_Y, "Play", infBtn === 0);
-  button(INFP.BTN_Y + INFP.BTN_H + INFP.BTN_GAP, "Game Settings", infBtn === 1);
+  const gear = (x, y, col, bg) => {
+    for (const [tx,ty,tw,th] of GEAR_TOOTH) R(x+tx, y+ty, tw, th, col);
+    GEAR_ROW.forEach((r,i)=>{ if (r[1]) R(x+r[0], y+3+i, r[1], 2, col); });
+    GEAR_ROW.forEach((r,i)=>{ if (r[2]) R(x+9-r[2], y+3+i, r[2]*2, 2, bg); });
+  };
+  {
+    const roww = 90;                       // the cover's drawn width
+    const gx = CONTENT_X + roww - INFP.GEAR_W;
+    const pw = gx - INFP.BTN_GAP - CONTENT_X;
+    let ink = button(CONTENT_X, pw, infBtn === 0);
+    useFont(SHELF_FNT_SM);
+    const w = textWidth("Play", SHELF_FNT_SM);
+    shelfText(CONTENT_X + pw / 2 - w / 2, INF_BTN_Y + 11, "Play", ink, SHELF_FNT_SM);
+    ink = button(gx, INFP.GEAR_W, infBtn === 1);
+    gear(gx + 3, INF_BTN_Y + 4, ink, infBtn === 1 ? 0x3A2E22 : 0xC9BFA6);
+  }
 
   // description, full width
   const desc = gameAttr(g, "description");

@@ -1713,18 +1713,24 @@ static void homeFormatTime(char *out, size_t n, int minutes);
 #define INF_HERO_H   244                 /* == LIB_HERO_H; see the note below */
 #define INF_COV_W    120                  /* declared; displays 2:3 at 180 tall */
 #define INF_COV_H    180
-#define INF_COV_Y    94                   /* 150 of it over the hero, 30 below */
+#define INF_PAD      12                   /* the one gap this page repeats */
 #define INF_COL_X    (CONTENT_X + INF_COV_W + 18)   /* 180 */
 #define INF_COL_W    ((640 - INF_COL_X - 24) / 3)   /* 145 */
 #define INF_HEAD_Y   254
 #define INF_ROW_H    24                   /* label over value, stacked */
 #define INF_COL_ROWS 4
 #define INF_CELL_Y   (INF_HEAD_Y + 20)
-#define INF_BTN_W    INF_COV_W            /* the width of the cover above them */
-#define INF_BTN_H    26
-#define INF_BTN_Y    288
+/* The action row sits ON the bottom edge of the attribute grid, so the two
+   columns of the page finish level, and the cover sits one INF_PAD above the
+   row -- the same gap the grid leaves above the description. Everything below
+   the hero is therefore derived from one number instead of measured by eye. */
+#define INF_GRID_BOT (INF_CELL_Y + INF_COL_ROWS * INF_ROW_H)
+#define INF_BTN_H    32
+#define INF_BTN_Y    (INF_GRID_BOT - INF_BTN_H)
 #define INF_BTN_GAP  6
-#define INF_DESC_Y   (INF_CELL_Y + INF_COL_ROWS * INF_ROW_H + 12)
+#define INF_GEAR_W   24                   /* 24 across renders as wide as 32 down */
+#define INF_COV_Y    (INF_BTN_Y - INF_PAD - INF_COV_H)
+#define INF_DESC_Y   (INF_GRID_BOT + INF_PAD)
 #define INF_CELLS    8                    /* attribute cells the two columns hold */
 
 static int infIdx = -1;                   /* item-list index being shown */
@@ -1801,26 +1807,64 @@ static void infDrawCell(int x, int y, const char *label, const char *value)
                     value, LAND_TEXT);
 }
 
+/* A cog, authored 18 wide by 24 tall and inset in the square button.
+ *
+ * Scanlines are drawn 2 tall on a pitch of 1 for the same reason the gradient
+ * gave up on stacked bands: rmDrawRect scales height as well as position and
+ * Y_SCALE truncates, so a 1px row can round to 1 physical pixel while the pitch
+ * advances 1.125 and every other row leaves a gap. Two covers the pitch, and
+ * the overlap costs nothing because these fills are opaque -- unlike the scrim,
+ * where overlapping was the whole problem.
+ *
+ * Teeth are blocks, never diagonals. A one-pixel diagonal cannot be corrected
+ * for anamorphic, which is what made the hand-drawn PlayStation logo distort
+ * along its own curves; a block placed at 45 degrees is still an axis-aligned
+ * rectangle and comes out clean. */
+static void infDrawGear(int x, int y, u64 col, u64 bg)
+{
+    static const unsigned char gearRow[19][3] = {
+        { 9, 0,0}, { 6, 6,0}, { 5, 8,0}, { 4,10,0}, { 3,12,0},
+        { 3,12,0}, { 2,14,1}, { 2,14,2}, { 2,14,2}, { 2,14,3},
+        { 2,14,2}, { 2,14,2}, { 2,14,1}, { 3,12,0}, { 3,12,0},
+        { 4,10,0}, { 5, 8,0}, { 6, 6,0}, { 9, 0,0},
+    };
+    static const unsigned char gearTooth[8][4] = {
+        {15,10,4,3}, {13,18,3,3}, { 8,21,3,4}, { 2,18,3,3},
+        { 0,11,4,3}, { 2, 3,3,3}, { 7, 0,3,4}, {13, 3,3,3},
+    };
+    int i;
+
+    for (i = 0; i < 8; i++)
+        rmDrawRect(x + gearTooth[i][0], y + gearTooth[i][1],
+                   gearTooth[i][2], gearTooth[i][3], col);
+    for (i = 0; i < 19; i++)
+        if (gearRow[i][1])
+            rmDrawRect(x + gearRow[i][0], y + 3 + i, gearRow[i][1], 2, col);
+    for (i = 0; i < 19; i++)
+        if (gearRow[i][2])
+            rmDrawRect(x + 9 - gearRow[i][2], y + 3 + i, gearRow[i][2] * 2, 2, bg);
+}
+
 /* A button. Filled when it has the selection, outlined when it does not -- the
    same ink either way, so the page does not gain a second colour just to say
    where the cursor is. The label is centred with ALIGN_HCENTER rather than by
    hand: fntCalcDimensions is physical and the layout is virtual, and centring
    a string by subtracting half its measured width is exactly how that bites. */
-static void infDrawButton(int y, const char *label, int on)
+/* The frame only. The contents differ -- one holds a word, one holds a cog --
+   so the caller fills it. Returns the ink the contents should use, which is the
+   inverse of the fill and therefore the button's own business, not the
+   caller's. */
+static u64 infDrawButton(int x, int w, int on)
 {
-    const int x = CONTENT_X;
-
-    if (on)
-        rmDrawRect(x, y, INF_BTN_W, INF_BTN_H, LAND_INK);
-    else {
-        rmDrawRect(x, y, INF_BTN_W, 1, LAND_RULE);
-        rmDrawRect(x, y + INF_BTN_H - 1, INF_BTN_W, 1, LAND_RULE);
-        rmDrawRect(x, y, 1, INF_BTN_H, LAND_RULE);
-        rmDrawRect(x + INF_BTN_W - 1, y, 1, INF_BTN_H, LAND_RULE);
+    if (on) {
+        rmDrawRect(x, INF_BTN_Y, w, INF_BTN_H, LAND_INK);
+        return GS_SETREG_RGBA(0xC9, 0xBF, 0xA6, 0x80);
     }
-    fntRenderString(appsFontSmall, x + INF_BTN_W / 2, y + 8,
-                    ALIGN_HCENTER, 0, 0, label,
-                    on ? GS_SETREG_RGBA(0xC9, 0xBF, 0xA6, 0x80) : LAND_TEXT);
+    rmDrawRect(x, INF_BTN_Y, w, 1, LAND_RULE);
+    rmDrawRect(x, INF_BTN_Y + INF_BTN_H - 1, w, 1, LAND_RULE);
+    rmDrawRect(x, INF_BTN_Y, 1, INF_BTN_H, LAND_RULE);
+    rmDrawRect(x + w - 1, INF_BTN_Y, 1, INF_BTN_H, LAND_RULE);
+    return LAND_TEXT;
 }
 
 void shelfRenderInfo(void)
@@ -1874,9 +1918,14 @@ void shelfRenderInfo(void)
                 rmDrawPixmap(logo, 640 - 24 - 100, INF_HERO_H - 76, ALIGN_NONE,
                              100, 60, SCALING_RATIO, gDefaultCol);
         }
-        /* Cover first, then the name beside it: the cover hangs off the bottom
-           of the hero and the name starts where the cover ends, so the two read
-           as one block rather than as a picture with a caption somewhere else. */
+        /* The band's bottom rule is drawn HERE, before the cover, so the cover
+           occludes the span it overlaps. Drawn after, it ruled a line straight
+           across the artwork -- which is what a border does when the thing it is
+           supposed to sit behind is painted first. */
+        rmDrawRect(SHELF_RAIL_W, INF_HERO_H, 640 - SHELF_RAIL_W, 1, LAND_RULE);
+        /* Cover, then the name beside it: the cover hangs off the bottom of the
+           hero and the name starts where the cover ends, so the two read as one
+           block rather than as a picture with a caption somewhere else. */
         {
             GSTEXTURE *cov = libCover(infIdx);
             if (cov)
@@ -1898,7 +1947,6 @@ void shelfRenderInfo(void)
                                 ALIGN_NONE, 0, 0, st, dim);
         }
     }
-    rmDrawRect(SHELF_RAIL_W, INF_HERO_H, 640 - SHELF_RAIL_W, 1, LAND_RULE);
 
     /* ---- columns one and two: the game ------------------------------------ */
     infCellN = 0;
@@ -1991,12 +2039,21 @@ void shelfRenderInfo(void)
     }
 
     /* ---- the two things you can do here ------------------------------------ */
-    /* Stacked under the cover rather than in a row along the bottom. Two
-       reasons: they sit directly beneath the thing they act on, and vacating
-       the bottom strip is what gives the description the full width of the page
-       for three lines instead of two. */
-    infDrawButton(INF_BTN_Y, "Play", infBtn == 0);
-    infDrawButton(INF_BTN_Y + INF_BTN_H + INF_BTN_GAP, "Game Settings", infBtn == 1);
+    /* One row, as wide as the cover above it. Settings is a square -- 24 by 32,
+       which displays square -- and Play takes what is left, because a word wants
+       width and a cog does not. */
+    {
+        int roww = rmWideScale(INF_COV_W);
+        int gx = CONTENT_X + roww - INF_GEAR_W;
+        u64 ink = infDrawButton(CONTENT_X, gx - INF_BTN_GAP - CONTENT_X, infBtn == 0);
+
+        fntRenderString(appsFontSmall,
+                        CONTENT_X + (gx - INF_BTN_GAP - CONTENT_X) / 2,
+                        INF_BTN_Y + 11, ALIGN_HCENTER, 0, 0, "Play", ink);
+        ink = infDrawButton(gx, INF_GEAR_W, infBtn == 1);
+        infDrawGear(gx + 3, INF_BTN_Y + 4, ink,
+                    infBtn == 1 ? LAND_INK : LAND_BG);
+    }
 
     /* ---- footer: Back only, now that Play is a control -------------------- */
     rmDrawRect(SHELF_RAIL_W, LIB_FTR_Y, 640 - SHELF_RAIL_W, 480 - LIB_FTR_Y, LAND_BG);
