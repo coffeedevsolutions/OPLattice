@@ -32,6 +32,7 @@ enum MENU_IDs {
     MENU_START_NBD,
     MENU_MMCE_SETTINGS,
     MENU_ABOUT,
+    MENU_CHEAT_SETTINGS,
     MENU_SAVE_CHANGES,
     MENU_EXIT,
     MENU_POWER_OFF
@@ -262,6 +263,10 @@ static void menuInitMainMenu(void)
     submenuAppendItem(&mainMenu, -1, NULL, MENU_AUDIO_SETTINGS, _STR_AUDIO_SETTINGS);
     submenuAppendItem(&mainMenu, -1, NULL, MENU_CONTROLLER_SETTINGS, _STR_CONTROLLER_SETTINGS);
     submenuAppendItem(&mainMenu, -1, NULL, MENU_OSD_LANGUAGE_SETTINGS, _STR_OSD_SETTINGS);
+    /* The global tier of the cheat settings, which has existed in
+       conf_game.cfg all along with no entrance of its own. Beside OSD
+       Language, which is the other setting that lives in both menus. */
+    submenuAppendItem(&mainMenu, -1, NULL, MENU_CHEAT_SETTINGS, _STR_CHEAT_SETTINGS);
     submenuAppendItem(&mainMenu, -1, NULL, MENU_PARENTAL_LOCK, _STR_PARENLOCKCONFIG);
     submenuAppendItem(&mainMenu, -1, NULL, MENU_NET_CONFIG, _STR_NETCONFIG);
     submenuAppendItem(&mainMenu, -1, NULL, MENU_NET_UPDATE, _STR_NET_UPDATE);
@@ -1092,6 +1097,9 @@ void menuHandleInputMenu()
         } else if (id == MENU_OSD_LANGUAGE_SETTINGS) {
             if (menuCheckParentalLock() == 0)
                 guiGameShowOSDLanguageConfig(1);
+        } else if (id == MENU_CHEAT_SETTINGS) {
+            if (menuCheckParentalLock() == 0)
+                guiGameShowCheatConfig(1);
         } else if (id == MENU_PARENTAL_LOCK) {
             if (menuCheckParentalLock() == 0)
                 guiShowParentalLockConfig();
@@ -1112,6 +1120,7 @@ void menuHandleInputMenu()
         } else if (id == MENU_SAVE_CHANGES) {
             if (menuCheckParentalLock() == 0) {
                 guiGameSaveOSDLanguageGlobalConfig(configGetByType(CONFIG_GAME));
+                guiGameSaveCheatsGlobalConfig(configGetByType(CONFIG_GAME));
 #ifdef PADEMU
                 guiGameSavePadEmuGlobalConfig(configGetByType(CONFIG_GAME));
                 guiGameSavePadMacroGlobalConfig(configGetByType(CONFIG_GAME));
@@ -1408,7 +1417,7 @@ void menuHandleInputGameMenu()
         if (menuID == GAME_COMPAT_SETTINGS) {
             guiGameShowCompatConfig(selected_item->item->current->item.id, selected_item->item->userdata, itemConfig);
         } else if (menuID == GAME_CHEAT_SETTINGS) {
-            guiGameShowCheatConfig();
+            guiGameShowCheatConfig(0);
         } else if (menuID == GAME_GSM_SETTINGS) {
             guiGameShowGSConfig();
         } else if (menuID == GAME_VMC_SETTINGS) {

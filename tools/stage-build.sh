@@ -38,7 +38,7 @@ cd "$ROOT"
 
 PATCH=patches/09-shelf-sidebar.patch
 ELF=$B/OPNPS2LD.ELF
-PATCH_SENTINELS=(rmSetPanX shelfPushX menuGetActiveList ELEM_TYPE_ATTRIBUTE_LIST rmDrawGradV oplRecentPrune)
+PATCH_SENTINELS=(rmSetPanX shelfPushX menuGetActiveList ELEM_TYPE_ATTRIBUTE_LIST rmDrawGradV oplRecentPrune MENU_CHEAT_SETTINGS forceGlobalCheat)
 SHELF_SENTINELS=(libDrawAlphabet LIB_ALPHA_LABELS RAIL_ICON_W shelfSyncFonts shelfHint shelfRenderInfo infDrawButton homeDateOk)
 
 [ -d "$B" ]      || { echo "no such build tree: $B" >&2; exit 1; }

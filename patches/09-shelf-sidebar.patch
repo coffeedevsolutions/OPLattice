@@ -106,6 +106,20 @@ index 79f256f..9544e9f 100644
  
  /** Clean-up the GUI */
  void guiEnd();
+diff --git a/include/guigame.h b/include/guigame.h
+index dd08859..90b0a1c 100644
+--- a/include/guigame.h
++++ b/include/guigame.h
+@@ -12,7 +12,8 @@ int guiGameVmcNameHandler(char *text, int maxLen);
+ void guiGameShowVMCMenu(int id, item_list_t *support);
+ void guiGameShowCompatConfig(int id, item_list_t *support, config_set_t *configSet);
+ void guiGameShowGSConfig(void);
+-void guiGameShowCheatConfig(void);
++void guiGameShowCheatConfig(int forceGlobal);
++void guiGameSaveCheatsGlobalConfig(config_set_t *configGame);
+ 
+ #ifdef PADEMU
+ void guiGameShowPadEmuConfig(int forceGlobal);
 diff --git a/include/menusys.h b/include/menusys.h
 index e2ef117..e284fb0 100644
 --- a/include/menusys.h
@@ -425,8 +439,123 @@ index e82bd2c..199180b 100644
  }
  
  void guiIntroLoop(void)
+diff --git a/src/guigame.c b/src/guigame.c
+index 8fa079a..9c0f9cf 100644
+--- a/src/guigame.c
++++ b/src/guigame.c
+@@ -38,6 +38,15 @@ static int EnableCheat;
+ static int CheatMode;
+ 
+ static int forceGlobalOSDLanguage;
++/* Cheats have a global tier and always did -- cheatman.c reads $EnableCheat and
++   $CheatMode from conf_game.cfg for any game whose own config does not claim
++   them. What it never had was a door of its own: the only way in was to
++   highlight some arbitrary game, press triangle, and set a dropdown in a menu
++   labelled per-game that then wrote a different file. This is the flag that
++   lets the same dialog serve the main menu, exactly as forceGlobalOSDLanguage
++   already does for OSD Language -- one dialog, two entrances, no second copy of
++   the settings to disagree with the first. */
++static int forceGlobalCheat;
+ 
+ #ifdef PADEMU
+ static int EnablePadEmu;
+@@ -419,6 +428,15 @@ static void guiGameSetCheatSettingsState(void)
+ {
+     int previousSource = gCheatSource;
+ 
++    if (forceGlobalCheat) {
++        /* No game to scope to, so the source row is inert and the only live
++           controls are the two values themselves. */
++        diaGetInt(diaCheatConfig, CHTCFG_ENABLECHEAT, &EnableCheat);
++        diaGetInt(diaCheatConfig, CHTCFG_CHEATMODE, &CheatMode);
++        diaSetEnabled(diaCheatConfig, CHTCFG_CHEATMODE, EnableCheat);
++        return;
++    }
++
+     diaGetInt(diaCheatConfig, CHTCFG_CHEATSOURCE, &gCheatSource);
+ 
+     // update GUI to display per-game or global settings if changed
+@@ -446,17 +464,53 @@ static int guiGameCheatUpdater(int modified)
+     return 0;
+ }
+ 
+-void guiGameShowCheatConfig(void)
++/** The cheat dialog, from either entrance.
++ *
++ *  forceGlobal is what the main menu passes. It pins Settings Source to Global
++ *  and greys it out -- greyed rather than hidden, so the row still says which
++ *  tier you are editing instead of leaving you to infer it -- and reads the
++ *  values from conf_game.cfg alone.
++ *
++ *  Nothing about the two tiers changed. A game that has claimed $CheatsSource
++ *  for itself still wins, and still has to be edited from its own menu; this
++ *  only means the tier that governs everything else is reachable without
++ *  picking a game first. */
++void guiGameShowCheatConfig(int forceGlobal)
+ {
+     // configure the enumerations
+     const char *settingsSource[] = {_l(_STR_GLOBAL_SETTINGS), _l(_STR_PERGAME_SETTINGS), NULL};
+     const char *cheatmodeNames[] = {_l(_STR_CHEATMODEAUTO), _l(_STR_CHEATMODESELECT), NULL};
+ 
++    forceGlobalCheat = forceGlobal;
++
+     diaSetEnum(diaCheatConfig, CHTCFG_CHEATSOURCE, settingsSource);
+     diaSetEnum(diaCheatConfig, CHTCFG_CHEATMODE, cheatmodeNames);
++    diaSetEnabled(diaCheatConfig, CHTCFG_CHEATSOURCE, !forceGlobal);
++
++    if (forceGlobal)
++        guiGameLoadCheatsConfig(NULL, configGetByType(CONFIG_GAME));
++
+     diaSetEnabled(diaCheatConfig, CHTCFG_CHEATMODE, EnableCheat);
+ 
+     diaExecuteDialog(diaCheatConfig, -1, 1, &guiGameCheatUpdater);
++    forceGlobalCheat = 0;
++}
++
++/** Persist the global tier. Called from the main menu's Save Changes, beside
++ *  guiGameSaveOSDLanguageGlobalConfig, which is where every other global
++ *  game-behaviour setting is written -- the shared saveConfig call there
++ *  already covers CONFIG_GAME. */
++void guiGameSaveCheatsGlobalConfig(config_set_t *configGame)
++{
++    /* Scope-guarded, exactly as guiGameSaveOSDLanguageGlobalConfig is. EnableCheat
++       and CheatMode are file statics shared by both entrances, so without this a
++       visit to a game that keeps its own cheat settings would leave per-game
++       values in them and Save Changes would copy that game's preferences into
++       everybody's. gCheatSource records which tier last filled them. */
++    if (gCheatSource == SETTINGS_GLOBAL) {
++        configSetInt(configGame, CONFIG_ITEM_ENABLECHEAT, EnableCheat);
++        configSetInt(configGame, CONFIG_ITEM_CHEATMODE, CheatMode);
++    }
+ }
+ 
+ // PADEMU
+@@ -1225,12 +1279,17 @@ static void guiGameLoadCheatsConfig(config_set_t *configSet, config_set_t *confi
+     configGetInt(configGame, CONFIG_ITEM_CHEATMODE, &CheatMode);
+ 
+     // override global with per-game settings if available and selected.
+-    configGetInt(configSet, CONFIG_ITEM_CHEATSSOURCE, &gCheatSource);
+-    if (gCheatSource == SETTINGS_PERGAME) {
+-        if (!configGetInt(configSet, CONFIG_ITEM_ENABLECHEAT, &EnableCheat))
+-            EnableCheat = 0;
+-        if (!configGetInt(configSet, CONFIG_ITEM_CHEATMODE, &CheatMode))
+-            CheatMode = 0;
++    /* Guarded, because opened from the main menu there is no game and configSet
++       is NULL -- getConfigItemForName would walk a null list. Same guard the
++       OSD Language dialog uses for the same reason. */
++    if (!forceGlobalCheat) {
++        configGetInt(configSet, CONFIG_ITEM_CHEATSSOURCE, &gCheatSource);
++        if (gCheatSource == SETTINGS_PERGAME) {
++            if (!configGetInt(configSet, CONFIG_ITEM_ENABLECHEAT, &EnableCheat))
++                EnableCheat = 0;
++            if (!configGetInt(configSet, CONFIG_ITEM_CHEATMODE, &CheatMode))
++                CheatMode = 0;
++        }
+     }
+ 
+     // set gui settings.
 diff --git a/src/menusys.c b/src/menusys.c
-index 9cc2a8a..2b5dd8c 100644
+index 9cc2a8a..3282816 100644
 --- a/src/menusys.c
 +++ b/src/menusys.c
 @@ -6,6 +6,7 @@
@@ -437,7 +566,15 @@ index 9cc2a8a..2b5dd8c 100644
  #include "include/iosupport.h"
  #include "include/renderman.h"
  #include "include/fntsys.h"
-@@ -57,6 +58,49 @@ enum GAME_MENU_IDs {
+@@ -31,6 +32,7 @@ enum MENU_IDs {
+     MENU_START_NBD,
+     MENU_MMCE_SETTINGS,
+     MENU_ABOUT,
++    MENU_CHEAT_SETTINGS,
+     MENU_SAVE_CHANGES,
+     MENU_EXIT,
+     MENU_POWER_OFF
+@@ -57,6 +59,49 @@ enum GAME_MENU_IDs {
  static menu_list_t *menu;
  static menu_list_t *selected_item;
  
@@ -487,7 +624,18 @@ index 9cc2a8a..2b5dd8c 100644
  static int actionStatus;
  static int itemConfigId;
  static config_set_t *itemConfig;
-@@ -683,6 +727,18 @@ static void menuNextH()
+@@ -218,6 +263,10 @@ static void menuInitMainMenu(void)
+     submenuAppendItem(&mainMenu, -1, NULL, MENU_AUDIO_SETTINGS, _STR_AUDIO_SETTINGS);
+     submenuAppendItem(&mainMenu, -1, NULL, MENU_CONTROLLER_SETTINGS, _STR_CONTROLLER_SETTINGS);
+     submenuAppendItem(&mainMenu, -1, NULL, MENU_OSD_LANGUAGE_SETTINGS, _STR_OSD_SETTINGS);
++    /* The global tier of the cheat settings, which has existed in
++       conf_game.cfg all along with no entrance of its own. Beside OSD
++       Language, which is the other setting that lives in both menus. */
++    submenuAppendItem(&mainMenu, -1, NULL, MENU_CHEAT_SETTINGS, _STR_CHEAT_SETTINGS);
+     submenuAppendItem(&mainMenu, -1, NULL, MENU_PARENTAL_LOCK, _STR_PARENLOCKCONFIG);
+     submenuAppendItem(&mainMenu, -1, NULL, MENU_NET_CONFIG, _STR_NETCONFIG);
+     submenuAppendItem(&mainMenu, -1, NULL, MENU_NET_UPDATE, _STR_NET_UPDATE);
+@@ -683,6 +732,18 @@ static void menuNextH()
      }
  }
  
@@ -506,7 +654,25 @@ index 9cc2a8a..2b5dd8c 100644
  static void menuPrevH()
  {
      struct menu_list *prev = selected_item->prev;
-@@ -1133,6 +1189,31 @@ void menuHandleInputMain()
+@@ -1036,6 +1097,9 @@ void menuHandleInputMenu()
+         } else if (id == MENU_OSD_LANGUAGE_SETTINGS) {
+             if (menuCheckParentalLock() == 0)
+                 guiGameShowOSDLanguageConfig(1);
++        } else if (id == MENU_CHEAT_SETTINGS) {
++            if (menuCheckParentalLock() == 0)
++                guiGameShowCheatConfig(1);
+         } else if (id == MENU_PARENTAL_LOCK) {
+             if (menuCheckParentalLock() == 0)
+                 guiShowParentalLockConfig();
+@@ -1056,6 +1120,7 @@ void menuHandleInputMenu()
+         } else if (id == MENU_SAVE_CHANGES) {
+             if (menuCheckParentalLock() == 0) {
+                 guiGameSaveOSDLanguageGlobalConfig(configGetByType(CONFIG_GAME));
++                guiGameSaveCheatsGlobalConfig(configGetByType(CONFIG_GAME));
+ #ifdef PADEMU
+                 guiGameSavePadEmuGlobalConfig(configGetByType(CONFIG_GAME));
+                 guiGameSavePadMacroGlobalConfig(configGetByType(CONFIG_GAME));
+@@ -1133,6 +1198,31 @@ void menuHandleInputMain()
       */
      int grid = menuRowStep() > 1;
  
@@ -538,7 +704,7 @@ index 9cc2a8a..2b5dd8c 100644
      if (getKey(KEY_LEFT)) {
          if (grid)
              menuPrevItem();
-@@ -1212,7 +1293,7 @@ void menuHandleInputInfo()
+@@ -1212,7 +1302,7 @@ void menuHandleInputInfo()
  {
      if (getKeyOn(KEY_CROSS)) {
          if (gSelectButton == KEY_CIRCLE)
@@ -547,7 +713,7 @@ index 9cc2a8a..2b5dd8c 100644
          else
              selected_item->item->execCross(selected_item->item);
      } else if (getKey(KEY_UP)) {
-@@ -1221,7 +1302,7 @@ void menuHandleInputInfo()
+@@ -1221,7 +1311,7 @@ void menuHandleInputInfo()
          menuNextV();
      } else if (getKeyOn(KEY_CIRCLE)) {
          if (gSelectButton == KEY_CROSS)
@@ -556,7 +722,16 @@ index 9cc2a8a..2b5dd8c 100644
          else
              selected_item->item->execCircle(selected_item->item);
      } else if (getKey(KEY_L1)) {
-@@ -1363,7 +1444,10 @@ void menuHandleInputGameMenu()
+@@ -1327,7 +1417,7 @@ void menuHandleInputGameMenu()
+         if (menuID == GAME_COMPAT_SETTINGS) {
+             guiGameShowCompatConfig(selected_item->item->current->item.id, selected_item->item->userdata, itemConfig);
+         } else if (menuID == GAME_CHEAT_SETTINGS) {
+-            guiGameShowCheatConfig();
++            guiGameShowCheatConfig(0);
+         } else if (menuID == GAME_GSM_SETTINGS) {
+             guiGameShowGSConfig();
+         } else if (menuID == GAME_VMC_SETTINGS) {
+@@ -1363,7 +1453,10 @@ void menuHandleInputGameMenu()
      }
  
      if (getKeyOn(KEY_START) || getKeyOn(gSelectButton == KEY_CIRCLE ? KEY_CROSS : KEY_CIRCLE)) {

@@ -7,7 +7,7 @@ Neither the memory card nor the HDD is mounted, so these are queued rather than 
   prunes entries that resolve to nothing (`oplRecentPrune`, opl.c), which clears the
   microSD-era ghosts on the next boot; wiping the file is the belt to that braces, and
   is what actually empties Home if the HDD titles happen to share startup ids.
-- `OPNPS2LD.ELF` -- 1,385,828 bytes, from `patches/build/OPNPS2LD-MMCE.ELF`.
+- `OPNPS2LD.ELF` -- 1,385,636 bytes, from `patches/build/OPNPS2LD-MMCE.ELF`.
 
 ## HDD (`CFG/`)
 - The 28 per-game configs in `_card-backup/20260817-192736/CFG/` were never copied
