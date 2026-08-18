@@ -1,0 +1,834 @@
+ATVOffroadFury4_US.iso
+  Serial       SCUS_974.79  (North America)
+  Title        ATV Offroad Fury 4
+  Developer    Climax Studios
+  Publisher    Sony Computer Entertainment America
+  Released     31 October 2006 (NA)
+  Metacritic   77 / 100  (36 critics)
+  Genre        Off-road racing
+
+  The fourth and final entry in Sony's off-road series, and the first built by
+  Climax rather than Rainbow Studios. It broadens the formula beyond quad bikes
+  to dirt bikes, buggies and trophy trucks, each with distinct weight and
+  suspension behaviour, across motocross circuits, desert, woodland and snow.
+  The handling sits deliberately between arcade and simulation -- preloading the
+  suspension before a jump matters -- and a generous trick system feeds a boost
+  meter, so showing off is mechanically rewarded. Sixteen-player online was
+  supported at launch, alongside four-player split screen.
+
+
+BionicleHeroes_US.iso
+  Serial       SLUS_214.28  (North America)
+  Title        Bionicle Heroes
+  Developer    Traveller's Tales
+  Publisher    Eidos Interactive / TT Games
+  Released     15 November 2006 (NA)
+  Metacritic   52 / 100  (13 critics)
+  Genre        Third-person shooter / action
+
+  A licensed shooter based on LEGO's Bionicle toy line, built by Traveller's
+  Tales straight after LEGO Star Wars and reusing much of the same technology.
+  The player controls a Toa hero who swaps between six elemental forms mid-level,
+  each with its own weapon and traversal ability, through linear corridors dense
+  with destructible LEGO scenery. Critics found it visually polished but
+  repetitive and undemanding, with auto-aim that removes most of the challenge
+  from a game built around shooting -- it is the lowest-reviewed title here.
+
+
+Cars_US.iso
+  Serial       SLUS_211.51  (North America)
+  Title        Cars
+  Developer    Rainbow Studios
+  Publisher    THQ
+  Released     6 June 2006 (NA)
+  Metacritic   71 / 100
+  Genre        Open-world racing
+
+  The tie-in to Pixar's 2006 film, and a markedly better game than licensed
+  racers of the period usually managed, because Rainbow Studios had already
+  spent years on off-road racing with MX vs. ATV. Radiator Springs and the
+  surrounding desert form a connected open world driven freely between events
+  rather than picked from a menu, supported by drift-and-boost racing and
+  mini-games like tractor tipping. Most of the film's cast returned to voice
+  their roles, including Owen Wilson and Larry the Cable Guy.
+
+
+CoDWaWFinalFronts_US.iso
+  Serial       SLUS_217.46  (North America)
+  Title        Call of Duty: World at War -- Final Fronts
+  Developer    Rebellion Developments
+  Publisher    Activision
+  Released     10 November 2008 (NA)
+  Metacritic   54 / 100
+  Genre        First-person shooter
+
+  A PlayStation 2 exclusive built alongside, but entirely separate from,
+  Treyarch's World at War -- the PS2 could not run that game, so Rebellion made a
+  different one sharing only the setting and branding. Three campaigns cover the
+  Pacific, the British advance into Germany and a Rhine crossing, none of which
+  appear in the Treyarch version, and there is no Zombies mode, no online and no
+  co-op. It is roughly four hours long, and was reviewed against a game it was
+  never meant to be.
+
+
+DynastyWarriors3_JP.iso
+  Serial       SLPM_650.53  (Japan)
+  Title        Dynasty Warriors 3  /  Shin Sangokumusou 2 (JP)
+  Developer    Omega Force
+  Publisher    Koei
+  Released     2001 (JP)  |  26 November 2001 (NA)
+  Metacritic   78 / 100
+  Genre        Hack and slash / tactical action
+
+  The game that established the Musou template, and for many players the high
+  point of the early series. A single named officer is dropped into battlefields
+  of hundreds of soldiers and must break enemy morale by killing officers,
+  capturing bases and defending allied commanders. Crowd sizes, combo strings,
+  weapon growth, bodyguards and two-player co-op all arrive here, across
+  48 playable officers. Note the numbering: Japan calls this Shin Sangokumusou 2,
+  because the West counted the unrelated PS1 fighting game as the first.
+
+
+DynastyWarriors4_JP.iso
+  Serial       SLPM_652.48  (Japan)
+  Title        Dynasty Warriors 4  /  Shin Sangokumusou 3 (JP)
+  Developer    Omega Force
+  Publisher    Koei
+  Released     27 February 2003 (JP)
+  Metacritic   78 / 100
+  Genre        Hack and slash / tactical action
+
+  A substantial refinement rather than a reinvention. The campaign is
+  restructured into kingdom-length Musou modes for Wei, Wu, Shu and an "Other"
+  faction, so battles connect into a continuous war instead of standing alone.
+  Combat gains the charge-attack system that would define the series, plus duels
+  that pull two officers into an isolated arena, recruitable levelling bodyguards
+  and randomised weapon attributes. It sold over a million copies in Japan within
+  nine days.
+
+
+DynastyWarriors5_JP.iso
+  Serial       SLPM_658.90  (Japan)
+  Title        Dynasty Warriors 5  /  Shin Sangokumusou 4 (JP)
+  Developer    Omega Force
+  Publisher    Koei
+  Released     24 February 2005 (JP)  |  29 March 2005 (NA)
+  Metacritic   69 / 100  (29 critics)
+  Genre        Hack and slash / tactical action
+
+  The last mainline entry built for the PS2 alone, and the point where critical
+  patience with the formula visibly thinned. It rebuilds the visuals, gives each
+  of its 48 officers an individual story campaign rather than sharing
+  kingdom-wide ones, and adds a skill tree for specialising across playthroughs.
+  The problem reviewers identified was familiarity -- missions and combat close
+  enough to the fourth game that additions read as iteration. Enthusiasts regard
+  it more warmly than the press did.
+
+
+FinalFantasy10_JP.iso
+  Serial       SLPS_250.50  (Japan)
+  Title        Final Fantasy X
+  Developer    SquareSoft
+  Publisher    Square (JP) / Square EA (NA)
+  Released     19 July 2001 (JP)  |  17 December 2001 (NA)
+  Metacritic   92 / 100  (53 critics)
+  Genre        Role-playing
+
+  The series' PS2 debut and a decisive break from its own conventions: the first
+  Final Fantasy with voice acting, the first to abandon pre-rendered backgrounds,
+  and the first with no world map. Tidus, displaced a thousand years into a
+  future he does not recognise, joins the summoner Yuna on a pilgrimage across
+  Spira to destroy the cataclysm called Sin. Battles show turn order explicitly
+  and allow free party substitution mid-fight, while the Sphere Grid replaces
+  levelling with a shared board each character crosses by their own path.
+
+
+FinalFantasy12_JP.iso
+  Serial       SLPM_663.20  (Japan)
+  Title        Final Fantasy XII
+  Developer    Square Enix
+  Publisher    Square Enix
+  Released     16 March 2006 (JP)
+  Metacritic   92 / 100  (64 critics)
+  Genre        Role-playing
+
+  The most structurally radical mainline Final Fantasy, developed under Yasumi
+  Matsuno of Final Fantasy Tactics and set in his Ivalice, concerning a kingdom
+  crushed between two empires. Random encounters are gone entirely -- enemies
+  roam seamless zones and are fought in real time -- and the Gambit system lets
+  players program each character's behaviour as ordered condition-action rules,
+  effectively writing the party's AI. Famitsu gave it a perfect 40/40. Its
+  automation polarised players, but its world-building on ageing hardware is
+  exceptional.
+
+
+FlushedAway_US.iso
+  Serial       SLUS_214.84  (North America)
+  Title        Flushed Away
+  Developer    Monkey Bar Games
+  Publisher    D3Publisher
+  Released     24 October 2006 (NA)
+  Metacritic   43 / 100
+  Genre        Platformer
+
+  The tie-in to the Aardman/DreamWorks film, following Roddy, a pampered pet rat
+  flushed from a Kensington flat into a sewer city. It mixes light platforming
+  and collection with boat-chase vehicle sections, reproducing the film's design
+  and several set pieces faithfully enough. It is the lowest-reviewed game here,
+  and the criticisms were consistent: an unreliable camera, imprecise jumping in
+  a game built on jumping, and a presentation reviewers repeatedly called
+  rushed.
+
+
+GTAViceCity_JP.iso
+  Serial       SLPM_654.88  (Japan)
+  Title        Grand Theft Auto: Vice City
+  Developer    Rockstar North
+  Publisher    Rockstar Games
+  Released     29 October 2002 (NA)
+  Metacritic   95 / 100  (62 critics)
+  Genre        Open world / action
+
+  Rockstar's follow-up to GTA III, and the entry that fixed the series' identity
+  as much through style as mechanics. It moves from the grey present of Liberty
+  City to a neon 1986 Miami pastiche, with period radio stations and a fully
+  voiced protagonist -- Ray Liotta as Tommy Vercetti -- in place of III's silent
+  lead. Motorcycles, helicopters and aircraft arrive, and property ownership
+  gives the sandbox a progression structure beyond the story: businesses generate
+  income and unlock their own mission strands.
+
+
+GranTurismo3_US.iso
+  Serial       SCUS_971.02  (North America)
+  Title        Gran Turismo 3: A-Spec
+  Developer    Polyphony Digital
+  Publisher    Sony Computer Entertainment America
+  Released     9 July 2001 (NA)
+  Metacritic   95 / 100  (54 critics)
+  Genre        Racing simulation
+
+  The PlayStation 2's technical showpiece and, for a long stretch, the
+  best-selling game on the system. Polyphony rebuilt the physics and rendering
+  for the new hardware, running at a locked 60fps with car models an order of
+  magnitude beyond the PS1 games -- widely treated at the time as the first
+  photorealistic console racer. The structure is the series' familiar loop of
+  licences, prize money and tuning across roughly 150 cars, with a driving model
+  that rewards weight transfer and tyre load rather than aggression.
+
+
+Gundam1YearWar_JP.iso
+  Serial       SLPS_254.78  (Japan)
+  Title        Mobile Suit Gundam: The One Year War
+  Developer    Namco
+  Publisher    Bandai
+  Released     7 April 2005 (JP)
+  Metacritic   No entry -- Japan-only release
+  Genre        Action / mecha
+
+  A Japan-exclusive retelling of the original 1979 Mobile Suit Gundam series,
+  following Amuro Ray from the colony attack through the White Base's journey to
+  A Baoa Qu. Missions track the anime closely, leaning on recreating specific
+  remembered scenes rather than inventing new ones. Combat places the player in
+  the RX-78-2 against Zaku, Gouf and Dom units, with difficulty coming largely
+  from managing ammunition and thruster fuel. Among importers it is regarded as
+  reverent but mechanically straightforward.
+
+
+JakAndDaxter_JP.iso
+  Serial       SCPS_150.21  (Japan)
+  Title        Jak and Daxter: The Precursor Legacy
+  Developer    Naughty Dog
+  Publisher    Sony Computer Entertainment America
+  Released     4 December 2001 (NA)
+  Metacritic   90 / 100  (35 critics)
+  Genre        3D platformer
+
+  Naughty Dog's first project after Crash Bandicoot, and a technical landmark:
+  the entire world loads once and never stops, so a player can travel from the
+  first village to the final area without a single loading screen. The premise is
+  a standard platformer setup -- Daxter is transformed into an otsel and the pair
+  seek a cure -- but the execution is unusually confident, with a day/night
+  cycle, dense collectible layering and mixed on-foot, vehicle and combat play.
+  Every critic review recorded by Metacritic was positive.
+
+
+KingdomHearts2_JP.iso
+  Serial       SLPM_662.33  (Japan)
+  Title        Kingdom Hearts II
+  Developer    Square Enix
+  Publisher    Square Enix
+  Released     22 December 2005 (JP)  |  28 March 2006 (NA)
+  Metacritic   87 / 100
+  Genre        Action role-playing
+
+  The full sequel to the Disney/Square crossover, and a significant mechanical
+  advance. Combat is faster and far more legible, adding Reaction Commands for
+  cinematic context-sensitive attacks and Drive Forms that fuse Sora with a
+  companion, while the camera finally moves to the right stick. The story is
+  considerably more convoluted, opening with several hours as Roxas and threading
+  Organization XIII through worlds from Mulan, Tron, Pirates of the Caribbean and
+  Steamboat Willie. Frequently cited as the series' peak.
+
+
+KingdomHearts_FinalMix_JP.iso
+  Serial       SLPS_251.98  (Japan)
+  Title        Kingdom Hearts Final Mix
+  Developer    Square
+  Publisher    Square / Disney Interactive
+  Released     26 December 2002 (JP)
+  Metacritic   No entry -- Japan-only on PS2
+  Genre        Action role-playing
+
+  The expanded rerelease of the first Kingdom Hearts, issued only in Japan on
+  PS2 and not localised until the HD collections years later. It takes the
+  international version -- already containing content cut from the original
+  Japanese release -- and adds new Heartless, abilities, equipment, difficulty
+  settings, skippable cutscenes and two optional superbosses in the Ice Titan and
+  Sephiroth. For a Western player this is the most complete PS2-era version of
+  the original game, but it is entirely in Japanese.
+
+
+LegoStarWars2_US.iso
+  Serial       SLUS_214.09  (North America)
+  Title        LEGO Star Wars II: The Original Trilogy
+  Developer    Traveller's Tales
+  Publisher    LucasArts
+  Released     12 September 2006 (NA)
+  Metacritic   84 / 100  (32 critics)
+  Genre        Action platformer
+
+  The sequel that turned a surprise hit into a franchise, covering Episodes IV
+  through VI with the same wordless slapstick retelling. Nearly everything is
+  broader: over fifty playable characters, vehicle levels including the Death
+  Star trench run and the Battle of Hoth, a character creator, and a Mos Eisley
+  cantina hub replacing the first game's menu. Drop-in drop-out co-op remains the
+  centrepiece, and free-play -- replaying levels with any character to reach
+  blocked areas -- is where most of the content sits.
+
+
+LegoStarWars_US.iso
+  Serial       SLUS_210.83  (North America)
+  Title        LEGO Star Wars: The Video Game
+  Developer    Traveller's Tales
+  Publisher    Eidos Interactive
+  Released     2 April 2005 (NA)
+  Metacritic   78 / 100  (46 critics)
+  Genre        Action platformer
+
+  The game that created an entire genre of licensed LEGO adaptations, retelling
+  the prequel trilogy through mute, pantomiming minifigures. Levels combine
+  simple combat, character-swapping puzzles and constant destruction of scenery
+  into collectible studs. Its most durable idea was structural: the game is
+  generous to the point of being unloseable, with death costing only studs, which
+  made it genuinely playable by a small child and a parent at once in split
+  screen. It vastly outperformed expectations commercially.
+
+
+MGS2_JP.iso
+  Serial       SLPM_650.78  (Japan)
+  Title        Metal Gear Solid 2: Sons of Liberty
+  Developer    Konami Computer Entertainment Japan (KCEJ)
+  Publisher    Konami
+  Released     12 November 2001 (NA)
+  Metacritic   96 / 100  (42 critics)
+  Genre        Stealth action
+
+  The highest-rated game in this collection, and one of the most argued-about
+  releases of its generation. Kojima's sequel opens with a tanker chapter
+  starring Solid Snake and then, without warning, replaces him for the bulk of
+  the game with Raiden -- a substitution deliberately concealed from marketing
+  and received at the time as a betrayal. What it enables is a story about
+  information control and the manipulation of the player that reads far more
+  presciently now than in 2001. Mechanically a considerable advance: first-person
+  aiming, and guards that communicate and search intelligently.
+
+
+MGS3_JP.iso
+  Serial       SLPM_657.90  (Japan)
+  Title        Metal Gear Solid 3: Snake Eater
+  Developer    Konami Computer Entertainment Japan (KCEJ)
+  Publisher    Konami
+  Released     17 November 2004 (NA)
+  Metacritic   91 / 100  (68 critics)
+  Genre        Stealth action
+
+  A prequel set in 1964, moving the series from corridors into Soviet jungle and
+  rebuilding its systems around that change. Camouflage becomes a managed
+  resource, with uniforms and face paint swapped constantly against an on-screen
+  index, alongside hunting, food spoilage and field treatment of individual
+  injuries. The story concerns Naked Snake sent to kill his own mentor, and is
+  the series' most self-contained and emotionally direct; the sniper duel against
+  The End remains one of the medium's best-known set pieces.
+
+
+MidnightClub3_US.iso
+  Serial       SLUS_213.55  (North America)
+  Title        Midnight Club 3: DUB Edition Remix
+  Developer    Rockstar San Diego
+  Publisher    Rockstar Games
+  Released     13 March 2006 (NA)
+  Metacritic   74 / 100  (34 critics)   [base DUB Edition: 84 / 100, 41 critics]
+  Genre        Arcade street racing
+
+  The expanded rerelease of Midnight Club 3, an open-city street racer across San
+  Diego, Atlanta and Detroit, with Tokyo added for this Remix edition. Its
+  defining feature was customisation of a depth no racing game had attempted,
+  licensed through DUB magazine: body kits, rims, hydraulics, neon and paint on
+  real licensed vehicles. Racing is unapologetically arcade, with abilities like
+  Roar and Zone that shove traffic aside or slow time. At 8.54 GB this is the
+  largest disc in the collection.
+
+
+MinnaNoGolf3_JP.iso
+  Serial       SCPS_150.16  (Japan)
+  Title        Minna no Golf 3 (JP)  /  Hot Shots Golf 3 (NA)  /  Everybody's Golf 3 (EU)
+  Developer    Clap Hanz
+  Publisher    Sony Computer Entertainment
+  Released     2001 (JP)  |  12 March 2002 (NA)
+  Metacritic   85 / 100
+  Genre        Sports / golf
+
+  The PS2 debut of Sony's arcade golf series, and a good demonstration of how
+  much depth can hide under a deliberately cute exterior. Swings use the series'
+  three-press timing meter, trivial to learn and very difficult to master once
+  spin, wind, lie and elevation are in play. Progression works by challenge:
+  beating characters in versus matches unlocks them as golfers with genuinely
+  different power and control statistics, alongside courses, clubs and balls.
+
+
+NCAAFinalFour2004_US.iso
+  Serial       SCUS_972.78  (North America)
+  Title        NCAA Final Four 2004
+  Developer    989 Sports
+  Publisher    Sony Computer Entertainment America
+  Released     11 November 2003 (NA)
+  Metacritic   45 / 100  (16 critics)
+  Genre        Sports / college basketball
+
+  Sony's college basketball entry for the 2003-04 season, covering licensed NCAA
+  Division I teams, arenas and tournament structure through to the Final Four,
+  with season play, recruiting-based dynasty management and a March Madness
+  bracket. Critically it was the weakest of three competing college basketball
+  franchises that year, behind EA's March Madness and Sega's ESPN College Hoops.
+  Reviewers cited unresponsive controls, uneven flow and weak AI. This is the one
+  title here with no cover art available.
+
+
+NFLStreet2_US.iso
+  Serial       SLUS_211.18  (North America)
+  Title        NFL Street 2
+  Developer    EA Tiburon
+  Publisher    EA Sports BIG
+  Released     22 December 2004 (NA)
+  Metacritic   77 / 100  (33 critics)
+  Genre        Sports / arcade football
+
+  The second entry in EA's exaggerated seven-on-seven street football series,
+  part of the EA Sports BIG line alongside SSX. Rules are stripped down and
+  physics abandoned: players run up walls, vault off teammates and chain
+  showboating into a Gamebreaker meter that makes a play nearly unstoppable. The
+  sequel adds wall moves and a two-tier Gamebreaker that rewards holding the
+  meter. Own the City mode is the substantial one, building a custom athlete and
+  recruiting NFL professionals through neighbourhood challenges.
+
+
+NFSMostWanted_JP.iso
+  Serial       SLPM_662.32  (Japan)
+  Title        Need for Speed: Most Wanted
+  Developer    EA Black Box
+  Publisher    Electronic Arts
+  Released     15 November 2005 (NA)
+  Metacritic   82 / 100  (36 critics)
+  Genre        Racing
+
+  The high point of the series' mid-2000s run, and the game that brought police
+  pursuit to the front of the design after two Underground titles. Progression is
+  a Blacklist of fifteen rivals beaten by winning races and by accumulating
+  pursuit bounty, so evading police is a requirement rather than an interruption.
+  Chases escalate through heat levels bringing spike strips, roadblocks and
+  helicopters, and the city is dense with pursuit breakers -- collapsing signage,
+  scaffolding, water towers -- placed specifically to shake off pursuers.
+
+
+NarutoHero3_JP.iso
+  Serial       SLPS_255.89  (Japan)
+  Title        Naruto: Narutimate Hero 3 (JP)  /  Naruto: Ultimate Ninja 3 (NA)
+  Developer    CyberConnect2
+  Publisher    Bandai (JP) / Namco Bandai (NA)
+  Released     22 December 2005 (JP)  |  25 March 2008 (NA)
+  Metacritic   75 / 100  (24 critics)
+  Genre        Fighting
+
+  The third and most expansive of CyberConnect2's PS2 Naruto fighters, arriving
+  in Japan more than two years before its Western release. Fights use a simple
+  attack string and a chakra gauge, resolving special attacks into elaborate
+  cinematic sequences with quick-time button matches between players. Its scale
+  distinguishes it: a roster in the forties and a lengthy free-roaming story mode
+  covering the anime through the Sasuke Retrieval arc. Reviewers considered it
+  the strongest in the series to that point.
+
+
+OnePieceRush_JP.iso
+  Serial       SLPS_254.73  (Japan)
+  Title        One Piece: Grand Battle! Rush!
+  Developer    Ganbarion
+  Publisher    Bandai
+  Released     17 March 2005 (JP)
+  Metacritic   No entry for this version -- Japan-only SKU
+  Genre        Fighting / party brawler
+
+  The fourth and final Grand Battle! game, covering the manga through the end of
+  the Long Ring Long Land arc. It is an arena brawler rather than a traditional
+  fighter: two to four characters fight across interactive stages with items and
+  hazards, closer in spirit to Super Smash Bros. than Street Fighter. A heavily
+  altered Western version was released as One Piece: Grand Adventure with a
+  different roster, so Western scores do not describe this disc, which is largely
+  non-verbal and so reasonable to play in Japanese.
+
+
+Onimusha2_JP.iso
+  Serial       SLPM_651.00  (Japan)
+  Title        Onimusha 2: Samurai's Destiny
+  Developer    Capcom
+  Publisher    Capcom
+  Released     28 August 2002 (NA)
+  Metacritic   84 / 100  (31 critics)
+  Genre        Action adventure
+
+  A sequel that changes protagonist and structure while keeping the fixed-camera,
+  pre-rendered presentation. Jubei Yagyu replaces Samanosuke against the demon
+  armies of Nobunaga Oda, across a larger and more open sequence of areas. Its
+  distinctive addition is a gift-giving system: items given to five allied
+  characters change their affection, which alters who assists in battle, which
+  scenes appear and which of several endings is reached. The soul-absorption
+  system returns with more weapon variety.
+
+
+Onimusha_JP.iso
+  Serial       SLPM_650.10  (Japan)
+  Title        Onimusha: Warlords
+  Developer    Capcom
+  Publisher    Capcom
+  Released     25 January 2001 (JP)  |  14 March 2001 (NA)
+  Metacritic   86 / 100
+  Genre        Action adventure
+
+  Capcom's fusion of Resident Evil's structure with sword combat, and the first
+  PS2 game to sell a million copies. Samanosuke Akechi enters a demon-overrun
+  castle in a supernaturally reworked Sengoku Japan, navigating fixed cameras and
+  pre-rendered backdrops. What distinguishes it is the combat -- responsive melee
+  with a well-judged parry-and-counter, and the Oni Gauntlet for absorbing souls
+  to upgrade weapons and magic. Most players finish in six to eight hours.
+
+
+PacManWorld3_US.iso
+  Serial       SLUS_212.19  (North America)
+  Title        Pac-Man World 3
+  Developer    Blitz Games
+  Publisher    Namco
+  Released     15 November 2005 (NA)
+  Metacritic   63 / 100  (22 critics)
+  Genre        3D platformer
+
+  Released for Pac-Man's 25th anniversary and a notably darker turn, with a plot
+  about a scientist draining the Ghost world and an uneasy alliance between
+  Pac-Man and the ghosts who normally chase him. Blitz Games took over from
+  Namco's own studio and shifted emphasis from platforming toward combat, with a
+  lock-on system and repetitive encounters reviewers singled out as the weakest
+  element. The platforming is competent but undemanding, and the tonal change
+  divided players. Runs about ten hours.
+
+
+RapalaProFishing_US.iso
+  Serial       SLUS_210.12  (North America)
+  Title        Rapala Pro Fishing
+  Developer    FUN Labs
+  Publisher    Activision Value
+  Released     31 August 2004 (NA)
+  Metacritic   59 / 100  (6 critics)
+  Genre        Sports / fishing simulation
+
+  A licensed fishing simulation built around the Rapala lure brand, with thirteen
+  species across freshwater locations and a catalogue of over seven hundred
+  lures. Play divides between tournaments with weight targets and free fishing,
+  with tackle, retrieve speed and water conditions all affecting what strikes.
+  Reviewers credited the environmental visuals and volume of licensed equipment
+  while finding the casting and landing too simplified to sustain interest. Only
+  six critics reviewed it.
+
+
+RatchetClank1_JP.iso
+  Serial       SCPS_150.37  (Japan)
+  Title        Ratchet & Clank
+  Developer    Insomniac Games
+  Publisher    Sony Computer Entertainment America
+  Released     4 November 2002 (NA)
+  Metacritic   88 / 100  (43 critics)
+  Genre        3D platformer / shooter
+
+  Insomniac's first game after the Spyro trilogy, pairing a mechanic from a
+  backwater planet with a defective military robot across a dozen worlds. Its
+  distinguishing idea is the arsenal: rather than a single moveset, the player
+  accumulates escalating absurd weapons and gadgets -- a glove deploying attack
+  robots, a device turning enemies into chickens, a swingshot for traversal --
+  and levels are built to be revisited once new gadgets open blocked routes. The
+  main criticism, fixed in the sequel, was that weapons did not improve with
+  use.
+
+
+RatchetClank2_JP.iso
+  Serial       SCPS_150.56  (Japan)
+  Title        Ratchet & Clank: Going Commando  /  Locked and Loaded (EU)
+  Developer    Insomniac Games
+  Publisher    Sony Computer Entertainment America
+  Released     11 November 2003 (NA)
+  Metacritic   90 / 100  (46 critics)
+  Genre        3D platformer / shooter
+
+  A sequel built almost entirely around fixing the first game's weaknesses, and
+  one of the strongest year-on-year improvements of the generation. Weapons now
+  level up through use, turning the arsenal from a set of tools into a
+  progression system, while strafing and a proper lock-on shift the feel
+  decisively toward a third-person shooter. A nanotech health bar that expands as
+  enemies are defeated adds light RPG structure, around space combat, arena
+  challenges and vehicle segments.
+
+
+RatchetClank3_JP.iso
+  Serial       SCPS_150.84  (Japan)
+  Title        Ratchet & Clank: Up Your Arsenal
+  Developer    Insomniac Games
+  Publisher    Sony Computer Entertainment America
+  Released     3 November 2004 (NA)
+  Metacritic   91 / 100  (65 critics)
+  Genre        3D platformer / shooter
+
+  The highest-rated entry in the PS2 trilogy and the most content-dense. It
+  continues the shift toward shooting with a further refined arsenal, adds full
+  online competitive multiplayer -- unusual for a platformer of the period -- and
+  includes arena combat and a playable retro-styled mini-game. The story is the
+  funniest of the three, introducing Captain Qwark's self-aggrandising narration
+  and the villain Dr. Nefarious. Some players note the balance had tipped so far
+  toward combat that the platforming heritage was becoming vestigial.
+
+
+RatchetClank4_JP.iso
+  Serial       SCPS_150.99  (Japan)
+  Title        Ratchet: Deadlocked (NA)  /  Ratchet & Clank 4th: Gigax (JP)  /  Gladiator (EU)
+  Developer    Insomniac Games
+  Publisher    Sony Computer Entertainment America
+  Released     25 October 2005 (NA)
+  Metacritic   81 / 100  (51 critics)
+  Genre        Third-person shooter
+
+  A deliberate spin-off rather than a numbered sequel, and the point where the
+  series abandoned platforming almost entirely. Ratchet is captured and forced
+  into a televised gladiatorial combat show, reframing the game as arena
+  challenges hosted by two commentators whose running patter is among its better
+  jokes. Clank is largely absent, replaced by two commandable combat bots, and
+  weapon mod slots alter behaviour substantially. Split-screen and online co-op
+  run throughout the campaign.
+
+
+SSX3.iso
+  Serial       SLPM_654.49  (Japan)
+  Title        SSX 3
+  Developer    EA Canada
+  Publisher    EA Sports BIG
+  Released     20 October 2003 (NA)
+  Metacritic   93 / 100  (41 critics)
+  Genre        Sports / snowboarding
+
+  The peak of EA's arcade snowboarding series and the second-highest rated game
+  here. Its structural idea was to replace discrete courses with a single
+  continuous mountain across three peaks, ridable top to bottom in one
+  uninterrupted twenty-minute run, with events, shops and shortcuts distributed
+  across it rather than picked from menus. The trick system layers grabs, flips
+  and rail grinds into an Uber tier reached only by sustaining a combo. The
+  soundtrack and in-game radio DJ are frequently cited as defining elements.
+
+
+Scaler_US.iso
+  Serial       SLUS_209.57  (North America)
+  Title        Scaler
+  Developer    Artificial Mind and Movement
+  Publisher    Global Star Software
+  Released     20 October 2004 (NA)
+  Metacritic   69 / 100
+  Genre        3D platformer
+
+  An original, largely forgotten platformer about a twelve-year-old lizard
+  enthusiast transformed into a reptilian creature and pulled into a parallel
+  world. Its central mechanic is transformation: Scaler shifts between creature
+  forms with different movement and combat abilities -- climbing, gliding,
+  electrical attacks -- and levels are built around routing with the right form.
+  The presentation is unusually strong for a budget release, with voice work
+  including Andy Dick and Rider Strong. At 1.29 GB it is the smallest disc
+  here.
+
+
+ShadowOfTheColossus.iso
+  Serial       SCPS_150.97  (Japan)
+  Title        Shadow of the Colossus  /  Wanda to Kyozou (JP)
+  Developer    Team Ico / SCE Japan Studio
+  Publisher    Sony Computer Entertainment
+  Released     18 October 2005 (NA)
+  Metacritic   91 / 100
+  Genre        Action adventure
+
+  Fumito Ueda's follow-up to Ico, and one of the strongest arguments for games as
+  an expressive medium produced in this era. A young man carries a dead girl to a
+  forbidden land and is told she can be revived if he destroys sixteen colossi.
+  There are no other enemies, no towns and almost no music outside the
+  encounters -- the game alternates between long silent rides across an empty
+  landscape and sixteen fights that are each simultaneously a battle and a
+  climbing puzzle across a moving creature the size of a building. It withholds
+  moral comfort deliberately.
+
+
+SonicRiders_US.iso
+  Serial       SLUS_213.31  (North America)
+  Title        Sonic Riders
+  Developer    Sonic Team
+  Publisher    Sega
+  Released     21 February 2006 (NA)
+  Metacritic   55 / 100  (41 critics)
+  Genre        Racing
+
+  Sega's attempt to move Sonic into hoverboard racing, released for the series'
+  fifteenth anniversary. Tracks have branching routes gated by character type --
+  Speed grinds rails, Flight rides air currents, Power smashes obstacles -- so
+  the same course runs differently depending on who is racing. The distinguishing
+  mechanic is air as fuel: boosting, drifting and tricks all drain a gauge
+  refilled by drafting or passing through rings, which reviewers found more
+  punishing than interesting. Player reception has been considerably warmer than
+  the critical response.
+
+
+SoulCalibur2_JP.iso
+  Serial       SLPS_252.30  (Japan)
+  Title        SoulCalibur II
+  Developer    Namco
+  Publisher    Namco
+  Released     27 August 2003 (NA)
+  Metacritic   92 / 100  (41 critics)
+  Genre        Fighting
+
+  Widely regarded as the finest weapon-based fighting game ever made. Its
+  eight-way run allows free movement around a three-dimensional arena rather than
+  along a single plane, and the guard impact mechanic rewards precisely timed
+  deflection over blocking, giving high-level play a distinctive rhythm. Each
+  platform got an exclusive guest -- Heihachi on PS2, Link on GameCube, Spawn on
+  Xbox. Weapon Master mode provides an extensive single-player campaign with a
+  map, equipment and progression well beyond the arcade ladder.
+
+
+StarWarsBattlefront2_US.iso
+  Serial       SLUS_212.40  (North America)
+  Title        Star Wars: Battlefront II
+  Developer    Pandemic Studios
+  Publisher    LucasArts
+  Released     1 November 2005 (NA)
+  Metacritic   78 / 100  (23 critics)
+  Genre        First/third-person shooter
+
+  The sequel that expanded Battlefront in nearly every direction. Space combat is
+  the headline addition: full orbital battles where players fly starfighters,
+  land inside enemy capital ships and sabotage them from within, all in one
+  continuous match. Playable heroes -- Vader, Luke, Yoda -- can be earned
+  mid-battle, and a narrative campaign follows the 501st Legion through both
+  trilogies, including Order 66 from the clones' perspective. Its reputation
+  among players sits well above its Metascore, which rests on only 23 reviews.
+
+
+StarWarsBattlefront_US.iso
+  Serial       SLUS_208.98  (North America)
+  Title        Star Wars: Battlefront
+  Developer    Pandemic Studios
+  Publisher    LucasArts
+  Released     20 September 2004 (NA)
+  Metacritic   82 / 100  (36 critics)
+  Genre        First/third-person shooter
+
+  Battlefield's large-scale objective warfare transplanted into Star Wars, and
+  the first game to let players fight the films' set-piece battles as ordinary
+  infantry rather than a hero. Matches place dozens of combatants on maps from
+  Hoth, Endor, Geonosis and Tatooine, contesting command posts that act as spawn
+  points, with vehicles from speeder bikes to AT-ATs. Four classes per faction
+  cover infantry, heavy weapons, sniping and engineering, and Galactic Conquest
+  layers a light strategic campaign over the battles.
+
+
+Suikoden4_JP.iso
+  Serial       SLPM_656.00  (Japan)
+  Title        Suikoden IV
+  Developer    Konami Computer Entertainment Tokyo
+  Publisher    Konami
+  Released     19 August 2004 (JP)  |  11 January 2005 (NA)
+  Metacritic   63 / 100
+  Genre        Role-playing
+
+  A prequel set roughly 150 years before the first Suikoden, in an island nation
+  where the series' recruitment of 108 Stars of Destiny happens across an
+  archipelago traversed by ship. The traditional elements are intact -- a large
+  recruitable cast, a growing home base, army-scale battles and the rune system
+  -- but the party drops from six to four and much of the play is sailing. That
+  sailing is the source of most criticism: slow, frequent and interrupted by
+  random encounters. The writing is better regarded than the aggregate
+  suggests.
+
+
+SuzukiTTSuperbikes_US.iso
+  Serial       SLUS_209.12  (North America)
+  Title        Suzuki TT Superbikes: Real Road Racing
+  Developer    Jester Interactive
+  Publisher    Valcon Games
+  Released     2005
+  Metacritic   71 / 100  (7 critics)
+  Genre        Motorcycle racing simulation
+
+  A licensed simulation of the Isle of Man TT, the public-road motorcycle race
+  held on a 37.7-mile mountain circuit notoriously lethal and unlike anything in
+  circuit racing. The game's ambition is the course itself, reproduced at full
+  length and ridden against the clock in the race's staggered-start format rather
+  than wheel-to-wheel. Handling is on the simulation side, with real stone walls
+  and hedges punishing small errors immediately. Reviewers praised the fidelity
+  while criticising loading times and the inevitable lack of track variety.
+
+
+ThrillvilleOffTheRails_US.iso
+  Serial       SLUS_216.11  (North America)
+  Title        Thrillville: Off the Rails
+  Developer    Frontier Developments
+  Publisher    LucasArts
+  Released     9 October 2007 (NA)
+  Metacritic   70 / 100  (11 critics)
+  Genre        Theme park management
+
+  The sequel to Thrillville, developed by Frontier -- the studio behind
+  RollerCoaster Tycoon 3 and later Planet Coaster -- as an accessible console take
+  on park management. Players build and run five parks, designing coasters piece
+  by piece and then riding them, managing staff and finances, and talking
+  directly to guests. The "off the rails" addition is deliberately absurd
+  physics: coasters can launch carriages between disconnected track sections and
+  loop through impossible geometry. Around thirty mini-games sit inside the parks
+  as attractions.
+
+
+TonyHawkAW_US.iso
+  Serial       SLUS_212.08  (North America)
+  Title        Tony Hawk's American Wasteland
+  Developer    Neversoft
+  Publisher    Activision
+  Released     18 October 2005 (NA)
+  Metacritic   77 / 100  (44 critics)
+  Genre        Sports / skateboarding
+
+  The seventh Tony Hawk game and the series' attempt at a seamless open world:
+  Los Angeles as one continuous map with loading disguised behind tunnels and
+  alleys. The story follows a Midwestern arrival building a skate park in a
+  derelict ranch, with art direction leaning on punk nostalgia. Mechanically it
+  consolidates the accumulated moveset -- manuals, reverts, spine transfers, the
+  wall plant, BMX carried over from Underground 2 -- and adds Bert slides.
+  Reviewers split between calling it the most polished entry and feeling the
+  annual formula had exhausted itself.
