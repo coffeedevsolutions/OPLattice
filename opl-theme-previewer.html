@@ -2848,86 +2848,102 @@ function renderShelfLibrary() {
 /* shelf.c's details page. Same sheet as the rest of the shell: the theme's info
    chain used to draw this, which meant a tan shell handing you a dark slab the
    moment you asked about a game. Constants mirror INF_* in shelf.c. */
-const INFP = { HERO_H: 150, COV_W: 120, COV_H: 180, COV_Y: 162, ROW_H: 24,
-               COL_ROWS: 4, BTN_Y: 412, BTN_H: 26, BTN_W: 132, BTN_GAP: 12 };
+const INFP = { HERO_H: 244, COV_W: 120, COV_H: 180, COV_Y: 94, HEAD_Y: 254,
+               ROW_H: 24, COL_ROWS: 4, BTN_H: 26, BTN_Y: 288, BTN_GAP: 6 };
 const INF_COL_X = CONTENT_X + INFP.COV_W + 18;
 const INF_COL_W = Math.floor((SCREEN_W - INF_COL_X - 24) / 3);
+const INF_CELL_Y = INFP.HEAD_Y + 20;
+const INF_DESC_Y = INF_CELL_Y + INFP.COL_ROWS * INFP.ROW_H + 12;
 let infBtn = 0;                        // 0 Play, 1 Game Settings
 
 function renderShelfInfo() {
   const games = gameList();
   const g = games[Math.min(Math.max(S.gameIndex | 0, 0), Math.max(games.length - 1, 0))] || {};
   const realArt = (k) => (g.serial ? S.art.get(lower(g.serial + "_" + k)) : null);
-  const R = (x, y, w, h, c, a) => {
-    ctx.fillStyle = a === undefined ? rgbHex(c)
-      : `rgba(${(c >> 16) & 255},${(c >> 8) & 255},${c & 255},${a / 128})`;
-    ctx.fillRect(x, y, w, h);
-  };
+  const R = (x, y, w, h, c) => { ctx.fillStyle = rgbHex(c); ctx.fillRect(x, y, w, h); };
   ctx.save();
   R(0, 0, SCREEN_W, SCREEN_H, 0xC9BFA6);
 
-  // hero band, with the title on it
+  // hero, 244 like the Library's -- the art is the same art and was being asked
+  // to be two different shapes
   const hero = realArt("HERO") || realArt("BG");
   if (hero) ctx.drawImage(hero, RAIL_W, 0, SCREEN_W - RAIL_W, INFP.HERO_H);
   else R(RAIL_W, 0, SCREEN_W - RAIL_W, INFP.HERO_H, 0x3A2E22);
-  {   // one gouraud quad on hardware; a linear gradient is the honest mock
-    const gr = ctx.createLinearGradient(0, INFP.HERO_H - 96, 0, INFP.HERO_H);
+  {
+    const gr = ctx.createLinearGradient(0, INFP.HERO_H - 120, 0, INFP.HERO_H);
     gr.addColorStop(0, "rgba(30,24,18,0.031)");
-    gr.addColorStop(1, "rgba(30,24,18,0.859)");
+    gr.addColorStop(1, "rgba(30,24,18,0.922)");
     ctx.fillStyle = gr;
-    ctx.fillRect(RAIL_W, INFP.HERO_H - 96, SCREEN_W - RAIL_W, 96);
+    ctx.fillRect(RAIL_W, INFP.HERO_H - 120, SCREEN_W - RAIL_W, 120);
   }
   const lgo = realArt("LGO");
   if (lgo) ctx.drawImage(lgo, SCREEN_W - 24 - 75, INFP.HERO_H - 76, 75, 60);
-  shelfText(CONTENT_X, INFP.HERO_H - 48, g.title || "—", 0xE8E2D2, SHELF_FNT);
-  shelfText(CONTENT_X, INFP.HERO_H - 22, g.serial || "", 0xE8E2D2, SHELF_FNT_LBL);
-  R(RAIL_W, INFP.HERO_H, SCREEN_W - RAIL_W, 1, 0x726756);
 
-  // cover
+  // cover, hanging off the bottom of the hero; the name starts where it ends
   const cov = realArt("COVHD");
   if (cov) ctx.drawImage(cov, CONTENT_X, INFP.COV_Y, 90, INFP.COV_H);
   else R(CONTENT_X, INFP.COV_Y, 90, INFP.COV_H, 0xAA9F89);
+  shelfText(INF_COL_X, INFP.HERO_H - 58, g.title || "—", 0xE8E2D2, SHELF_FNT);
+  shelfText(INF_COL_X, INFP.HERO_H - 28, g.serial || "", 0xE8E2D2, SHELF_FNT_LBL);
+  R(RAIL_W, INFP.HERO_H, SCREEN_W - RAIL_W, 1, 0x726756);
 
-  // a cell: field name small and dim above, value beneath
   const cell = (x, y, label, value) => {
     shelfText(x, y, label, 0x8A806C, SHELF_FNT_LBL);
     shelfText(x, y + 11, value, 0x3A2E22, SHELF_FNT_SM);
   };
 
-  // columns one and two: the game. Cells are gathered, then dealt, so an
-  // absent field leaves no hole.
+  // columns one and two: the game. MEDIA and FORMAT are gone -- every disc is a
+  // DVD and an ISO, so they said the same thing on all 46 pages.
   const cells = [];
   const push = (l, v) => { if (v) cells.push([l, v]); };
   push("GENRE", gameAttr(g, "genre"));
   push("RELEASED", gameAttr(g, "release"));
   push("DEVELOPER", gameAttr(g, "developer"));
+  push("PUBLISHER", "Square Enix");
+  push("METACRITIC", "92 / 100");
   push("RATING", gameAttr(g, "rating"));
-  push("MEDIA", "DVD");
-  push("FORMAT", "ISO");
   push("SIZE", "3610 MiB");
   push("WIDESCREEN", "on device");
 
-  shelfText(INF_COL_X, INFP.COV_Y, "DETAILS", 0x8A806C, SHELF_FNT_HD);
-  R(INF_COL_X, INFP.COV_Y + 14, INF_COL_W * 2 - 10, 1, 0xAA9F89);
+  shelfText(INF_COL_X, INFP.HEAD_Y, "DETAILS", 0x8A806C, SHELF_FNT_HD);
+  R(INF_COL_X, INFP.HEAD_Y + 14, INF_COL_W * 2 - 10, 1, 0xAA9F89);
   cells.slice(0, 8).forEach(([l, v], k) =>
     cell(INF_COL_X + Math.floor(k / INFP.COL_ROWS) * INF_COL_W,
-         INFP.COV_Y + 24 + (k % INFP.COL_ROWS) * INFP.ROW_H, l, v));
+         INF_CELL_Y + (k % INFP.COL_ROWS) * INFP.ROW_H, l, v));
 
   // column three: the history
   {
     const cx = INF_COL_X + 2 * INF_COL_W;
-    shelfText(cx, INFP.COV_Y, "PLAY HISTORY", 0x8A806C, SHELF_FNT_HD);
-    R(cx, INFP.COV_Y + 14, INF_COL_W - 10, 1, 0xAA9F89);
-    let y = INFP.COV_Y + 24;
+    shelfText(cx, INFP.HEAD_Y, "PLAY HISTORY", 0x8A806C, SHELF_FNT_HD);
+    R(cx, INFP.HEAD_Y + 14, INF_COL_W - 10, 1, 0xAA9F89);
+    let y = INF_CELL_Y;
     for (const [l, v] of [["LAST PLAYED", "2d ago"], ["PLAYTIME", "3 h"], ["LAUNCHES", "7"]]) {
       cell(cx, y, l, v); y += INFP.ROW_H;
     }
   }
 
-  // description, wrapped the way fntFitString wraps
+  // the two things you can do, stacked under the cover so the bottom strip is
+  // free for the description at full width
+  const button = (y, label, on) => {
+    if (on) R(CONTENT_X, y, INFP.COV_W, INFP.BTN_H, 0x3A2E22);
+    else {
+      R(CONTENT_X, y, INFP.COV_W, 1, 0x726756);
+      R(CONTENT_X, y + INFP.BTN_H - 1, INFP.COV_W, 1, 0x726756);
+      R(CONTENT_X, y, 1, INFP.BTN_H, 0x726756);
+      R(CONTENT_X + INFP.COV_W - 1, y, 1, INFP.BTN_H, 0x726756);
+    }
+    useFont(SHELF_FNT_SM);
+    const w = textWidth(label, SHELF_FNT_SM);
+    shelfText(CONTENT_X + INFP.COV_W / 2 - w / 2, y + 8, label,
+              on ? 0xC9BFA6 : 0x3A2E22, SHELF_FNT_SM);
+  };
+  button(INFP.BTN_Y, "Play", infBtn === 0);
+  button(INFP.BTN_Y + INFP.BTN_H + INFP.BTN_GAP, "Game Settings", infBtn === 1);
+
+  // description, full width
   const desc = gameAttr(g, "description");
   if (desc) {
-    let dy = INFP.COV_Y + INFP.COV_H + 14;
+    let dy = INF_DESC_Y;
     useFont(SHELF_FNT_SM);
     const maxw = SCREEN_W - CONTENT_X - 24;
     let line = "";
@@ -2935,31 +2951,13 @@ function renderShelfInfo() {
       const t = line ? line + " " + w : w;
       if (textWidth(t, SHELF_FNT_SM) > maxw && line) {
         shelfText(CONTENT_X, dy, line, 0x6B604F, SHELF_FNT_SM);
-        dy += 14; line = w;
-        if (dy > INFP.BTN_Y - 20) { line = ""; break; }
+        dy += 19; line = w;
+        if (dy > LIBP.FTR_Y - 14) { line = ""; break; }
       } else line = t;
     }
     if (line) shelfText(CONTENT_X, dy, line, 0x6B604F, SHELF_FNT_SM);
   }
 
-  // the two things you can do here
-  const button = (x, label, on) => {
-    if (on) R(x, INFP.BTN_Y, INFP.BTN_W, INFP.BTN_H, 0x3A2E22);
-    else {
-      R(x, INFP.BTN_Y, INFP.BTN_W, 1, 0x726756);
-      R(x, INFP.BTN_Y + INFP.BTN_H - 1, INFP.BTN_W, 1, 0x726756);
-      R(x, INFP.BTN_Y, 1, INFP.BTN_H, 0x726756);
-      R(x + INFP.BTN_W - 1, INFP.BTN_Y, 1, INFP.BTN_H, 0x726756);
-    }
-    useFont(SHELF_FNT_SM);
-    const w = textWidth(label, SHELF_FNT_SM);
-    shelfText(x + INFP.BTN_W / 2 - w / 2, INFP.BTN_Y + 8, label,
-              on ? 0xC9BFA6 : 0x3A2E22, SHELF_FNT_SM);
-  };
-  button(CONTENT_X, "Play", infBtn === 0);
-  button(CONTENT_X + INFP.BTN_W + INFP.BTN_GAP, "Game Settings", infBtn === 1);
-
-  // footer: Back only, now that Play is a control
   R(RAIL_W, LIBP.FTR_Y, SCREEN_W - RAIL_W, SCREEN_H - LIBP.FTR_Y, 0xC9BFA6);
   R(RAIL_W, LIBP.FTR_Y, SCREEN_W - RAIL_W, 1, 0x726756);
   shelfHintPv(CONTENT_X, LIBP.FTR_TEXT, "cross", "Back");

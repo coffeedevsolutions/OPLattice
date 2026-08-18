@@ -1118,7 +1118,11 @@ static int *libOrder;
 static int libMetaIdx = -1;
 static char libMetaA[96];    /* Genre, Release, Developer          */
 static char libMetaB[96];    /* #Media, #Format, Rating, #Size     */
-static char libMetaDesc[192];
+/* 256, which is CONFIG_KEY_VALUE_LEN: there is no point being larger than the
+   config parser, which truncates at 255 before this ever sees the string. It
+   used to be 192, so a description was cut twice -- once here and once there --
+   and the tighter of the two cuts was the one nobody could see in the file. */
+static char libMetaDesc[256];
 static char libMetaName[128];
 
 /* Join present values with the theme's separator, skipping absent ones so they
@@ -1706,18 +1710,21 @@ static void homeFormatTime(char *out, size_t n, int minutes);
  *   - raw primitives are NOT square: 12 across renders as wide as 16 down
  *   - shelfGradV, never a hand-rolled band loop
  */
-#define INF_HERO_H   150
+#define INF_HERO_H   244                 /* == LIB_HERO_H; see the note below */
 #define INF_COV_W    120                  /* declared; displays 2:3 at 180 tall */
 #define INF_COV_H    180
-#define INF_COV_Y    162
+#define INF_COV_Y    94                   /* 150 of it over the hero, 30 below */
 #define INF_COL_X    (CONTENT_X + INF_COV_W + 18)   /* 180 */
 #define INF_COL_W    ((640 - INF_COL_X - 24) / 3)   /* 145 */
+#define INF_HEAD_Y   254
 #define INF_ROW_H    24                   /* label over value, stacked */
 #define INF_COL_ROWS 4
-#define INF_BTN_Y    412
+#define INF_CELL_Y   (INF_HEAD_Y + 20)
+#define INF_BTN_W    INF_COV_W            /* the width of the cover above them */
 #define INF_BTN_H    26
-#define INF_BTN_W    132
-#define INF_BTN_GAP  12
+#define INF_BTN_Y    288
+#define INF_BTN_GAP  6
+#define INF_DESC_Y   (INF_CELL_Y + INF_COL_ROWS * INF_ROW_H + 12)
 #define INF_CELLS    8                    /* attribute cells the two columns hold */
 
 static int infIdx = -1;                   /* item-list index being shown */
@@ -1799,17 +1806,19 @@ static void infDrawCell(int x, int y, const char *label, const char *value)
    where the cursor is. The label is centred with ALIGN_HCENTER rather than by
    hand: fntCalcDimensions is physical and the layout is virtual, and centring
    a string by subtracting half its measured width is exactly how that bites. */
-static void infDrawButton(int x, const char *label, int on)
+static void infDrawButton(int y, const char *label, int on)
 {
+    const int x = CONTENT_X;
+
     if (on)
-        rmDrawRect(x, INF_BTN_Y, INF_BTN_W, INF_BTN_H, LAND_INK);
+        rmDrawRect(x, y, INF_BTN_W, INF_BTN_H, LAND_INK);
     else {
-        rmDrawRect(x, INF_BTN_Y, INF_BTN_W, 1, LAND_RULE);
-        rmDrawRect(x, INF_BTN_Y + INF_BTN_H - 1, INF_BTN_W, 1, LAND_RULE);
-        rmDrawRect(x, INF_BTN_Y, 1, INF_BTN_H, LAND_RULE);
-        rmDrawRect(x + INF_BTN_W - 1, INF_BTN_Y, 1, INF_BTN_H, LAND_RULE);
+        rmDrawRect(x, y, INF_BTN_W, 1, LAND_RULE);
+        rmDrawRect(x, y + INF_BTN_H - 1, INF_BTN_W, 1, LAND_RULE);
+        rmDrawRect(x, y, 1, INF_BTN_H, LAND_RULE);
+        rmDrawRect(x + INF_BTN_W - 1, y, 1, INF_BTN_H, LAND_RULE);
     }
-    fntRenderString(appsFontSmall, x + INF_BTN_W / 2, INF_BTN_Y + 8,
+    fntRenderString(appsFontSmall, x + INF_BTN_W / 2, y + 8,
                     ALIGN_HCENTER, 0, 0, label,
                     on ? GS_SETREG_RGBA(0xC9, 0xBF, 0xA6, 0x80) : LAND_TEXT);
 }
@@ -1835,63 +1844,78 @@ void shelfRenderInfo(void)
 
     rmDrawRect(0, 0, 640, 480, LAND_BG);
 
-    /* ---- hero band, with the title on it ---------------------------------- */
+    /* ---- hero band ------------------------------------------------------
+     *
+     * 244, the same as the Library's, because the art is the same art and it was
+     * being asked to be two different shapes. There is no HERO art on the device
+     * at all -- libHero falls back to BG, which is authored 418x180 -- and the
+     * virtual 640x480 space is stretched to fill 16:9, so a 612x150 rect
+     * DISPLAYS at 5.44:1 against a 2.32:1 source. That is a 2.34x horizontal
+     * stretch, and it is why this page looked worse than the Library, which asks
+     * for 3.34:1 and stretches the same file by 1.44x. Matching the Library does
+     * not make the art correct; it makes this page no worse than the page next
+     * to it. Correct needs a HERO file authored at 3.34:1 -- 816x244.
+     */
     {
         GSTEXTURE *hero = libHero(infIdx);
         const u64 lit = GS_SETREG_RGBA(0xE8, 0xE2, 0xD2, 0x80);
-        const u64 dim = GS_SETREG_RGBA(0xE8, 0xE2, 0xD2, 0x58);
+        const u64 dim = GS_SETREG_RGBA(0xE8, 0xE2, 0xD2, 0x5E);
 
         if (hero)
             rmDrawPixmap(hero, SHELF_RAIL_W, 0, ALIGN_NONE, 640 - SHELF_RAIL_W,
                          INF_HERO_H, SCALING_NONE, gDefaultCol);
         else
             rmDrawRect(SHELF_RAIL_W, 0, 640 - SHELF_RAIL_W, INF_HERO_H, LAND_INK);
-        shelfGradV(SHELF_RAIL_W, INF_HERO_H - 96, 640 - SHELF_RAIL_W, 96,
-                   0x04, 0x6E, GS_SETREG_RGBA(0x1E, 0x18, 0x12, 0));
-        /* The logo goes right, because the title now occupies the left of the
-           scrim and two names for the same game stacked on each other is one
-           more than the page needs. */
+        shelfGradV(SHELF_RAIL_W, INF_HERO_H - 120, 640 - SHELF_RAIL_W, 120,
+                   0x04, 0x76, GS_SETREG_RGBA(0x1E, 0x18, 0x12, 0));
         {
             GSTEXTURE *logo = libLogo(infIdx);
             if (logo)
                 rmDrawPixmap(logo, 640 - 24 - 100, INF_HERO_H - 76, ALIGN_NONE,
                              100, 60, SCALING_RATIO, gDefaultCol);
         }
+        /* Cover first, then the name beside it: the cover hangs off the bottom
+           of the hero and the name starts where the cover ends, so the two read
+           as one block rather than as a picture with a caption somewhere else. */
+        {
+            GSTEXTURE *cov = libCover(infIdx);
+            if (cov)
+                rmDrawPixmap(cov, CONTENT_X, INF_COV_Y, ALIGN_NONE, INF_COV_W,
+                             INF_COV_H, SCALING_RATIO, gDefaultCol);
+            else
+                rmDrawRect(CONTENT_X, INF_COV_Y, rmWideScale(INF_COV_W),
+                           INF_COV_H, LAND_FAINT);
+        }
         v = libMetaName[0] ? libMetaName
                            : (list->itemGetName ? list->itemGetName(list, infIdx) : NULL);
         if (v)
-            fntRenderString(FNT_DEFAULT, CONTENT_X, INF_HERO_H - 48, ALIGN_NONE,
-                            420, 0, v, lit);
+            fntRenderString(FNT_DEFAULT, INF_COL_X, INF_HERO_H - 58, ALIGN_NONE,
+                            640 - 24 - 100 - INF_COL_X - 12, 0, v, lit);
         if (list->itemGetStartup) {
             char *st = list->itemGetStartup(list, infIdx);
             if (st)
-                fntRenderString(appsFontLabel, CONTENT_X, INF_HERO_H - 22,
+                fntRenderString(appsFontLabel, INF_COL_X, INF_HERO_H - 28,
                                 ALIGN_NONE, 0, 0, st, dim);
         }
     }
     rmDrawRect(SHELF_RAIL_W, INF_HERO_H, 640 - SHELF_RAIL_W, 1, LAND_RULE);
 
-    /* ---- cover ----------------------------------------------------------- */
-    {
-        GSTEXTURE *cov = libCover(infIdx);
-        if (cov)
-            rmDrawPixmap(cov, CONTENT_X, INF_COV_Y, ALIGN_NONE, INF_COV_W,
-                         INF_COV_H, SCALING_RATIO, gDefaultCol);
-        else
-            rmDrawRect(CONTENT_X, INF_COV_Y, rmWideScale(INF_COV_W), INF_COV_H,
-                       LAND_FAINT);
-    }
-
     /* ---- columns one and two: the game ------------------------------------ */
     infCellN = 0;
     if (cfg) {
+        /* MEDIA and FORMAT used to sit here and were dropped. Every disc on
+           this device is a DVD and an ISO, so those two cells said the same
+           thing on all forty-six pages while the grid holds eight -- they were
+           costing the two slots METACRITIC and PUBLISHER now use. OPL still
+           derives both keys; nothing stops them coming back if a CD or a ZSO
+           ever turns up. */
         static const struct { const char *label, *key; } rows[] = {
-            {"GENRE",     "Genre"},
-            {"RELEASED",  "Release"},
-            {"DEVELOPER", "Developer"},
-            {"RATING",    "Rating"},
-            {"MEDIA",     CONFIG_ITEM_MEDIA},
-            {"FORMAT",    CONFIG_ITEM_FORMAT},
+            {"GENRE",      "Genre"},
+            {"RELEASED",   "Release"},
+            {"DEVELOPER",  "Developer"},
+            {"PUBLISHER",  "Publisher"},
+            {"METACRITIC", "Metacritic"},
+            {"RATING",     "Rating"},
         };
         for (i = 0; i < (int)(sizeof(rows) / sizeof(rows[0])); i++) {
             v = NULL;
@@ -1910,12 +1934,12 @@ void shelfRenderInfo(void)
        find a widescreen patch for this game on this device. */
     infCell("WIDESCREEN", infWide ? "on device" : "none");
 
-    fntRenderString(appsFontHead, INF_COL_X, INF_COV_Y, ALIGN_NONE, 0, 0,
+    fntRenderString(appsFontHead, INF_COL_X, INF_HEAD_Y, ALIGN_NONE, 0, 0,
                     "DETAILS", LAND_DIM);
-    rmDrawRect(INF_COL_X, INF_COV_Y + 14, INF_COL_W * 2 - 10, 1, LAND_FAINT);
+    rmDrawRect(INF_COL_X, INF_HEAD_Y + 14, INF_COL_W * 2 - 10, 1, LAND_FAINT);
     for (i = 0; i < infCellN; i++)
         infDrawCell(INF_COL_X + (i / INF_COL_ROWS) * INF_COL_W,
-                    INF_COV_Y + 24 + (i % INF_COL_ROWS) * INF_ROW_H,
+                    INF_CELL_Y + (i % INF_COL_ROWS) * INF_ROW_H,
                     infCellLabel[i], infCellValue[i]);
 
     /* ---- column three: the history ---------------------------------------- */
@@ -1930,10 +1954,10 @@ void shelfRenderInfo(void)
             configGetInt(cfg, "PlayCount", &count);
             configGetInt(cfg, "Playtime", &mins);
         }
-        fntRenderString(appsFontHead, cx, INF_COV_Y, ALIGN_NONE, 0, 0,
+        fntRenderString(appsFontHead, cx, INF_HEAD_Y, ALIGN_NONE, 0, 0,
                         "PLAY HISTORY", LAND_DIM);
-        rmDrawRect(cx, INF_COV_Y + 14, INF_COL_W - 10, 1, LAND_FAINT);
-        y = INF_COV_Y + 24;
+        rmDrawRect(cx, INF_HEAD_Y + 14, INF_COL_W - 10, 1, LAND_FAINT);
+        y = INF_CELL_Y;
         if (count > 0 || mins > 0 || when[0]) {
             if (when[0]) {
                 infDrawCell(cx, y, "LAST PLAYED", when);
@@ -1961,15 +1985,18 @@ void shelfRenderInfo(void)
         char wrapped[sizeof(libMetaDesc)];
         snprintf(wrapped, sizeof(wrapped), "%s", libMetaDesc);
         fntFitString(appsFontSmall, wrapped, 640 - CONTENT_X - 24);
-        fntRenderString(appsFontSmall, CONTENT_X, INF_COV_Y + INF_COV_H + 14,
-                        ALIGN_NONE, 640 - CONTENT_X - 24,
-                        INF_BTN_Y - (INF_COV_Y + INF_COV_H + 14) - 8, wrapped,
-                        LAND_MUTE);
+        fntRenderString(appsFontSmall, CONTENT_X, INF_DESC_Y, ALIGN_NONE,
+                        640 - CONTENT_X - 24, LIB_FTR_Y - INF_DESC_Y - 8,
+                        wrapped, LAND_MUTE);
     }
 
     /* ---- the two things you can do here ------------------------------------ */
-    infDrawButton(CONTENT_X, "Play", infBtn == 0);
-    infDrawButton(CONTENT_X + INF_BTN_W + INF_BTN_GAP, "Game Settings", infBtn == 1);
+    /* Stacked under the cover rather than in a row along the bottom. Two
+       reasons: they sit directly beneath the thing they act on, and vacating
+       the bottom strip is what gives the description the full width of the page
+       for three lines instead of two. */
+    infDrawButton(INF_BTN_Y, "Play", infBtn == 0);
+    infDrawButton(INF_BTN_Y + INF_BTN_H + INF_BTN_GAP, "Game Settings", infBtn == 1);
 
     /* ---- footer: Back only, now that Play is a control -------------------- */
     rmDrawRect(SHELF_RAIL_W, LIB_FTR_Y, 640 - SHELF_RAIL_W, 480 - LIB_FTR_Y, LAND_BG);
@@ -1992,9 +2019,9 @@ void shelfHandleInputInfo(void)
     if (shelfTrigger(0))
         return;
 
-    if (getKeyOn(KEY_LEFT) && infBtn > 0)
+    if ((getKeyOn(KEY_UP) || getKeyOn(KEY_LEFT)) && infBtn > 0)
         infBtn--;
-    else if (getKeyOn(KEY_RIGHT) && infBtn < 1)
+    else if ((getKeyOn(KEY_DOWN) || getKeyOn(KEY_RIGHT)) && infBtn < 1)
         infBtn++;
     /* Details keeps its Back, because unlike the three top-level pages this one
        is somewhere you arrived at from a page that still exists behind it. On
