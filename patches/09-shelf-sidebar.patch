@@ -240,6 +240,38 @@ index 443a7bf..81db456 100644
          if (configGetStr(appConfig, APP_CONFIG_ARGV1, &argv1) != 0) {
              strncpy(app->app.argv1, argv1, APP_ARGV1_MAX + 1);
              app->app.argv1[APP_ARGV1_MAX] = '\0';
+diff --git a/src/cheatman.c b/src/cheatman.c
+index 5fb538b..7db0e70 100644
+--- a/src/cheatman.c
++++ b/src/cheatman.c
+@@ -24,6 +24,8 @@
+ 
+ #include <unistd.h>
+ #include "include/cheatman.h"
++#include <fcntl.h>
++#include <errno.h>
+ #include "include/ioman.h"
+ 
+ static int gEnableCheat; // Enables PS2RD Cheat Engine - 0 for Off, 1 for On
+@@ -367,6 +369,18 @@ int load_cheats(const char *cheatfile)
+     LOG("%s: Reading cheat file '%s'...\n", __FUNCTION__, cheatfile);
+     buf = read_text_file(cheatfile, 0);
+     if (buf == NULL) {
++        /* Tell "there is no cheat file" apart from "there is one and it would
++           not load". Both used to return -1, and every caller switches on
++           -ENOENT to choose between "No cheats found" and "Cheats loading
++           failed" -- so the -ENOENT arm was dead code and every game without a
++           cheat file reported a failure instead. On a library where 18 of 46
++           have no patch that is a scary message for the normal case. */
++        int fd = open(cheatfile, O_RDONLY);
++        if (fd < 0) {
++            LOG("%s: No cheats file '%s'\n", __FUNCTION__, cheatfile);
++            return -ENOENT;
++        }
++        close(fd);
+         LOG("%s: Could not read cheats file '%s'\n", __FUNCTION__, cheatfile);
+         return -1;
+     }
 diff --git a/src/dialogs.c b/src/dialogs.c
 index e7552f7..9a5e26c 100644
 --- a/src/dialogs.c
