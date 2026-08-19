@@ -1,70 +1,31 @@
 # Sync log
 
-Both volumes are current as of 2026-08-17. Nothing is queued.
+Both volumes current as of 2026-08-18. Nothing queued.
 
-## HDD (`/Volumes/PS2`) -- done
-- 27 metadata CFGs merged in from the card backup. Merged, not copied over: the
-  HDD's own copies carry keys OPL writes itself (Playtime, PlayCount, size) and
-  those were kept. `SLPS_200.01` (Ridge Racer V) skipped -- no ISO on the drive.
-- All 46 ISOs renamed to display titles. The title IS the filename and cannot be
-  anything else: sbPopulateConfig reads the CFG and then overwrites `#Name` from
-  the filename, and configWrite skips every key starting with `#`, so a config can
-  neither supply the name nor keep one written into it. Renaming is what OPL's own
-  Rename does (sbRename renames the file). Reverse map:
-  `_hdd-backup/20260817-203034/iso-renames.json`.
-  Re-parsed SYSTEM.CNF afterwards: all 46 still resolve to the same serials, so the
-  art / config / cheat bindings are intact.
-- `DVD/games.bin` deleted -- OPL's own scan cache of base_game_info_t records, which
-  still held the old names. First boot after this rescans and will be slower.
-- `APPS/OPNPS2LD.ELF` -- 1,385,636 bytes.
+## Deployed this pass
+- `APPS/OPNPS2LD.ELF` -- 1,389,492 bytes, md5 4dff337b62dc4dfa9b2a322a8259c7cf,
+  on the HDD and both card locations.
+- 46 CFGs merged: the sixteen-value Genre vocabulary and `Source=Disc`. Merged,
+  so OPL's own LastPlayed / PlayCount / Rating survived.
+- 46 `*_COVXL.png` at 216x432 (HDD only -- art is device-local).
+- Theme slimmed on both volumes: 19 classic-chain images DELETED rather than
+  merely not-copied, plus star-on / star-off. 319,118 bytes, 11 files, byte
+  identical to the repo on both.
 
-19 games have no metadata CFG (the US set was never authored). Their details pages
-show only what OPL derives itself: media, format, size, widescreen.
+## What to watch on this boot
+1. Home, left alone for several minutes. Every render path used to open six
+   files a frame and leak them; nothing in any render path opens a file now.
+2. The hero gradient. It is one gouraud quad. Any residual stepping is the
+   16-bit framebuffer at vmode 11 (1920x1080 > 704x576 forces GS_PSM_CT16S,
+   5 bits per channel), dithered -- not a seam. A hard seam would mean the quad
+   is wrong; soft gradation is the depth ceiling.
+3. Library: Square cycles ordering, L1/R1 the filter, L2/R2 jumps a section.
+   Moving between rows should no longer reload art that was just on screen.
+4. Details: triangle favourites, and the star should be filled after.
 
-## Memory card (`/Volumes/PSxMemCard`) -- done
-- `APPS/OPNPS2LD.ELF` and `APPS/OPL/OPNPS2LD.ELF` -- 1,385,636 bytes, md5
-  c70fab871114f569a44c78375caf0998, plus `APPS/OPL/title.cfg`.
-- Recents wiped. OPL's config does NOT live on the FAT side: the SD2PSX presents
-  virtual cards as `.mcd` images under `MemoryCards/PS2/`, and conf_opl.cfg /
-  conf_game.cfg / conf_last.cfg are inside `BOOT/BootCard-5.mcd` (channel 5). The
-  image is 8 MiB exactly -- 16384 pages of 512 with no spare area -- so there is no
-  ECC to recompute and a same-length byte edit is safe. `recentN_id` / `recentN_title`
-  and the stale `pending_*` pair were rewritten to `#ecentN_...` / `#ending_...`:
-  same byte length, so nothing in the filesystem shifts; not found by
-  oplRecentLoad, which breaks at recent0 and yields an empty list; and dropped
-  entirely the next time OPL rewrites the file, because configWrite skips keys
-  beginning with `#`. `last_played` was left alone -- Home reads the recent list,
-  not that key.
-  The stored titles were the pre-rename filenames (GranTurismo3_US, MGS3_JP...),
-  so the wipe was needed regardless: those entries still resolve by serial and
-  would have survived oplRecentPrune.
-
-Backups: `_hdd-backup/20260817-203034/`, `_card-backup/20260817-204337/`
-(the latter includes all seven BootCard images).
+## Console settings
+BDM Start Mode -> Auto; BDM HDD -> On; Enable PS2RD Cheat Engine -> On;
+Settings -> Cheat Settings (global) -> Enable Cheats, Auto-select, Save Changes.
 
 ## Copying to either volume
-Set `COPYFILE_DISABLE=1` first. macOS otherwise writes AppleDouble sidecars
-(`._name`) onto exFAT, which are junk on the console; 32 were cleaned up here.
-
-## Console settings still to enable
-BDM Start Mode -> Auto; BDM HDD -> On; Enable PS2RD Cheat Engine -> On;
-Cheat Engine Mode -> Auto-select (Settings -> Cheat Settings, the new global entry,
-then Save Changes).
-
-
-## Queued for the next mount (2026-08-18)
-
-- `APPS/OPNPS2LD.ELF` -- 1,386,468 bytes, to both volumes and `APPS/OPL/` on the card.
-  Carries: the footer reaching the bottom row, COVXL on the details page, the
-  cheat message fix, Select-opens-details on the Library, and Settings returning
-  to the page that opened it.
-- `ART/*_COVXL.png` -- 46 covers at 216x432, HDD only (art is device-local).
-- `THM/thm_GridHard/` -- both volumes. The theme lost 19 images and 418 lines of
-  element definitions; `conf_theme.cfg` is 97 lines and the folder is 332K, down
-  from 5.6M. Delete the removed PNGs on the device rather than only copying the
-  new ones, or the old files stay and the RAM is not actually freed.
-    removed: backdrop banner botbar topbar infoband tile screen hero fade
-             cap_l cap_r left right playbtn circle cross square triangle
-             start select
-    kept:    conf_theme.cfg, the four TTFs, the two OFL licences,
-             pslogo.png, settings.png
+`export COPYFILE_DISABLE=1` first, or macOS writes `._` sidecars onto exFAT.
