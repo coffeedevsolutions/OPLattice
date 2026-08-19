@@ -2631,9 +2631,15 @@ function renderShelfHome() {
   };
   // 2px bands, matching shelf.c. The step count used to be a parameter set far
   // too low, which showed as stripes on any dark scrim.
+  // One interpolated fill, matching rmDrawGradV. It stacked 2px bands, which is
+  // what shelfGradV did before the gouraud quad replaced it.
   const gradV = (x, y, w, h, a0, a1, c) => {
-    const n = Math.max(2, Math.floor(h / 2));
-    for (let i = 0; i < n; i++) R(x, y + i * 2, w, 2, c, a0 + (a1 - a0) * i / (n - 1));
+    const gr = ctx.createLinearGradient(0, y, 0, y + h);
+    const rgb = ((c >> 16) & 255) + "," + ((c >> 8) & 255) + "," + (c & 255);
+    gr.addColorStop(0, "rgba(" + rgb + "," + (a0 / 128) + ")");
+    gr.addColorStop(1, "rgba(" + rgb + "," + (a1 / 128) + ")");
+    ctx.fillStyle = gr;
+    ctx.fillRect(x, y, w, h);
   };
   const fmt = m => m <= 0 ? "" : m < 60 ? m + " m" : Math.floor(m / 60) + " h";
   // shelf.c animates off guiFrameId; the previewer has no frame loop, so the
@@ -2803,11 +2809,17 @@ function renderShelfLibrary() {
     : null;
   if (bg) ctx.drawImage(bg, RAIL_W, 0, SCREEN_W - RAIL_W, LIBP.HERO_H);
   else { ctx.fillStyle = rgbHex(0x3A2E22); ctx.fillRect(RAIL_W, 0, SCREEN_W - RAIL_W, LIBP.HERO_H); }
-  for (let i = 0; i < 66; i++) {
-    // 2px bands, as shelfGradV does. Twelve strips of eleven pixels is not a
-    // gradient, it is a stack of rectangles, and on a photograph it looked it.
-    ctx.fillStyle = "rgba(30,24,18," + ((4 + i * (0x53 - 4) / 65) / 128) + ")";
-    ctx.fillRect(RAIL_W, LIBP.HERO_H - 132 + i * 2, SCREEN_W - RAIL_W, 3);
+  {
+    // shelfGradV is ONE gouraud quad now -- rmDrawGradV hands the ramp to the
+    // rasteriser. This mock stacked 66 bands three tall on a two-pixel pitch,
+    // so every band double-blended its neighbour by a row: it was still drawing
+    // the bug the C stopped having, and the scanlines you could see here were
+    // the previewer's own.
+    const gr = ctx.createLinearGradient(0, LIBP.HERO_H - 132, 0, LIBP.HERO_H);
+    gr.addColorStop(0, "rgba(30,24,18," + (0x04 / 128) + ")");
+    gr.addColorStop(1, "rgba(30,24,18," + (0x53 / 128) + ")");
+    ctx.fillStyle = gr;
+    ctx.fillRect(RAIL_W, LIBP.HERO_H - 132, SCREEN_W - RAIL_W, 132);
   }
 
   // Bottom-aligned with the same inset it has from the left: CONTENT_X - RAIL_W.
