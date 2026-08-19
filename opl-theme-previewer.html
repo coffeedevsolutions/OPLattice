@@ -2854,7 +2854,7 @@ function renderShelfLibrary() {
   let hx = CONTENT_X;
   hx += shelfHintPv(hx, LIBP.FTR_TEXT, "circle", "Select");
   hx += shelfHintPv(hx, LIBP.FTR_TEXT, "square", S.libSort || "A-Z");
-  shelfText(hx, LIBP.FTR_TEXT, "L1/R1", 0x8A806C, SHELF_FNT_LBL);
+  shelfText(hx, LIBP.FTR_TEXT, "L1/R1", 0x6B604F, SHELF_FNT_LBL);  // LAND_MUTE, was LAND_DIM
   useFont(SHELF_FNT_LBL);
   hx += textWidth("L1/R1", SHELF_FNT_LBL) + 8;
   shelfText(hx, LIBP.FTR_TEXT - 1, S.libFilter || "All", 0x3A2E22, SHELF_FNT_SM);

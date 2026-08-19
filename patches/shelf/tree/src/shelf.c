@@ -1751,7 +1751,22 @@ static int libSync(void)
         /* Suffix, not filename fragment: mmceGetImage builds "%s%s/%s_%s" and
            texDiscoverLoad appends ".png", so passing "_COV" asked for
            SERIAL__COV.png and nothing ever loaded. */
-        libCache = cacheInitCache(0, "ART", 1, "COV", LIB_PER + LIB_COLS);
+        /* Four rows, for a grid that shows two.
+         *
+         * It held exactly LIB_PER + LIB_COLS = twelve, which is exactly what the
+         * grid draws, so there was no headroom at all: stepping down a row
+         * needs six covers that are not resident, and the only entries old
+         * enough to evict are the six you just scrolled off. Step back up and
+         * they are gone -- the row you were looking at a second ago reloads.
+         * Every move evicted precisely the row you were most likely to return
+         * to.
+         *
+         * Twenty-four holds the two visible rows plus a row either side, so
+         * moving up and down within that window evicts nothing. It costs
+         * 491,520 bytes more and puts every art cache together at about half
+         * the 4 MiB pool, which is affordable where a reload on every keypress
+         * is not. */
+        libCache = cacheInitCache(0, "ART", 1, "COV", LIB_COLS * 4);
         /* COVXL exists for the same reason HERO does. libCover hands back COV,
            which is 100x150 texels sized for a 55-wide grid cell, and the details
            page was drawing it into a rect three times that -- 108 virtual wide
@@ -2022,8 +2037,13 @@ void shelfRenderLibrary(void)
        behind a queue they had just filled. */
     if (total > 0)
         rmPrefetchTexture(libHero(libAt(libSel)));
-    for (i = LIB_PER; i < LIB_PER + LIB_COLS && first + i < total; i++)
+    /* The row below the two on screen, and the row above. Both are one keypress
+       away and the cache is big enough to hold them now, so the art is resident
+       before the move rather than after it. */
+    for (i = LIB_PER; i < LIB_PER + LIB_COLS * 2 && first + i < total; i++)
         rmPrefetchTexture(libCover(libAt(first + i)));
+    for (i = 1; i <= LIB_COLS && first - i >= 0; i++)
+        rmPrefetchTexture(libCover(libAt(first - i)));
 
     /* Two rows drawn, the second clipped by the grid box to half a cell. */
     for (n = 0; n < LIB_COLS * 2 && first + n < total; n++) {
@@ -2077,7 +2097,7 @@ void shelfRenderLibrary(void)
            that cycles is useless without saying where it currently is. */
         hx += shelfHint(hx, LIB_FTR_TEXT, HINT_ALT, libSortName());
         fntRenderString(appsFontLabel, hx, LIB_FTR_TEXT, ALIGN_NONE, 0, 0,
-                        "L1/R1", LAND_DIM);
+                        "L1/R1", LAND_MUTE);
         hx += rmUnscaleX(fntCalcDimensions(appsFontLabel, "L1/R1")) + 8;
         fntRenderString(appsFontSmall, hx, LIB_FTR_TEXT - 1, ALIGN_NONE, 0, 0,
                         libFilterName(), LAND_TEXT);
@@ -2682,7 +2702,7 @@ void shelfRenderInfo(void)
         hx += shelfHint(hx, LIB_FTR_TEXT, HINT_OK, "Select");
         hx += shelfHint(hx, LIB_FTR_TEXT, HINT_BACK, "Back");
         shelfHint(hx, LIB_FTR_TEXT, HINT_FAV,
-                  (minf && minf->favorite) ? "Unfavourite" : "Favourite");
+                  (minf && minf->favorite) ? "Unfavorite" : "Favorite");
     }
 
     shelfDrawRail(infRail);
