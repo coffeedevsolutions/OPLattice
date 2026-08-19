@@ -1,10 +1,13 @@
 # Sync log
 
-Both volumes current as of 2026-08-18. Nothing queued.
+Both volumes current as of 2026-08-19. Nothing queued.
 
 ## Deployed this pass
-- `APPS/OPNPS2LD.ELF` -- 1,389,492 bytes, md5 4dff337b62dc4dfa9b2a322a8259c7cf,
-  on the HDD and both card locations.
+- `APPS/OPNPS2LD.ELF` -- 1,389,876 bytes, md5 07f7fb7b2c0e56202054ca3bb02aa88a,
+  on the HDD and both card locations. ELF only: the theme, the 46 CFGs and the
+  372 art files were already current and were verified rather than re-copied.
+  Previous binaries kept as `_hdd-backup/OPNPS2LD-*.ELF` and
+  `_card-backup/OPNPS2LD-*.ELF` for an A/B.
 - 46 CFGs merged: the sixteen-value Genre vocabulary and `Source=Disc`. Merged,
   so OPL's own LastPlayed / PlayCount / Rating survived.
 - 46 `*_COVXL.png` at 216x432 (HDD only -- art is device-local).
@@ -21,7 +24,12 @@ Both volumes current as of 2026-08-18. Nothing queued.
    is wrong; soft gradation is the depth ceiling.
 3. Library: Square cycles ordering, L1/R1 the filter, L2/R2 jumps a section.
    Moving between rows should no longer reload art that was just on screen.
-4. Details: triangle favourites, and the star should be filled after.
+4. Details: TRIANGLE favorites. The last build bound this to square while the
+   footer drew a triangle, so pressing what the page said did nothing. The star
+   should fill, and survive a reboot -- that last part is the CFG write proving
+   out.
+5. Library, Category ordering: names spelled out in a wheel with the current one
+   centred, L2 above and R2 below it, and each category starting its own row.
 
 ## Console settings
 BDM Start Mode -> Auto; BDM HDD -> On; Enable PS2RD Cheat Engine -> On;
