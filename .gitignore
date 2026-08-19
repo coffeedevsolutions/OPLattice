@@ -1,5 +1,8 @@
 node_modules/
 .DS_Store
+
+# Local agent/editor scratch
+.claude/
 sample-art
 _deploy/
 _rollback/

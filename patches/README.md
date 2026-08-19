@@ -1,6 +1,6 @@
 # OPL patches
 
-Two patches for Open PS2 Loader's theme engine, against
+Patches for Open PS2 Loader, against
 `ps2homebrew/Open-PS2-Loader` @ `3e3f34e` (v1.2.0-Beta). **Apply in order** —
 the second builds on the first.
 
@@ -24,7 +24,8 @@ make
 
 **Compiles and links.** Built with the real toolchain (`ps2dev/ps2dev`,
 `mips64r5900el-ps2-elf-gcc 15.2.0`), `make` exit 0, **zero warnings** on both
-patched files. A ready binary is in [`build/OPNPS2LD.ELF`](build/OPNPS2LD.ELF).
+patched files. Prebuilt binaries ship as [Release assets](../../../releases)
+rather than repository files — see [`build/README.md`](build/README.md).
 
 Verified the patch is actually in the output by diffing against an unpatched
 build of the same tree:
