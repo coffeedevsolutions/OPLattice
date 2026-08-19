@@ -6,6 +6,7 @@ ATVOffroadFury4_US.iso
   Developer    Climax Studios
   Publisher    SCEA
   Metacritic   77 / 100 (36 critics)
+  Source       Disc
   Description  (184 chars)
     The last of Sony's off-road series and the first by Climax, broadening the formula to dirt bikes, buggies and trophy trucks across desert, woodland and snow. Tricks feed a boost meter.
 
@@ -17,6 +18,7 @@ BionicleHeroes_US.iso
   Developer    Traveller's Tales
   Publisher    Eidos Interactive
   Metacritic   52 / 100 (13 critics)
+  Source       Disc
   Description  (176 chars)
     Built on the studio's LEGO Star Wars technology, swapping between six elemental hero forms mid-level. Polished but repetitive, with auto-aim that removes most of the challenge.
 
@@ -28,6 +30,7 @@ Cars_US.iso
   Developer    Rainbow Studios
   Publisher    THQ
   Metacritic   71 / 100
+  Source       Disc
   Description  (188 chars)
     The Pixar tie-in, built by off-road specialists Rainbow Studios. Radiator Springs is a connected open world driven freely between races, with most of the film's cast returning to voice it.
 
@@ -39,6 +42,7 @@ CoDWaWFinalFronts_US.iso
   Developer    Rebellion
   Publisher    Activision
   Metacritic   54 / 100
+  Source       Disc
   Description  (171 chars)
     A PS2 exclusive built separately from Treyarch's World at War, sharing only the setting. Three campaigns of its own, no Zombies mode, no online, and about four hours long.
 
@@ -50,6 +54,7 @@ DynastyWarriors3_JP.iso
   Developer    Omega Force
   Publisher    Koei
   Metacritic   78 / 100
+  Source       Disc
   Description  (170 chars)
     The game that established the Musou template: one officer against hundreds, breaking enemy morale by taking bases and commanders. Japan numbers it as Shin Sangokumusou 2.
 
@@ -61,6 +66,7 @@ DynastyWarriors4_JP.iso
   Developer    Omega Force
   Publisher    Koei
   Metacritic   78 / 100
+  Source       Disc
   Description  (185 chars)
     A refinement rather than a reinvention, connecting battles into kingdom-length campaigns and adding the charge-attack system that defined the series. Sold a million copies in nine days.
 
@@ -72,6 +78,7 @@ DynastyWarriors5_JP.iso
   Developer    Omega Force
   Publisher    Koei
   Metacritic   69 / 100 (29 critics)
+  Source       Disc
   Description  (172 chars)
     The last mainline entry built for PS2 alone. All 48 officers get an individual campaign and a skill tree, but reviewers found the missions too familiar to read as progress.
 
@@ -83,6 +90,7 @@ FinalFantasy10_JP.iso
   Developer    SquareSoft
   Publisher    Square
   Metacritic   92 / 100 (53 critics)
+  Source       Disc
   Description  (181 chars)
     The series' PS2 debut and a clean break: first with voice acting, no world map, and the Sphere Grid in place of levelling. Tidus joins Yuna's pilgrimage across Spira to destroy Sin.
 
@@ -94,6 +102,7 @@ FinalFantasy12_JP.iso
   Developer    Square Enix
   Publisher    Square Enix
   Metacritic   92 / 100 (64 critics)
+  Source       Disc
   Description  (168 chars)
     Matsuno's Ivalice, with random encounters gone entirely and the Gambit system letting you program each character's AI as ordered rules. Famitsu gave it a perfect 40/40.
 
@@ -105,6 +114,7 @@ FlushedAway_US.iso
   Developer    Monkey Bar Games
   Publisher    D3Publisher
   Metacritic   43 / 100
+  Source       Disc
   Description  (174 chars)
     The Aardman film tie-in, mixing light platforming with boat chases. The lowest-reviewed game here: unreliable camera, imprecise jumping, a presentation critics called rushed.
 
@@ -116,6 +126,7 @@ GTAViceCity_JP.iso
   Developer    Rockstar North
   Publisher    Rockstar Games
   Metacritic   95 / 100 (62 critics)
+  Source       Disc
   Description  (179 chars)
     Rockstar's follow-up to GTA III, trading grey Liberty City for neon 1986 Miami, a voiced protagonist in Ray Liotta, and property ownership that gives the sandbox real progression.
 
@@ -127,6 +138,7 @@ GranTurismo3_US.iso
   Developer    Polyphony Digital
   Publisher    SCEA
   Metacritic   95 / 100 (54 critics)
+  Source       Disc
   Description  (174 chars)
     The PS2's technical showpiece, rebuilt at a locked 60fps and treated then as the first photorealistic console racer. Some 150 cars, rewarding weight transfer over aggression.
 
@@ -138,6 +150,7 @@ Gundam1YearWar_JP.iso
   Developer    Namco
   Publisher    Bandai
   Metacritic   No entry (JP-only)
+  Source       Disc
   Description  (184 chars)
     A Japan-exclusive retelling of the 1979 anime, following Amuro Ray from the colony attack to A Baoa Qu. Reverent but straightforward; the difficulty is managing ammo and thruster fuel.
 
@@ -149,6 +162,7 @@ JakAndDaxter_JP.iso
   Developer    Naughty Dog
   Publisher    SCEA
   Metacritic   90 / 100 (35 critics)
+  Source       Disc
   Description  (154 chars)
     Naughty Dog's first post-Crash game, and a technical landmark: the whole world loads once, so you can cross it end to end without a single loading screen.
 
@@ -160,6 +174,7 @@ KingdomHearts2_JP.iso
   Developer    Square Enix
   Publisher    Square Enix
   Metacritic   87 / 100
+  Source       Disc
   Description  (172 chars)
     A major mechanical advance on the original, adding Reaction Commands and Drive Forms and finally moving the camera to the right stick. Frequently cited as the series' peak.
 
@@ -171,6 +186,7 @@ KingdomHearts_FinalMix_JP.iso
   Developer    Square
   Publisher    Square / Disney
   Metacritic   No entry (JP-only)
+  Source       Disc
   Description  (179 chars)
     The Japan-only expanded rerelease of the first game, adding Heartless, abilities, difficulty settings and two superbosses. The most complete PS2-era version, entirely in Japanese.
 
@@ -182,6 +198,7 @@ LegoStarWars2_US.iso
   Developer    Traveller's Tales
   Publisher    LucasArts
   Metacritic   84 / 100 (32 critics)
+  Source       Disc
   Description  (172 chars)
     The original trilogy, broader in every direction: fifty-plus characters, vehicle levels, a character creator and a cantina hub. Free-play is where most of the content sits.
 
@@ -193,6 +210,7 @@ LegoStarWars_US.iso
   Developer    Traveller's Tales
   Publisher    Eidos Interactive
   Metacritic   78 / 100 (46 critics)
+  Source       Disc
   Description  (177 chars)
     The game that created the LEGO adaptation genre. Its most durable idea was structural: generous to the point of being unloseable, so a child and a parent could play it together.
 
@@ -204,6 +222,7 @@ MGS2_JP.iso
   Developer    KCEJ
   Publisher    Konami
   Metacritic   96 / 100 (42 critics)
+  Source       Disc
   Description  (176 chars)
     Opens with Snake, then replaces him with Raiden without warning. What that enables is a story about information control that reads far more presciently now than it did in 2001.
 
@@ -215,6 +234,7 @@ MGS3_JP.iso
   Developer    KCEJ
   Publisher    Konami
   Metacritic   91 / 100 (68 critics)
+  Source       Disc
   Description  (181 chars)
     A 1964 prequel that moves the series into jungle and rebuilds around camouflage, hunting and field surgery. Snake is sent to kill his own mentor. The duel against The End is famous.
 
@@ -226,6 +246,7 @@ MidnightClub3_US.iso
   Developer    Rockstar San Diego
   Publisher    Rockstar Games
   Metacritic   74 / 100 (34 critics)
+  Source       Disc
   Description  (183 chars)
     The expanded rerelease, adding Tokyo to San Diego, Atlanta and Detroit, with customisation of a depth no racer had attempted. At 8.54 GB the largest disc here. Base edition scored 84.
 
@@ -237,6 +258,7 @@ MinnaNoGolf3_JP.iso
   Developer    Clap Hanz
   Publisher    SCE
   Metacritic   85 / 100
+  Source       Disc
   Description  (180 chars)
     Sony's arcade golf on PS2, hiding real depth under a cute exterior. The three-press swing meter is trivial to learn and very hard to master once spin, wind and lie are all in play.
 
@@ -248,6 +270,7 @@ NCAAFinalFour2004_US.iso
   Developer    989 Sports
   Publisher    SCEA
   Metacritic   45 / 100 (16 critics)
+  Source       Disc
   Description  (179 chars)
     Sony's college basketball for the 2003-04 season, with dynasty recruiting and a March Madness bracket. The weakest of three competing franchises that year: poor controls, weak AI.
 
@@ -259,6 +282,7 @@ NFLStreet2_US.iso
   Developer    EA Tiburon
   Publisher    EA Sports BIG
   Metacritic   77 / 100 (33 critics)
+  Source       Disc
   Description  (173 chars)
     Seven-on-seven street football with physics abandoned: run up walls, vault off teammates, build a Gamebreaker meter. Own the City mode has more tactical depth than it looks.
 
@@ -270,6 +294,7 @@ NFSMostWanted_JP.iso
   Developer    EA Black Box
   Publisher    Electronic Arts
   Metacritic   82 / 100 (36 critics)
+  Source       Disc
   Description  (182 chars)
     The peak of the series' mid-2000s run, putting police pursuit at the centre. Bounty from chases is required to progress, and the city is dense with signage built to collapse on them.
 
@@ -281,6 +306,7 @@ NarutoHero3_JP.iso
   Developer    CyberConnect2
   Publisher    Bandai
   Metacritic   75 / 100 (24 critics)
+  Source       Disc
   Description  (176 chars)
     The most expansive of CyberConnect2's PS2 Naruto fighters, with a roster in the forties and a long story mode through the Sasuke Retrieval arc. Reached the West two years late.
 
@@ -292,6 +318,7 @@ OnePieceRush_JP.iso
   Developer    Ganbarion
   Publisher    Bandai
   Metacritic   No entry (JP-only)
+  Source       Disc
   Description  (175 chars)
     The last Grand Battle! game, an arena brawler closer to Smash Bros. than Street Fighter. The Western release was a different, rebalanced game, so its scores do not apply here.
 
@@ -303,6 +330,7 @@ Onimusha2_JP.iso
   Developer    Capcom
   Publisher    Capcom
   Metacritic   84 / 100 (31 critics)
+  Source       Disc
   Description  (178 chars)
     Jubei Yagyu replaces Samanosuke against Nobunaga's demons. Its distinctive addition is gift-giving: items raise ally affection, changing who helps you and which ending you reach.
 
@@ -314,6 +342,7 @@ Onimusha_JP.iso
   Developer    Capcom
   Publisher    Capcom
   Metacritic   86 / 100
+  Source       Disc
   Description  (178 chars)
     Resident Evil's structure with real sword combat, and the first PS2 game to sell a million. Parry-and-counter melee plus the Oni Gauntlet for absorbing souls. Six to eight hours.
 
@@ -325,6 +354,7 @@ PacManWorld3_US.iso
   Developer    Blitz Games
   Publisher    Namco
   Metacritic   63 / 100 (22 critics)
+  Source       Disc
   Description  (176 chars)
     A darker 25th-anniversary entry with Pac-Man allied to the ghosts. Blitz Games shifted the emphasis from platforming to combat, which reviewers singled out as the weakest part.
 
@@ -336,6 +366,7 @@ RapalaProFishing_US.iso
   Developer    FUN Labs
   Publisher    Activision Value
   Metacritic   59 / 100 (6 critics)
+  Source       Disc
   Description  (182 chars)
     A licensed fishing sim with thirteen species and seven hundred lures. Reviewers credited the scenery and the tackle catalogue but found casting and landing too simplified to sustain.
 
@@ -347,6 +378,7 @@ RatchetClank1_JP.iso
   Developer    Insomniac Games
   Publisher    SCEA
   Metacritic   88 / 100 (43 critics)
+  Source       Disc
   Description  (178 chars)
     Insomniac's first post-Spyro game. Its idea is the arsenal: escalating absurd weapons and gadgets, with levels built to be revisited once new ones open previously blocked routes.
 
@@ -358,6 +390,7 @@ RatchetClank2_JP.iso
   Developer    Insomniac Games
   Publisher    SCEA
   Metacritic   90 / 100 (46 critics)
+  Source       Disc
   Description  (176 chars)
     Built around fixing the first game's weaknesses. Weapons now level up through use, turning the arsenal into a progression system, and strafing shifts the feel toward a shooter.
 
@@ -369,6 +402,7 @@ RatchetClank3_JP.iso
   Developer    Insomniac Games
   Publisher    SCEA
   Metacritic   91 / 100 (65 critics)
+  Source       Disc
   Description  (161 chars)
     The highest-rated of the PS2 trilogy and the most content-dense, adding online multiplayer, arena combat, and Captain Qwark's self-aggrandising serial narration.
 
@@ -380,6 +414,7 @@ RatchetClank4_JP.iso
   Developer    Insomniac Games
   Publisher    SCEA
   Metacritic   81 / 100 (51 critics)
+  Source       Disc
   Description  (174 chars)
     A spin-off that abandons platforming almost entirely: Ratchet forced into a televised gladiator show, with two commandable bots replacing Clank and co-op across the campaign.
 
@@ -391,6 +426,7 @@ SSX3.iso
   Developer    EA Canada
   Publisher    EA Sports BIG
   Metacritic   93 / 100 (41 critics)
+  Source       Disc
   Description  (169 chars)
     Replaces discrete courses with one continuous mountain, ridable top to bottom in a single twenty-minute run. The trick system and the in-game radio DJ are both defining.
 
@@ -402,6 +438,7 @@ Scaler_US.iso
   Developer    Artificial Mind & Mvmt
   Publisher    Global Star Software
   Metacritic   69 / 100
+  Source       Disc
   Description  (180 chars)
     A forgotten platformer about a boy turned reptile, built around shifting between creature forms to route through levels. Strong voice work for a budget release. Smallest disc here.
 
@@ -413,6 +450,7 @@ ShadowOfTheColossus.iso
   Developer    Team Ico
   Publisher    SCE
   Metacritic   91 / 100
+  Source       Disc
   Description  (178 chars)
     Ueda's follow-up to Ico: no enemies but sixteen colossi, no towns, almost no music. Each fight is at once a battle and a climbing puzzle across a creature the size of a building.
 
@@ -424,6 +462,7 @@ SonicRiders_US.iso
   Developer    Sonic Team
   Publisher    Sega
   Metacritic   55 / 100 (41 critics)
+  Source       Disc
   Description  (179 chars)
     Hoverboard racing with routes gated by character type, so the same track runs differently. Air works as fuel, draining as you boost, which reviewers found more punishing than fun.
 
@@ -435,6 +474,7 @@ SoulCalibur2_JP.iso
   Developer    Namco
   Publisher    Namco
   Metacritic   92 / 100 (41 critics)
+  Source       Disc
   Description  (177 chars)
     Widely regarded as the finest weapon-based fighter made. Eight-way run frees movement around the arena, and guard impact rewards timing over blocking. PS2 got Heihachi as guest.
 
@@ -446,6 +486,7 @@ StarWarsBattlefront2_US.iso
   Developer    Pandemic Studios
   Publisher    LucasArts
   Metacritic   78 / 100 (23 critics)
+  Source       Disc
   Description  (186 chars)
     Adds full space combat: fly a starfighter, land inside a capital ship and sabotage it from within, all in one match. Playable heroes, and a campaign following the 501st through Order 66.
 
@@ -457,6 +498,7 @@ StarWarsBattlefront_US.iso
   Developer    Pandemic Studios
   Publisher    LucasArts
   Metacritic   82 / 100 (36 critics)
+  Source       Disc
   Description  (177 chars)
     Battlefield's objective warfare in Star Wars, fighting the films' set pieces as ordinary infantry. Command posts act as spawn points, with vehicles from speeder bikes to AT-ATs.
 
@@ -468,6 +510,7 @@ Suikoden4_JP.iso
   Developer    Konami CE Tokyo
   Publisher    Konami
   Metacritic   63 / 100
+  Source       Disc
   Description  (185 chars)
     A prequel set 150 years earlier across an archipelago. All 108 Stars are still recruitable, but the party drops to four and the slow, encounter-heavy sailing drew most of the criticism.
 
@@ -479,6 +522,7 @@ SuzukiTTSuperbikes_US.iso
   Developer    Jester Interactive
   Publisher    Valcon Games
   Metacritic   71 / 100 (7 critics)
+  Source       Disc
   Description  (182 chars)
     A simulation of the Isle of Man TT, built around one 37.7-mile public-road circuit reproduced at full length. Real stone walls punish small errors; track variety is the obvious cost.
 
@@ -490,6 +534,7 @@ ThrillvilleOffTheRails_US.iso
   Developer    Frontier Developments
   Publisher    LucasArts
   Metacritic   70 / 100 (11 critics)
+  Source       Disc
   Description  (176 chars)
     Frontier's accessible console park management, where you design coasters then ride them. The sequel adds deliberately absurd physics and about thirty mini-games as attractions.
 
@@ -501,5 +546,6 @@ TonyHawkAW_US.iso
   Developer    Neversoft
   Publisher    Activision
   Metacritic   77 / 100 (44 critics)
+  Source       Disc
   Description  (187 chars)
     The series' open-world attempt: Los Angeles as one continuous map with loading hidden in tunnels. Consolidates the accumulated moveset and adds BMX. Critics split on whether it was tired.

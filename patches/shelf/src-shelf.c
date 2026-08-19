@@ -1161,7 +1161,8 @@ static image_cache_t *infCoverCache;
 static int *infCoverId, *infCoverUid;
 static item_list_t *libList;          /* what the arrays were sized against */
 static int libCount, libSel;
-static int libView;                   /* LV_*, or LV_GENRE0 + genre index */
+static int libSort;                   /* SORT_* -- sequence, and what the bar indexes */
+static int libFilter;                 /* FILT_* -- which games are in it at all */
 static int libViewCount;              /* live entries in libOrder */
 /* Display order. libSel and the grid's own indices are POSITIONS in this array;
    everything that touches the device -- names, art, launching -- goes through
@@ -1310,7 +1311,10 @@ static lib_meta_t *libMetaGet(int idx)
         const char *src = NULL;
         m->source = 0;
         if (configGetStr(cfg, "Source", &src) && src && src[0]) {
-            if (src[0] == 'B' || src[0] == 'b') m->source = 1;
+            /* Disc = a disc you own and burned; Shared = a file from someone
+               else's collection. Matched on the first letter so "Disc",
+               "Disc burn" and "Shared copy" all land where they should. */
+            if (src[0] == 'D' || src[0] == 'd') m->source = 1;
             else if (src[0] == 'S' || src[0] == 's') m->source = 2;
         }
     }
@@ -1407,101 +1411,89 @@ static void libSortOrder(item_list_t *list, int count)
     }
 }
 
-/* ------------------------------------------------------------------- views
+/* ------------------------------------------------- orderings and filters
  *
- * A view is an ordering plus a predicate, and libOrder already was the first
- * half: the grid has always drawn through a permutation rather than through the
- * item list, so filtering is the same array with fewer entries in it. That is
- * why this costs so little -- libSync returns the count of the VIEW, and every
- * page that asks it how many games there are gets the filtered answer without
- * being told a filter exists.
+ * Two axes, deliberately separate. An ordering decides the sequence and what
+ * the left bar indexes; a filter decides which games are in it at all. Folded
+ * into one list they cannot combine, and "favourites by score" or "unplayed,
+ * grouped by category" are the questions this page exists to answer.
  *
- * The genres are discovered rather than declared. docs/GENRES.md fixes the
- * vocabulary at sixteen, but a library holding none of them should not offer
- * an empty Horror view, so the list is built from what the table actually
- * contains and the views after LV_GENRE0 index into it.
+ * libOrder was already half of it. The grid has always drawn through a
+ * permutation rather than through the item list, so a filter is the same array
+ * with fewer entries and libSync returning the VIEW's count means every page
+ * gets the filtered answer without being told a filter exists.
  *
- * Everything here reads the metadata table. Ordering 250 games by score means
- * comparing every game against every other, which was impossible while each
- * comparison cost a disk read. */
-enum {
-    LV_AZ = 0, LV_SCORE, LV_PLAYED, LV_UNPLAYED, LV_FAV, LV_BURN, LV_SHARED,
-    LV_GENRE0
-};
+ * Everything reads the metadata table. Ordering 250 games by score compares
+ * every game against every other, which was impossible while each comparison
+ * cost a disk read.
+ */
+enum { SORT_AZ = 0, SORT_SCORE, SORT_CAT, SORT_N };
+enum { FILT_ALL = 0, FILT_FAV, FILT_PLAYED, FILT_UNPLAYED, FILT_N };
 
 #define LIB_GENRE_MAX 16
+#define LIB_SECT_MAX  20
+#define LIB_SECT_LBL  5             /* the bar is 20px wide: three glyphs fit */
+
 static char libGenres[LIB_GENRE_MAX][LM_STR];
 static int libGenreN;
-static const char *libViewName(int v)
+
+static char libSectLabel[LIB_SECT_MAX][LIB_SECT_LBL];
+static int libSectStart[LIB_SECT_MAX];   /* first view position, -1 if empty */
+static int libSectN;
+
+static const char *libSortName(void)
 {
-    switch (v) {
-        case LV_AZ:       return "All, A-Z";
-        case LV_SCORE:    return "By score";
-        case LV_PLAYED:   return "Played";
-        case LV_UNPLAYED: return "Unplayed";
-        case LV_FAV:      return "Favourites";
-        case LV_BURN:     return "Burns";
-        case LV_SHARED:   return "Shared";
-        default: break;
-    }
-    v -= LV_GENRE0;
-    return (v >= 0 && v < libGenreN) ? libGenres[v] : "All, A-Z";
+    return libSort == SORT_SCORE ? "Metacritic"
+         : libSort == SORT_CAT   ? "Category" : "A-Z";
 }
 
-static int libViewTotal(void)
+static const char *libFilterName(void)
 {
-    return LV_GENRE0 + libGenreN;
+    return libFilter == FILT_FAV      ? "Favourites"
+         : libFilter == FILT_PLAYED   ? "Played"
+         : libFilter == FILT_UNPLAYED ? "Unplayed" : "All";
 }
 
-/* Does this game belong in the current view? */
-static int libViewKeeps(lib_meta_t *m)
+static int libFilterKeeps(lib_meta_t *m)
 {
-    if (!m)
-        return libView == LV_AZ;
-    switch (libView) {
-        case LV_AZ:       return 1;
-        case LV_SCORE:    return 1;
-        case LV_PLAYED:   return m->playtime > 0;
-        case LV_UNPLAYED: return m->playtime <= 0;
-        case LV_FAV:      return m->favorite != 0;
-        case LV_BURN:     return m->source == 1;
-        case LV_SHARED:   return m->source == 2;
-        default: break;
-    }
-    {
-        int g = libView - LV_GENRE0;
-        return (g >= 0 && g < libGenreN && !strcmp(m->genre, libGenres[g]));
+    switch (libFilter) {
+        case FILT_FAV:      return m && m->favorite;
+        case FILT_PLAYED:   return m && m->playtime > 0;
+        case FILT_UNPLAYED: return !m || m->playtime <= 0;
+        default:            return 1;
     }
 }
 
-/* Order two ITEM indices for the current view. Negative means a sorts first.
-   Ties fall through to the name, so every view has one stable order rather than
-   whatever the device happened to scan. */
-static int libViewCmp(int a, int b)
+/* Order two ITEM indices under the current sort. Ties fall through to the name
+   so every ordering has one stable sequence rather than whatever the device
+   happened to scan. */
+static int libSortCmp(int a, int b)
 {
     lib_meta_t *ma = libMetaGet(a), *mb = libMetaGet(b);
     char *na, *nb;
     int d = 0;
 
-    if (libView == LV_SCORE) {
+    if (libSort == SORT_SCORE) {
         int sa = ma ? ma->score : -1, sb = mb ? mb->score : -1;
         d = sb - sa;                                  /* highest first */
-    } else if (libView == LV_PLAYED) {
-        int pa = ma ? ma->playtime : 0, pb = mb ? mb->playtime : 0;
-        d = pb - pa;                                  /* longest first */
+    } else if (libSort == SORT_CAT) {
+        const char *ga = (ma && ma->genre[0]) ? ma->genre : "\xff";
+        const char *gb = (mb && mb->genre[0]) ? mb->genre : "\xff";
+        d = strcasecmp(ga, gb);                       /* unset sinks */
     }
     if (d)
         return d;
     na = libList && libList->itemGetName ? libList->itemGetName(libList, a) : NULL;
     nb = libList && libList->itemGetName ? libList->itemGetName(libList, b) : NULL;
     if (!na && !nb) return 0;
-    if (!na) return 1;                                /* nameless sinks */
+    if (!na) return 1;
     if (!nb) return -1;
     return strcasecmp(na, nb);
 }
 
-/* Collect the genres actually present, in vocabulary order rather than scan
-   order, so the view list does not reshuffle when a device is rescanned. */
+/* The genres actually present, in A-Z order so the bar does not reshuffle when
+   a device is rescanned. GENRES.md fixes the vocabulary at sixteen; a library
+   holding no Horror should not carry an empty Horror section. */
 static void libScanGenres(void)
 {
     int i, j;
@@ -1517,7 +1509,7 @@ static void libScanGenres(void)
         if (j == libGenreN && libGenreN < LIB_GENRE_MAX)
             snprintf(libGenres[libGenreN++], LM_STR, "%s", m->genre);
     }
-    for (i = 1; i < libGenreN; i++) {                 /* A-Z, insertion */
+    for (i = 1; i < libGenreN; i++) {
         char key[LM_STR];
         snprintf(key, LM_STR, "%s", libGenres[i]);
         for (j = i - 1; j >= 0 && strcasecmp(libGenres[j], key) > 0; j--)
@@ -1526,35 +1518,137 @@ static void libScanGenres(void)
     }
 }
 
-/* Rebuild libOrder for the current view. Reads the whole table, which is one
-   file per game ONCE -- the old code paid six reads a frame forever. */
+/* Which section does this view position fall in? */
+static int libSectOf(int idx)
+{
+    lib_meta_t *m = libMetaGet(idx);
+
+    if (libSort == SORT_SCORE) {
+        int sc = m ? m->score : -1;
+        if (sc < 0) return libSectN - 1;              /* unscored, at the end */
+        return (100 - sc) / 10;                       /* 100..91 -> 0, 90.. -> 1 */
+    }
+    if (libSort == SORT_CAT) {
+        int g;
+        for (g = 0; g < libGenreN; g++)
+            if (m && !strcmp(m->genre, libGenres[g]))
+                return g;
+        return libGenreN;                             /* unset */
+    }
+    {   /* A-Z: the nine labels are a scale, so a section is a letter RANGE. */
+        char *nm = libList && libList->itemGetName
+                 ? libList->itemGetName(libList, idx) : NULL;
+        int c = (nm && nm[0]) ? nm[0] : 'Z';
+        int k;
+        if (c >= 'a' && c <= 'z') c -= 32;
+        if (c < 'A') c = 'A';
+        if (c > 'Z') c = 'Z';
+        for (k = libSectN - 1; k > 0; k--)
+            if (c >= (int)libSectLabel[k][0])
+                return k;
+        return 0;
+    }
+}
+
+/* The bar's labels, and where each one starts in the view. Three glyphs: the
+   strip between the rail and the grid is twenty pixels wide, and SUSE Mono
+   advances 5.4 of them per character at 9px, so "Hack & Slash" was never going
+   to fit. The full name goes in the footer, where there is room for it. */
+static void libBuildSections(void)
+{
+    static const char *ABBR[] = {
+        "Action", "ACT", "Adventure", "ADV", "Fighting", "FGT",
+        "Hack & Slash", "H&S", "Horror", "HOR", "Music", "MUS",
+        "Open World", "OPW", "Platformer", "PLT", "Puzzle", "PUZ",
+        "RPG", "RPG", "Racing", "RAC", "Shooter", "SHT",
+        "Simulation", "SIM", "Sports", "SPT", "Stealth", "STL",
+        "Strategy", "STR", NULL
+    };
+    int i, k;
+
+    libSectN = 0;
+    if (libSort == SORT_SCORE) {
+        for (i = 0; i <= 10 && libSectN < LIB_SECT_MAX; i++)
+            snprintf(libSectLabel[libSectN++], LIB_SECT_LBL, "%d", 100 - i * 10);
+    } else if (libSort == SORT_CAT) {
+        for (i = 0; i < libGenreN && libSectN < LIB_SECT_MAX; i++) {
+            const char *ab = libGenres[i];
+            for (k = 0; ABBR[k]; k += 2)
+                if (!strcmp(ABBR[k], libGenres[i])) { ab = ABBR[k + 1]; break; }
+            snprintf(libSectLabel[libSectN++], LIB_SECT_LBL, "%s", ab);
+        }
+        if (libSectN < LIB_SECT_MAX)
+            snprintf(libSectLabel[libSectN++], LIB_SECT_LBL, "--");
+    } else {
+        for (i = 0; i < 9 && libSectN < LIB_SECT_MAX; i++) {
+            libSectLabel[libSectN][0] = (char)('A' + i * 25 / 8);
+            libSectLabel[libSectN][1] = '\0';
+            libSectN++;
+        }
+    }
+    for (i = 0; i < libSectN; i++)
+        libSectStart[i] = -1;
+    for (i = libViewCount - 1; i >= 0; i--) {
+        int sec = libSectOf(libOrder[i]);
+        if (sec >= 0 && sec < libSectN)
+            libSectStart[sec] = i;                    /* last write wins = first */
+    }
+}
+
+/* Rebuild libOrder for the current ordering and filter. Reads the whole table,
+   which is one file per game ONCE -- the old code paid six reads a frame. */
 static void libRebuild(void)
 {
     int i, j;
 
     if (!libOrder || libCount <= 0) {
-        libViewCount = 0;
+        libViewCount = libSectN = 0;
         return;
     }
     libMetaAll();
     libScanGenres();
-    if (libView >= libViewTotal())
-        libView = LV_AZ;
 
     libViewCount = 0;
     for (i = 0; i < libCount; i++)
-        if (libViewKeeps(libMetaGet(i)))
+        if (libFilterKeeps(libMetaGet(i)))
             libOrder[libViewCount++] = i;
 
     for (i = 1; i < libViewCount; i++) {
         int key = libOrder[i];
-        for (j = i - 1; j >= 0 && libViewCmp(libOrder[j], key) > 0; j--)
+        for (j = i - 1; j >= 0 && libSortCmp(libOrder[j], key) > 0; j--)
             libOrder[j + 1] = libOrder[j];
         libOrder[j + 1] = key;
     }
+    libBuildSections();
     if (libSel >= libViewCount)
         libSel = libViewCount > 0 ? libViewCount - 1 : 0;
     libMetaIdx = -1;
+}
+
+/* Jump to the next or previous section that actually holds something. Empty
+   sections are skipped rather than landing you on nothing -- a score band with
+   no games in it is a label on a scale, not a destination. */
+static void libJumpSection(int dir)
+{
+    int here, k, n;
+
+    if (libViewCount <= 0 || libSectN <= 0)
+        return;
+    here = libSectOf(libOrder[libSel]);
+    for (n = 1; n <= libSectN; n++) {
+        k = here + dir * n;
+        if (k < 0 || k >= libSectN)
+            break;
+        if (libSectStart[k] >= 0) {
+            libSel = libSectStart[k];
+            sfxPlay(SFX_CURSOR);
+            return;
+        }
+    }
+    /* Nowhere further in that direction: go to the end of the run instead, so
+       the button always does something rather than appearing to be broken. */
+    libSel = (dir > 0) ? libViewCount - 1 : 0;
+    sfxPlay(SFX_CURSOR);
 }
 
 static int libSync(void)
@@ -1790,36 +1884,31 @@ static int libAlphaPos = -1;
 
 static int libAlphaY(int i)
 {
-    return LIB_ALPHA_Y0 + i * (LIB_ALPHA_Y1 - LIB_ALPHA_Y0) / (LIB_ALPHA_N - 1);
+    return (libSectN > 1)
+         ? LIB_ALPHA_Y0 + i * (LIB_ALPHA_Y1 - LIB_ALPHA_Y0) / (libSectN - 1)
+         : LIB_ALPHA_Y0;
 }
 
-/* The letter mark i carries, or 0 for a dot. Integer division lands label 0 on
-   A and the last exactly on Z, which is the whole reason for spreading a count
-   across the alphabet rather than stepping through it: three does not divide
-   twenty-five, so a plain step would end on Y and never reach the letter the
-   scale exists to run to. */
-static char libAlphaLetter(int i)
-{
-    if (i & 1)
-        return 0;                       /* odd marks are the dots */
-    return (char)('A' + (i / 2) * 25 / (LIB_ALPHA_LABELS - 1));
-}
-
+/* The index down the left of the grid.
+ *
+ * It was the alphabet and is now whatever the ordering indexes: letters for
+ * A-Z, 100 down to 0 for Metacritic, three-letter category codes for Category.
+ * The marker is a scroll position and stays true in all three, which is why it
+ * survived when the letters stopped being meaningful outside A-Z.
+ *
+ * Sections holding nothing are drawn faint rather than hidden. A score band with
+ * no games in it is still part of the scale, and removing it would make the
+ * spacing lie about where 70 sits. */
 static void libDrawAlphabet(int gridX, int total)
 {
-    int ax = gridX - LIB_ALPHA_DX;      /* letters */
-    int lx = ax - 9;                    /* the line, and the marker on it */
+    int ax = gridX - LIB_ALPHA_DX;
+    int lx = ax - 9;
     int rows = (total + LIB_COLS - 1) / LIB_COLS;
     int row = (total > 0) ? libSel / LIB_COLS : 0;
-    int tgt, d, my, near, i;
-    int labels;
+    int tgt, d, my, here, i;
 
-    if (total <= 0)
-        return;                         /* nothing to be an index of */
-    /* Outside A-Z the letters are a lie -- a grid ordered by score is not
-       indexed by initial. The line and its marker stay, because those report
-       position in the list and that is true in every view. */
-    labels = (libView == LV_AZ);
+    if (total <= 0 || libSectN <= 0)
+        return;
 
     tgt = (rows > 1) ? LIB_ALPHA_Y0 + row * (LIB_ALPHA_Y1 - LIB_ALPHA_Y0) / (rows - 1)
                      : LIB_ALPHA_Y0;
@@ -1827,8 +1916,6 @@ static void libDrawAlphabet(int gridX, int total)
     if (libAlphaPos < 0)
         libAlphaPos = tgt;              /* first frame: place it, do not fly it in */
     d = tgt - libAlphaPos;
-    /* Integer ease. Snapping inside a pixel stops the quarter-step stalling out
-       short of the target, which would leave the marker permanently a hair off. */
     if (d > -16 && d < 16)
         libAlphaPos = tgt;
     else
@@ -1837,32 +1924,15 @@ static void libDrawAlphabet(int gridX, int total)
 
     rmDrawRect(lx + 3, LIB_ALPHA_Y0, 1, LIB_ALPHA_Y1 - LIB_ALPHA_Y0 + 8, LAND_RULE);
 
-    /* Whichever letter the marker is nearest reads as ink; the rest are a scale.
-       Computed from the marker rather than from the row so it tracks the ease. */
-    near = (my - LIB_ALPHA_Y0) * (LIB_ALPHA_N - 1) * 2 + (LIB_ALPHA_Y1 - LIB_ALPHA_Y0);
-    near /= (LIB_ALPHA_Y1 - LIB_ALPHA_Y0) * 2;
-    if (near < 0) near = 0;
-    if (near > LIB_ALPHA_N - 1) near = LIB_ALPHA_N - 1;
-
-    for (i = 0; i < LIB_ALPHA_N; i++) {
-        u64 col = (i == near) ? LAND_TEXT : LAND_DIM;
-        int y = libAlphaY(i);
-        char letter = labels ? libAlphaLetter(i) : 0;
-        if (letter) {
-            char c[2];
-            c[0] = letter;
-            c[1] = '\0';
-            fntRenderString(appsFontLabel, ax, y, ALIGN_NONE, 0, 0, c, col);
-        } else {
-            /* Flush with the letters' left edge, not centred under them. Every
-               cap in this face reports bitmap_left 0 and is four pixels wide at
-               9px, so the ink starts exactly at ax and a dot at ax + 2 sat in
-               the letter's right half. Vertically it is centred on where the cap
-               would be rather than on the glyph box, whose top is y. */
-            rmDrawRect(ax, y + 3, 2, 3, col);
-        }
+    /* Lit by which section the CURSOR is in, not by which label the marker is
+       nearest. The marker eases and the highlight should not lag behind it. */
+    here = libSectOf(libOrder[libSel]);
+    for (i = 0; i < libSectN; i++) {
+        u64 col = (i == here) ? LAND_TEXT
+                : (libSectStart[i] >= 0) ? LAND_DIM : LAND_FAINT;
+        fntRenderString(appsFontLabel, ax, libAlphaY(i), ALIGN_NONE, 0, 0,
+                        libSectLabel[i], col);
     }
-
     rmDrawRect(lx, my + 3, 9, 2, LAND_INK);
 }
 
@@ -1943,7 +2013,7 @@ void shelfRenderLibrary(void)
                         empty ? "Nothing in this view." : "Nothing to show yet.",
                         LAND_TEXT);
         fntRenderString(appsFontSmall, CONTENT_X, 148, ALIGN_NONE, 0, 0,
-                        empty ? "L1 and R1 change what the grid is showing."
+                        empty ? "L1 and R1 change the filter. Square changes the ordering."
                               : "This page follows the device the main list is on. Pick one there first.",
                         LAND_MUTE);
     }
@@ -2003,12 +2073,15 @@ void shelfRenderLibrary(void)
         /* L1/R1 drawn as text: they are shoulder buttons and there is no shape
            in shelfHint that would read as one. The view's own name follows,
            because a control that cycles is useless without saying where it is. */
+        /* Ordering under its own mark, then the filter under L1/R1. A control
+           that cycles is useless without saying where it currently is. */
+        hx += shelfHint(hx, LIB_FTR_TEXT, HINT_ALT, libSortName());
         fntRenderString(appsFontLabel, hx, LIB_FTR_TEXT, ALIGN_NONE, 0, 0,
                         "L1/R1", LAND_DIM);
         hx += rmUnscaleX(fntCalcDimensions(appsFontLabel, "L1/R1")) + 8;
         fntRenderString(appsFontSmall, hx, LIB_FTR_TEXT - 1, ALIGN_NONE, 0, 0,
-                        libViewName(libView), LAND_TEXT);
-        hx += rmUnscaleX(fntCalcDimensions(appsFontSmall, libViewName(libView))) + 18;
+                        libFilterName(), LAND_TEXT);
+        hx += rmUnscaleX(fntCalcDimensions(appsFontSmall, libFilterName())) + 18;
         if (total > 0) {
             snprintf(buf, sizeof(buf), "%d of %d", libSel + 1, total);
             w = rmUnscaleX(fntCalcDimensions(appsFontSmall, buf));
@@ -2049,12 +2122,24 @@ void shelfHandleInputLibrary(void)
        those you genuinely did arrive at from somewhere. */
     /* Before the empty check, deliberately: a view matching nothing still has
        to be escapable, and returning early on total <= 0 would trap you in it. */
-    if (getKeyOn(KEY_L1) || getKeyOn(KEY_R1)) {
-        int n = libViewTotal();
-        libView = (libView + (getKeyOn(KEY_R1) ? 1 : n - 1)) % n;
+    if (getKeyOn(SHELF_ALT)) {                     /* ordering */
+        libSort = (libSort + 1) % SORT_N;
         libRebuild();
         libSel = 0;
+        libAlphaPos = -1;                          /* place the marker, do not fly it */
+        sfxPlay(SFX_CONFIRM);
+        return;
+    }
+    if (getKeyOn(KEY_L1) || getKeyOn(KEY_R1)) {    /* filter */
+        libFilter = (libFilter + (getKeyOn(KEY_R1) ? 1 : FILT_N - 1)) % FILT_N;
+        libRebuild();
+        libSel = 0;
+        libAlphaPos = -1;
         sfxPlay(SFX_CURSOR);
+        return;
+    }
+    if (getKeyOn(KEY_L2) || getKeyOn(KEY_R2)) {    /* jump a section */
+        libJumpSection(getKeyOn(KEY_R2) ? 1 : -1);
         return;
     }
 
@@ -2502,7 +2587,7 @@ void shelfRenderInfo(void)
        absent means unrecorded, and an unrecorded provenance is better left
        blank than guessed at, so infCell drops the row entirely. */
     if (minf)
-        infCell("SOURCE", minf->source == 1 ? "Disc burn"
+        infCell("SOURCE", minf->source == 1 ? "Disc"
                         : minf->source == 2 ? "Shared" : "");
 
     fntRenderString(appsFontHead, INF_COL_X, INF_HEAD_Y, ALIGN_NONE, 0, 0,

@@ -2329,6 +2329,17 @@ const LIBP = { HERO_H: 244, GRID_Y: 256, FTR_H: 26, FTR_Y: 480 - 26,
    The marker is proportional (row over rows) rather than a lookup of the
    selected title's initial, so the letters are a ruler rather than a promise --
    they line up with real initials only when the active sort is A-Z. */
+/* The bar's sections, per ordering. Mirrors libBuildSections: three glyphs,
+   because the strip between rail and grid is 20px and SUSE Mono advances 5.4 of
+   them per character at 9px -- "Hack & Slash" was never going to fit, so the
+   full name lives in the footer. */
+function libSections() {
+  if (S.libSort === "Metacritic")
+    return [100,90,80,70,60,50,40,30,20,10,0].map(String);
+  if (S.libSort === "Category")
+    return ["ACT","ADV","FGT","H&S","OPW","PLT","RPG","RAC","SHT","SIM","SPT","STL","--"];
+  return [0,1,2,3,4,5,6,7,8].map(i => String.fromCharCode(65 + Math.floor(i * 25 / 8)));
+}
 const libAlphaY = i =>
   LIBP.ALPHA_Y0 + Math.floor(i * (LIBP.ALPHA_Y1 - LIBP.ALPHA_Y0) / (LIBP.ALPHA_N - 1));
 
@@ -2353,16 +2364,15 @@ function libDrawAlphabetPv(gridX, total, sel, cols) {
   // Even marks are letters, odd marks are dots -- 17 marks, not 26. At 26 the
   // pitch came out 6.9 against 9px letters and every label overlapped the dot
   // below it. See LIB_ALPHA_N in shelf.c.
-  for (let i = 0; i < LIBP.ALPHA_N; i++) {
-    const col = i === near ? 0x3A2E22 : 0x8A806C, y = libAlphaY(i);
-    if (i % 2 === 0) {
-      // Outside A-Z the letters are a lie -- a grid ordered by score is not
-      // indexed by initial. The marker stays; it reports position, which is
-      // true in every view. Mirrors the `labels` gate in libDrawAlphabet.
-      if (S.libView && S.libView !== "All, A-Z") continue;
-      const c = String.fromCharCode(65 + Math.floor((i / 2) * 25 / (LIBP.ALPHA_LABELS - 1)));
-      shelfText(ax, y, c, col, SHELF_FNT_LBL);
-    } else R(ax, y + 3, 2, 3, col);   // flush left with the caps
+  // Sections, not a fixed alphabet: letters for A-Z, 100..0 for Metacritic,
+  // three-letter codes for Category. Empty sections stay on the scale rather
+  // than being removed, or the spacing would lie about where 70 sits.
+  const secs = libSections();
+  const lit = Math.round(near * (secs.length - 1) / Math.max(LIBP.ALPHA_N - 1, 1));
+  for (let i = 0; i < secs.length; i++) {
+    const y = LIBP.ALPHA_Y0 + i * (LIBP.ALPHA_Y1 - LIBP.ALPHA_Y0) /
+              Math.max(secs.length - 1, 1);
+    shelfText(ax, y, secs[i], i === lit ? 0x3A2E22 : 0x8A806C, SHELF_FNT_LBL);
   }
   R(lx, my + 3, 9, 2, 0x3A2E22);
 }
@@ -2843,12 +2853,13 @@ function renderShelfLibrary() {
   ctx.fillRect(RAIL_W, LIBP.FTR_Y, SCREEN_W - RAIL_W, 1);
   let hx = CONTENT_X;
   hx += shelfHintPv(hx, LIBP.FTR_TEXT, "circle", "Select");
+  hx += shelfHintPv(hx, LIBP.FTR_TEXT, "square", S.libSort || "A-Z");
   shelfText(hx, LIBP.FTR_TEXT, "L1/R1", 0x8A806C, SHELF_FNT_LBL);
   useFont(SHELF_FNT_LBL);
   hx += textWidth("L1/R1", SHELF_FNT_LBL) + 8;
-  shelfText(hx, LIBP.FTR_TEXT - 1, S.libView || "All, A-Z", 0x3A2E22, SHELF_FNT_SM);
+  shelfText(hx, LIBP.FTR_TEXT - 1, S.libFilter || "All", 0x3A2E22, SHELF_FNT_SM);
   useFont(SHELF_FNT_SM);
-  hx += textWidth(S.libView || "All, A-Z", SHELF_FNT_SM) + 18;
+  hx += textWidth(S.libFilter || "All", SHELF_FNT_SM) + 18;
   const count = (sel + 1) + " of " + games.length;
   const cw = textWidth(count, SHELF_FNT_SM);
   if (605 - cw > hx + 8)
