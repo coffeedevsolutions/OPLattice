@@ -6,6 +6,19 @@ _rollback/
 
 # Card backups (large, and reproducible by re-reading the card)
 _card-backup/
-# Truecolor art bank kept by tools/palettize-art.py
-_art-truecolor/
 _hdd-backup/
+
+# Art directories are working output, not source: every file in them is
+# derived from masters that live outside this repo. The folders and their
+# READMEs are tracked so the layout is self-documenting; the images are not.
+#
+# They also hold publisher cover art, which is not ours to redistribute.
+_art-truecolor/*
+!_art-truecolor/README.md
+_cover-truecolor/*
+!_cover-truecolor/README.md
+_hero-truecolor/*
+!_hero-truecolor/README.md
+
+# Built loader binaries ship as GitHub Release assets, not in git history.
+patches/build/*.ELF
