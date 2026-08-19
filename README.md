@@ -1,4 +1,4 @@
-# OPLucid
+# OPLattice
 
 A custom [Open PS2 Loader](https://github.com/ps2homebrew/Open-PS2-Loader) build
 and the toolkit that produced it: a sidebar-driven UI called **SHELF**, nine

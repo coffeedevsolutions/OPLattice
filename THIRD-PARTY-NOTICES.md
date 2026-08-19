@@ -1,6 +1,6 @@
 # Third-party notices
 
-OPLucid is licensed under the GNU General Public License v3.0 or later
+OPLattice is licensed under the GNU General Public License v3.0 or later
 (see [`LICENSE`](LICENSE)). That choice is not arbitrary — it is the strongest
 obligation already present in the tree, and it is explained below.
 
@@ -44,7 +44,7 @@ work and its terms attach.
 ### In-game screenshots
 
 `ee_core/src/igs_api.c` in the upstream tree is GPL, from **maximus32** and
-**doctorxyz**. OPLucid builds with `IGS=1`, which switches on code that was
+**doctorxyz**. OPLattice builds with `IGS=1`, which switches on code that was
 already present upstream. That file is not vendored here.
 
 ## Fonts

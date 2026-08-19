@@ -1,4 +1,4 @@
-# Installing OPLucid
+# Installing OPLattice
 
 From nothing to a booting console. Read [Booting](BOOTING.md) alongside this —
 it covers which FMCB channel actually launches what, and why the L1 hold
