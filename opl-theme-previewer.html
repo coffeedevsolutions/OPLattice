@@ -2356,6 +2356,10 @@ function libDrawAlphabetPv(gridX, total, sel, cols) {
   for (let i = 0; i < LIBP.ALPHA_N; i++) {
     const col = i === near ? 0x3A2E22 : 0x8A806C, y = libAlphaY(i);
     if (i % 2 === 0) {
+      // Outside A-Z the letters are a lie -- a grid ordered by score is not
+      // indexed by initial. The marker stays; it reports position, which is
+      // true in every view. Mirrors the `labels` gate in libDrawAlphabet.
+      if (S.libView && S.libView !== "All, A-Z") continue;
       const c = String.fromCharCode(65 + Math.floor((i / 2) * 25 / (LIBP.ALPHA_LABELS - 1)));
       shelfText(ax, y, c, col, SHELF_FNT_LBL);
     } else R(ax, y + 3, 2, 3, col);   // flush left with the caps
@@ -2839,6 +2843,12 @@ function renderShelfLibrary() {
   ctx.fillRect(RAIL_W, LIBP.FTR_Y, SCREEN_W - RAIL_W, 1);
   let hx = CONTENT_X;
   hx += shelfHintPv(hx, LIBP.FTR_TEXT, "circle", "Select");
+  shelfText(hx, LIBP.FTR_TEXT, "L1/R1", 0x8A806C, SHELF_FNT_LBL);
+  useFont(SHELF_FNT_LBL);
+  hx += textWidth("L1/R1", SHELF_FNT_LBL) + 8;
+  shelfText(hx, LIBP.FTR_TEXT - 1, S.libView || "All, A-Z", 0x3A2E22, SHELF_FNT_SM);
+  useFont(SHELF_FNT_SM);
+  hx += textWidth(S.libView || "All, A-Z", SHELF_FNT_SM) + 18;
   const count = (sel + 1) + " of " + games.length;
   const cw = textWidth(count, SHELF_FNT_SM);
   if (605 - cw > hx + 8)
@@ -2855,7 +2865,7 @@ function renderShelfLibrary() {
    chain used to draw this, which meant a tan shell handing you a dark slab the
    moment you asked about a game. Constants mirror INF_* in shelf.c. */
 const INFP = { HERO_H: 244, COV_DW: 108, COV_H: 216, HEAD_Y: 254, PAD: 12,
-               ROW_H: 24, COL_ROWS: 4, BTN_H: 32, BTN_GAP: 6, GEAR_W: 24 };
+               ROW_H: 22, COL_ROWS: 5, BTN_H: 32, BTN_GAP: 6, GEAR_W: 24 };
 const INF_COL_X = CONTENT_X + INFP.COV_DW + 16;
 const INF_COL_W = Math.floor((SCREEN_W - INF_COL_X - 24) / 3);
 const INF_CELL_Y = INFP.HEAD_Y + 20;
@@ -2968,10 +2978,11 @@ function renderShelfInfo() {
   push("RATING", gameAttr(g, "rating"));
   push("SIZE", "3610 MiB");
   push("WIDESCREEN", "on device");
+  push("SOURCE", "Disc burn");
 
   shelfText(INF_COL_X, INFP.HEAD_Y, "DETAILS", 0x8A806C, SHELF_FNT_HD);
   R(INF_COL_X, INFP.HEAD_Y + 14, INF_COL_W * 2 - 10, 1, 0xAA9F89);
-  cells.slice(0, 8).forEach(([l, v], k) =>
+  cells.slice(0, 10).forEach(([l, v], k) =>
     cell(INF_COL_X + Math.floor(k / INFP.COL_ROWS) * INF_COL_W,
          INF_CELL_Y + (k % INFP.COL_ROWS) * INFP.ROW_H, l, v));
 

@@ -1161,6 +1161,8 @@ static image_cache_t *infCoverCache;
 static int *infCoverId, *infCoverUid;
 static item_list_t *libList;          /* what the arrays were sized against */
 static int libCount, libSel;
+static int libView;                   /* LV_*, or LV_GENRE0 + genre index */
+static int libViewCount;              /* live entries in libOrder */
 /* Display order. libSel and the grid's own indices are POSITIONS in this array;
    everything that touches the device -- names, art, launching -- goes through
    libAt() to get the real item index.
@@ -1194,7 +1196,7 @@ static char libMetaName[128];
    ordered; everything it asks the device for is not. */
 static int libAt(int pos)
 {
-    return (libOrder && pos >= 0 && pos < libCount) ? libOrder[pos] : pos;
+    return (libOrder && pos >= 0 && pos < libViewCount) ? libOrder[pos] : pos;
 }
 
 
@@ -1405,6 +1407,156 @@ static void libSortOrder(item_list_t *list, int count)
     }
 }
 
+/* ------------------------------------------------------------------- views
+ *
+ * A view is an ordering plus a predicate, and libOrder already was the first
+ * half: the grid has always drawn through a permutation rather than through the
+ * item list, so filtering is the same array with fewer entries in it. That is
+ * why this costs so little -- libSync returns the count of the VIEW, and every
+ * page that asks it how many games there are gets the filtered answer without
+ * being told a filter exists.
+ *
+ * The genres are discovered rather than declared. docs/GENRES.md fixes the
+ * vocabulary at sixteen, but a library holding none of them should not offer
+ * an empty Horror view, so the list is built from what the table actually
+ * contains and the views after LV_GENRE0 index into it.
+ *
+ * Everything here reads the metadata table. Ordering 250 games by score means
+ * comparing every game against every other, which was impossible while each
+ * comparison cost a disk read. */
+enum {
+    LV_AZ = 0, LV_SCORE, LV_PLAYED, LV_UNPLAYED, LV_FAV, LV_BURN, LV_SHARED,
+    LV_GENRE0
+};
+
+#define LIB_GENRE_MAX 16
+static char libGenres[LIB_GENRE_MAX][LM_STR];
+static int libGenreN;
+static const char *libViewName(int v)
+{
+    switch (v) {
+        case LV_AZ:       return "All, A-Z";
+        case LV_SCORE:    return "By score";
+        case LV_PLAYED:   return "Played";
+        case LV_UNPLAYED: return "Unplayed";
+        case LV_FAV:      return "Favourites";
+        case LV_BURN:     return "Burns";
+        case LV_SHARED:   return "Shared";
+        default: break;
+    }
+    v -= LV_GENRE0;
+    return (v >= 0 && v < libGenreN) ? libGenres[v] : "All, A-Z";
+}
+
+static int libViewTotal(void)
+{
+    return LV_GENRE0 + libGenreN;
+}
+
+/* Does this game belong in the current view? */
+static int libViewKeeps(lib_meta_t *m)
+{
+    if (!m)
+        return libView == LV_AZ;
+    switch (libView) {
+        case LV_AZ:       return 1;
+        case LV_SCORE:    return 1;
+        case LV_PLAYED:   return m->playtime > 0;
+        case LV_UNPLAYED: return m->playtime <= 0;
+        case LV_FAV:      return m->favorite != 0;
+        case LV_BURN:     return m->source == 1;
+        case LV_SHARED:   return m->source == 2;
+        default: break;
+    }
+    {
+        int g = libView - LV_GENRE0;
+        return (g >= 0 && g < libGenreN && !strcmp(m->genre, libGenres[g]));
+    }
+}
+
+/* Order two ITEM indices for the current view. Negative means a sorts first.
+   Ties fall through to the name, so every view has one stable order rather than
+   whatever the device happened to scan. */
+static int libViewCmp(int a, int b)
+{
+    lib_meta_t *ma = libMetaGet(a), *mb = libMetaGet(b);
+    char *na, *nb;
+    int d = 0;
+
+    if (libView == LV_SCORE) {
+        int sa = ma ? ma->score : -1, sb = mb ? mb->score : -1;
+        d = sb - sa;                                  /* highest first */
+    } else if (libView == LV_PLAYED) {
+        int pa = ma ? ma->playtime : 0, pb = mb ? mb->playtime : 0;
+        d = pb - pa;                                  /* longest first */
+    }
+    if (d)
+        return d;
+    na = libList && libList->itemGetName ? libList->itemGetName(libList, a) : NULL;
+    nb = libList && libList->itemGetName ? libList->itemGetName(libList, b) : NULL;
+    if (!na && !nb) return 0;
+    if (!na) return 1;                                /* nameless sinks */
+    if (!nb) return -1;
+    return strcasecmp(na, nb);
+}
+
+/* Collect the genres actually present, in vocabulary order rather than scan
+   order, so the view list does not reshuffle when a device is rescanned. */
+static void libScanGenres(void)
+{
+    int i, j;
+
+    libGenreN = 0;
+    for (i = 0; i < libCount; i++) {
+        lib_meta_t *m = libMetaGet(i);
+        if (!m || m->loaded != 1 || !m->genre[0])
+            continue;
+        for (j = 0; j < libGenreN; j++)
+            if (!strcmp(libGenres[j], m->genre))
+                break;
+        if (j == libGenreN && libGenreN < LIB_GENRE_MAX)
+            snprintf(libGenres[libGenreN++], LM_STR, "%s", m->genre);
+    }
+    for (i = 1; i < libGenreN; i++) {                 /* A-Z, insertion */
+        char key[LM_STR];
+        snprintf(key, LM_STR, "%s", libGenres[i]);
+        for (j = i - 1; j >= 0 && strcasecmp(libGenres[j], key) > 0; j--)
+            memcpy(libGenres[j + 1], libGenres[j], LM_STR);
+        snprintf(libGenres[j + 1], LM_STR, "%s", key);
+    }
+}
+
+/* Rebuild libOrder for the current view. Reads the whole table, which is one
+   file per game ONCE -- the old code paid six reads a frame forever. */
+static void libRebuild(void)
+{
+    int i, j;
+
+    if (!libOrder || libCount <= 0) {
+        libViewCount = 0;
+        return;
+    }
+    libMetaAll();
+    libScanGenres();
+    if (libView >= libViewTotal())
+        libView = LV_AZ;
+
+    libViewCount = 0;
+    for (i = 0; i < libCount; i++)
+        if (libViewKeeps(libMetaGet(i)))
+            libOrder[libViewCount++] = i;
+
+    for (i = 1; i < libViewCount; i++) {
+        int key = libOrder[i];
+        for (j = i - 1; j >= 0 && libViewCmp(libOrder[j], key) > 0; j--)
+            libOrder[j + 1] = libOrder[j];
+        libOrder[j + 1] = key;
+    }
+    if (libSel >= libViewCount)
+        libSel = libViewCount > 0 ? libViewCount - 1 : 0;
+    libMetaIdx = -1;
+}
+
 static int libSync(void)
 {
     item_list_t *list = menuGetActiveList();
@@ -1477,6 +1629,7 @@ static int libSync(void)
         libList = list;
         libCount = count;
         libMetaIdx = -1;
+        libRebuild();
         if (libSel >= count)
             libSel = count > 0 ? count - 1 : 0;
     }
@@ -1517,7 +1670,12 @@ static int libSync(void)
         infCoverCache = cacheInitCache(6, "ART", 1, "COVXL", 2);
     }
 
-    return count;
+    /* The VIEW's count, not the library's. Every page that asks how many games
+       there are gets the filtered answer without being told a filter exists --
+       which is the whole reason filtering costs so little here. libAt reads the
+       same permutation, so the grid, the cursor and the count all agree by
+       construction rather than by three separate range checks. */
+    return libViewCount;
 }
 
 /* The selected game's key art, full screen and heavily scrimmed.
@@ -1654,9 +1812,14 @@ static void libDrawAlphabet(int gridX, int total)
     int rows = (total + LIB_COLS - 1) / LIB_COLS;
     int row = (total > 0) ? libSel / LIB_COLS : 0;
     int tgt, d, my, near, i;
+    int labels;
 
     if (total <= 0)
         return;                         /* nothing to be an index of */
+    /* Outside A-Z the letters are a lie -- a grid ordered by score is not
+       indexed by initial. The line and its marker stay, because those report
+       position in the list and that is true in every view. */
+    labels = (libView == LV_AZ);
 
     tgt = (rows > 1) ? LIB_ALPHA_Y0 + row * (LIB_ALPHA_Y1 - LIB_ALPHA_Y0) / (rows - 1)
                      : LIB_ALPHA_Y0;
@@ -1684,7 +1847,7 @@ static void libDrawAlphabet(int gridX, int total)
     for (i = 0; i < LIB_ALPHA_N; i++) {
         u64 col = (i == near) ? LAND_TEXT : LAND_DIM;
         int y = libAlphaY(i);
-        char letter = libAlphaLetter(i);
+        char letter = labels ? libAlphaLetter(i) : 0;
         if (letter) {
             char c[2];
             c[0] = letter;
@@ -1775,10 +1938,13 @@ void shelfRenderLibrary(void)
     }
 
     if (total <= 0) {
+        int empty = (libCount > 0);       /* games exist, this view holds none */
         fntRenderString(FNT_DEFAULT, CONTENT_X, 120, ALIGN_NONE, 0, 0,
-                        "Nothing to show yet.", LAND_TEXT);
+                        empty ? "Nothing in this view." : "Nothing to show yet.",
+                        LAND_TEXT);
         fntRenderString(appsFontSmall, CONTENT_X, 148, ALIGN_NONE, 0, 0,
-                        "This page follows the device the main list is on. Pick one there first.",
+                        empty ? "L1 and R1 change what the grid is showing."
+                              : "This page follows the device the main list is on. Pick one there first.",
                         LAND_MUTE);
     }
 
@@ -1834,6 +2000,15 @@ void shelfRenderLibrary(void)
     {
         int hx = CONTENT_X, w, rx = 605;
         hx += shelfHint(hx, LIB_FTR_TEXT, HINT_OK, "Select");
+        /* L1/R1 drawn as text: they are shoulder buttons and there is no shape
+           in shelfHint that would read as one. The view's own name follows,
+           because a control that cycles is useless without saying where it is. */
+        fntRenderString(appsFontLabel, hx, LIB_FTR_TEXT, ALIGN_NONE, 0, 0,
+                        "L1/R1", LAND_DIM);
+        hx += rmUnscaleX(fntCalcDimensions(appsFontLabel, "L1/R1")) + 8;
+        fntRenderString(appsFontSmall, hx, LIB_FTR_TEXT - 1, ALIGN_NONE, 0, 0,
+                        libViewName(libView), LAND_TEXT);
+        hx += rmUnscaleX(fntCalcDimensions(appsFontSmall, libViewName(libView))) + 18;
         if (total > 0) {
             snprintf(buf, sizeof(buf), "%d of %d", libSel + 1, total);
             w = rmUnscaleX(fntCalcDimensions(appsFontSmall, buf));
@@ -1872,6 +2047,17 @@ void shelfHandleInputLibrary(void)
        rather than the thing you booted into. L3 opens the panel; the panel is
        the whole of the navigation. Details and Settings keep theirs, because
        those you genuinely did arrive at from somewhere. */
+    /* Before the empty check, deliberately: a view matching nothing still has
+       to be escapable, and returning early on total <= 0 would trap you in it. */
+    if (getKeyOn(KEY_L1) || getKeyOn(KEY_R1)) {
+        int n = libViewTotal();
+        libView = (libView + (getKeyOn(KEY_R1) ? 1 : n - 1)) % n;
+        libRebuild();
+        libSel = 0;
+        sfxPlay(SFX_CURSOR);
+        return;
+    }
+
     if (total <= 0)
         return;
 
@@ -1964,8 +2150,8 @@ static void homeFormatTime(char *out, size_t n, int minutes);
 #define INF_COL_X    (CONTENT_X + INF_COV_DW + 16)
 #define INF_COL_W    ((640 - INF_COL_X - 24) / 3)   /* 145 */
 #define INF_HEAD_Y   254
-#define INF_ROW_H    24                   /* label over value, stacked */
-#define INF_COL_ROWS 4
+#define INF_ROW_H    22                   /* label over value, stacked */
+#define INF_COL_ROWS 5
 #define INF_CELL_Y   (INF_HEAD_Y + 20)
 /* The action row sits ON the bottom edge of the attribute grid, so the two
    columns of the page finish level, and the cover sits one INF_PAD above the
@@ -1978,7 +2164,7 @@ static void homeFormatTime(char *out, size_t n, int minutes);
 #define INF_GEAR_W   24                   /* 24 across renders as wide as 32 down */
 #define INF_COV_Y    (INF_BTN_Y - INF_PAD - INF_COV_H)
 #define INF_DESC_Y   (INF_GRID_BOT + INF_PAD)
-#define INF_CELLS    8                    /* attribute cells the two columns hold */
+#define INF_CELLS    10                   /* attribute cells the two columns hold */
 
 static int infIdx = -1;                   /* item-list index being shown */
 static int infBack = GUI_SCREEN_SHELF_LIBRARY;
@@ -2177,9 +2363,12 @@ void shelfRenderInfo(void)
     char buf[160], when[32];
     const char *v = NULL;
     int i, y, days = 0, hh = 0, mm = 0;
-    int total = libSync();
-
-    if (infIdx < 0 || infIdx >= total || !list) {
+    /* libCount, not libSync's view count: infIdx is an ITEM index handed over by
+       whoever opened this page, and a filtered view is shorter than the library
+       it filters. Validating one against the other would bounce you out of the
+       details page the moment a view hid enough games. */
+    libSync();
+    if (infIdx < 0 || infIdx >= libCount || !list) {
         guiSwitchScreen(infBack);
         return;
     }
@@ -2309,6 +2498,12 @@ void shelfRenderInfo(void)
     /* The one line the classic page never had: whether the cheat engine will
        find a widescreen patch for this game on this device. */
     infCell("WIDESCREEN", infWide ? "on device" : "none");
+    /* Where the disc came from. Set as Source=Burn or Source=Shared in the CFG;
+       absent means unrecorded, and an unrecorded provenance is better left
+       blank than guessed at, so infCell drops the row entirely. */
+    if (minf)
+        infCell("SOURCE", minf->source == 1 ? "Disc burn"
+                        : minf->source == 2 ? "Shared" : "");
 
     fntRenderString(appsFontHead, INF_COL_X, INF_HEAD_Y, ALIGN_NONE, 0, 0,
                     "DETAILS", LAND_DIM);
