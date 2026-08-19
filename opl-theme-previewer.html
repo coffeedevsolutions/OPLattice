@@ -2337,7 +2337,8 @@ function libSections() {
   if (S.libSort === "Metacritic")
     return [100,90,80,70,60,50,40,30,20,10,0].map(String);
   if (S.libSort === "Category")
-    return ["ACT","ADV","FGT","H&S","OPW","PLT","RPG","RAC","SHT","SIM","SPT","STL","--"];
+    return ["Action","Adventure","Fighting","Hack & Slash","Open World",
+            "Platformer","RPG","Racing","Shooter","Simulation","Sports","Stealth"];
   return [0,1,2,3,4,5,6,7,8].map(i => String.fromCharCode(65 + Math.floor(i * 25 / 8)));
 }
 const libAlphaY = i =>
@@ -2356,7 +2357,10 @@ function libDrawAlphabetPv(gridX, total, sel, cols) {
                       : LIBP.ALPHA_Y0;
 
   const R = (x, y, w, h, c) => { ctx.fillStyle = rgbHex(c); ctx.fillRect(x, y, w, h); };
-  R(lx + 3, LIBP.ALPHA_Y0, 1, span + 8, 0x726756);
+  // The ruler line belongs to the two scales. The wheel has no scale to rule --
+  // libDrawAlphabet hands off to libDrawWheel before this line in shelf.c.
+  if (S.libSort !== "Category")
+    R(lx + 3, LIBP.ALPHA_Y0, 1, span + 8, 0x726756);
   let near = Math.round((my - LIBP.ALPHA_Y0) * (LIBP.ALPHA_N - 1) / span);
   near = Math.max(0, Math.min(LIBP.ALPHA_N - 1, near));
   // A D G J M P S V Z -- every third, with the count spread across the span so
@@ -2369,6 +2373,23 @@ function libDrawAlphabetPv(gridX, total, sel, cols) {
   // than being removed, or the spacing would lie about where 70 sits.
   const secs = libSections();
   const lit = Math.round(near * (secs.length - 1) / Math.max(LIBP.ALPHA_N - 1, 1));
+  if (S.libSort === "Category") {
+    // A wheel, not a ruler. Named discrete groups cannot be evenly spaced down
+    // a fixed scale without either clipping at the bottom or shrinking to codes
+    // nobody can read; centring the current one solves both. Right-aligned
+    // against the grid, growing left into a gutter that is 108px wide.
+    const mid = (LIBP.ALPHA_Y0 + LIBP.ALPHA_Y1) / 2, rx = gridX - 12;
+    useFont(SHELF_FNT_LBL);
+    for (let i = -3; i <= 3; i++) {
+      const k = lit + i, d = Math.abs(i);
+      if (k < 0 || k >= secs.length) continue;
+      const col = d === 0 ? 0x3A2E22 : d === 1 ? 0x6B604F : d === 2 ? 0x8A806C : 0xAA9F89;
+      shelfText(rx - textWidth(secs[k], SHELF_FNT_LBL), mid + i * 21 - 4,
+                secs[k], col, SHELF_FNT_LBL);
+    }
+    R(rx + 5, mid - 1, 4, 2, 0x3A2E22);
+    return;
+  }
   for (let i = 0; i < secs.length; i++) {
     const y = LIBP.ALPHA_Y0 + i * (LIBP.ALPHA_Y1 - LIBP.ALPHA_Y0) /
               Math.max(secs.length - 1, 1);

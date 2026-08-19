@@ -88,6 +88,12 @@ int gEnableShelfUI;
 #define SHELF_OK    (gSelectButton)
 #define SHELF_BACK  (gSelectButton == KEY_CIRCLE ? KEY_CROSS : KEY_CIRCLE)
 #define SHELF_ALT   (KEY_SQUARE)
+/* Favourite is TRIANGLE, and it needs its own name because SHELF_ALT is square
+   and the details footer draws a triangle. The handler listened for SHELF_ALT
+   while the footer promised the other button, so the mark was correct, the
+   write was correct, and nothing happened when you pressed what it told you
+   to. */
+#define SHELF_FAV   (KEY_TRIANGLE)
 
 /* Hint kinds are meanings, not shapes. shelfHint picks the glyph. */
 #define HINT_OK    0
@@ -1432,7 +1438,11 @@ enum { FILT_ALL = 0, FILT_FAV, FILT_PLAYED, FILT_UNPLAYED, FILT_N };
 
 #define LIB_GENRE_MAX 16
 #define LIB_SECT_MAX  20
-#define LIB_SECT_LBL  5             /* the bar is 20px wide: three glyphs fit */
+/* Long enough for the longest name in GENRES.md. The three-letter codes were
+   sized against a gutter I had measured wrong: pitchX is rmWideScale(88) = 66,
+   so the grid is 396 wide and sits at 136, leaving 108 pixels between it and
+   the rail. "Hack & Slash" needs 65. There was room the whole time. */
+#define LIB_SECT_LBL  20
 
 static char libGenres[LIB_GENRE_MAX][LM_STR];
 static int libGenreN;
@@ -1556,29 +1566,26 @@ static int libSectOf(int idx)
    to fit. The full name goes in the footer, where there is room for it. */
 static void libBuildSections(void)
 {
-    static const char *ABBR[] = {
-        "Action", "ACT", "Adventure", "ADV", "Fighting", "FGT",
-        "Hack & Slash", "H&S", "Horror", "HOR", "Music", "MUS",
-        "Open World", "OPW", "Platformer", "PLT", "Puzzle", "PUZ",
-        "RPG", "RPG", "Racing", "RAC", "Shooter", "SHT",
-        "Simulation", "SIM", "Sports", "SPT", "Stealth", "STL",
-        "Strategy", "STR", NULL
-    };
-    int i, k;
+    int i;
 
     libSectN = 0;
     if (libSort == SORT_SCORE) {
         for (i = 0; i <= 10 && libSectN < LIB_SECT_MAX; i++)
             snprintf(libSectLabel[libSectN++], LIB_SECT_LBL, "%d", 100 - i * 10);
     } else if (libSort == SORT_CAT) {
-        for (i = 0; i < libGenreN && libSectN < LIB_SECT_MAX; i++) {
-            const char *ab = libGenres[i];
-            for (k = 0; ABBR[k]; k += 2)
-                if (!strcmp(ABBR[k], libGenres[i])) { ab = ABBR[k + 1]; break; }
-            snprintf(libSectLabel[libSectN++], LIB_SECT_LBL, "%s", ab);
+        for (i = 0; i < libGenreN && libSectN < LIB_SECT_MAX; i++)
+            snprintf(libSectLabel[libSectN++], LIB_SECT_LBL, "%s", libGenres[i]);
+        /* Only when something is actually untagged. An "Untagged" row that
+           never holds anything is a section you can never reach and, at the
+           bottom of a fixed scale, the one that clipped off the screen. */
+        for (i = 0; i < libCount; i++) {
+            lib_meta_t *m = libMetaGet(i);
+            if (m && (m->loaded != 1 || !m->genre[0])) {
+                if (libSectN < LIB_SECT_MAX)
+                    snprintf(libSectLabel[libSectN++], LIB_SECT_LBL, "Untagged");
+                break;
+            }
         }
-        if (libSectN < LIB_SECT_MAX)
-            snprintf(libSectLabel[libSectN++], LIB_SECT_LBL, "--");
     } else {
         for (i = 0; i < 9 && libSectN < LIB_SECT_MAX; i++) {
             libSectLabel[libSectN][0] = (char)('A' + i * 25 / 8);
@@ -1906,14 +1913,49 @@ static int libAlphaY(int i)
 
 /* The index down the left of the grid.
  *
- * It was the alphabet and is now whatever the ordering indexes: letters for
- * A-Z, 100 down to 0 for Metacritic, three-letter category codes for Category.
- * The marker is a scroll position and stays true in all three, which is why it
- * survived when the letters stopped being meaningful outside A-Z.
+ * Two shapes, because there are two kinds of thing being indexed. A-Z and
+ * Metacritic are continuous scales -- a ruler, fixed, with a marker sliding
+ * along it to report scroll position. Categories are named discrete groups,
+ * which a ruler cannot present: thirteen words evenly spaced either clip at the
+ * bottom or shrink to codes nobody can read.
  *
- * Sections holding nothing are drawn faint rather than hidden. A score band with
- * no games in it is still part of the scale, and removing it would make the
- * spacing lie about where 70 sits. */
+ * So categories get a wheel. The current one sits in the middle at full ink and
+ * its neighbours fade away above and below, which means only a window is ever
+ * drawn -- nothing can fall off the end -- and the name has the whole gutter to
+ * itself. Right-aligned against the grid, so the column stays visually attached
+ * to the thing it indexes while growing leftward into the 108 pixels that were
+ * there all along.
+ */
+#define LIB_WHEEL_PITCH 21
+#define LIB_WHEEL_SIDE  3               /* rows drawn either side of centre */
+
+static void libDrawWheel(int gridX)
+{
+    int mid = (LIB_ALPHA_Y0 + LIB_ALPHA_Y1) / 2;
+    int here = (libViewCount > 0) ? libSectOf(libOrder[libSel]) : 0;
+    int rx = gridX - 12;                /* names END here and grow left */
+    int i;
+
+    for (i = -LIB_WHEEL_SIDE; i <= LIB_WHEEL_SIDE; i++) {
+        int k = here + i, d = i < 0 ? -i : i;
+        u64 col;
+        if (k < 0 || k >= libSectN)
+            continue;
+        /* Ink for the one you are on, and falling away from it. The empty ones
+           stay legible enough to read as destinations you could reach. */
+        col = (d == 0) ? LAND_TEXT
+            : (d == 1) ? LAND_MUTE
+            : (d == 2) ? LAND_DIM : LAND_FAINT;
+        if (d && libSectStart[k] < 0)
+            col = LAND_FAINT;
+        fntRenderString(appsFontLabel, rx, mid + i * LIB_WHEEL_PITCH - 4,
+                        ALIGN_RIGHT, 0, 0, libSectLabel[k], col);
+    }
+    /* The mark on the centred row, so the eye has something to sit on that is
+       not the text itself. */
+    rmDrawRect(rx + 5, mid - 1, 4, 2, LAND_INK);
+}
+
 static void libDrawAlphabet(int gridX, int total)
 {
     int ax = gridX - LIB_ALPHA_DX;
@@ -1924,6 +1966,10 @@ static void libDrawAlphabet(int gridX, int total)
 
     if (total <= 0 || libSectN <= 0)
         return;
+    if (libSort == SORT_CAT) {
+        libDrawWheel(gridX);
+        return;
+    }
 
     tgt = (rows > 1) ? LIB_ALPHA_Y0 + row * (LIB_ALPHA_Y1 - LIB_ALPHA_Y0) / (rows - 1)
                      : LIB_ALPHA_Y0;
@@ -1939,8 +1985,6 @@ static void libDrawAlphabet(int gridX, int total)
 
     rmDrawRect(lx + 3, LIB_ALPHA_Y0, 1, LIB_ALPHA_Y1 - LIB_ALPHA_Y0 + 8, LAND_RULE);
 
-    /* Lit by which section the CURSOR is in, not by which label the marker is
-       nearest. The marker eases and the highlight should not lag behind it. */
     here = libSectOf(libOrder[libSel]);
     for (i = 0; i < libSectN; i++) {
         u64 col = (i == here) ? LAND_TEXT
@@ -2096,6 +2140,12 @@ void shelfRenderLibrary(void)
         /* Ordering under its own mark, then the filter under L1/R1. A control
            that cycles is useless without saying where it currently is. */
         hx += shelfHint(hx, LIB_FTR_TEXT, HINT_ALT, libSortName());
+        /* L2/R2 only means something when the bar has sections to step. */
+        if (libSectN > 1) {
+            fntRenderString(appsFontLabel, hx, LIB_FTR_TEXT, ALIGN_NONE, 0, 0,
+                            "L2/R2", LAND_MUTE);
+            hx += rmUnscaleX(fntCalcDimensions(appsFontLabel, "L2/R2")) + 18;
+        }
         fntRenderString(appsFontLabel, hx, LIB_FTR_TEXT, ALIGN_NONE, 0, 0,
                         "L1/R1", LAND_MUTE);
         hx += rmUnscaleX(fntCalcDimensions(appsFontLabel, "L1/R1")) + 8;
@@ -2721,7 +2771,7 @@ void shelfHandleInputInfo(void)
     if (shelfTrigger(0))
         return;
 
-    if (getKeyOn(SHELF_ALT)) {
+    if (getKeyOn(SHELF_FAV)) {
         infToggleFavorite();
         return;
     }
