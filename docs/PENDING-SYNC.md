@@ -50,3 +50,21 @@ Set `COPYFILE_DISABLE=1` first. macOS otherwise writes AppleDouble sidecars
 BDM Start Mode -> Auto; BDM HDD -> On; Enable PS2RD Cheat Engine -> On;
 Cheat Engine Mode -> Auto-select (Settings -> Cheat Settings, the new global entry,
 then Save Changes).
+
+
+## Queued for the next mount (2026-08-18)
+
+- `APPS/OPNPS2LD.ELF` -- 1,386,468 bytes, to both volumes and `APPS/OPL/` on the card.
+  Carries: the footer reaching the bottom row, COVXL on the details page, the
+  cheat message fix, Select-opens-details on the Library, and Settings returning
+  to the page that opened it.
+- `ART/*_COVXL.png` -- 46 covers at 216x432, HDD only (art is device-local).
+- `THM/thm_GridHard/` -- both volumes. The theme lost 19 images and 418 lines of
+  element definitions; `conf_theme.cfg` is 97 lines and the folder is 332K, down
+  from 5.6M. Delete the removed PNGs on the device rather than only copying the
+  new ones, or the old files stay and the RAM is not actually freed.
+    removed: backdrop banner botbar topbar infoband tile screen hero fade
+             cap_l cap_r left right playbtn circle cross square triangle
+             start select
+    kept:    conf_theme.cfg, the four TTFs, the two OFL licences,
+             pslogo.png, settings.png
