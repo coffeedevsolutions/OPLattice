@@ -93,6 +93,7 @@ int gEnableShelfUI;
 #define HINT_OK    0
 #define HINT_BACK  1
 #define HINT_ALT   2
+#define HINT_FAV   3      /* triangle */
 
 static enum ShelfState state;
 /* Resolved once per frame by shelfSyncFonts: a theme face when the theme supplies
@@ -270,30 +271,55 @@ static void shelfGradV(int x, int y, int w, int h, int a0, int a1, u64 rgb)
  * Reloaded when the theme changes, and asked for exactly once per theme: a
  * missing file sets state to -1 and is never retried, because retrying a failed
  * open every frame is how the font loader used to stall the renderer. */
-static GSTEXTURE psLogo;
-static int psLogoState;          /* 0 untried, 1 loaded, -1 absent */
-static int psLogoTheme = -1;
+/* The marks the shell takes from the theme folder.
+ *
+ * All of them share one contract: white with the shape as its alpha, so the
+ * mark is tinted at draw time and follows the sheet's ink instead of baking a
+ * colour in; asked for exactly once per theme; and never retried after a
+ * failure, because retrying a failed open every frame is how the font loader
+ * used to stall the renderer.
+ *
+ * A table rather than a function each. There were two of these, and adding the
+ * star would have made three copies of the same twenty lines. */
+enum { MARK_PSLOGO, MARK_SETTINGS, MARK_STAR, MARK_STAR_OFF, MARK_COUNT };
 
-static GSTEXTURE *shelfLogo(void)
+static struct shelf_mark {
+    const char *file;
+    GSTEXTURE tex;
+    int state;                 /* 0 untried, 1 loaded, -1 absent */
+    int theme;
+} shelfMarks[MARK_COUNT] = {
+    {"pslogo",   {0}, 0, -1},
+    {"settings", {0}, 0, -1},
+    {"star-on",  {0}, 0, -1},
+    {"star-off", {0}, 0, -1},
+};
+
+static GSTEXTURE *shelfMark(int id)
 {
-    int themeId = thmGetGuiValue();
+    struct shelf_mark *m;
+    int themeId;
 
-    if (themeId != psLogoTheme) {
-        psLogoTheme = themeId;
-        psLogoState = 0;
+    if (id < 0 || id >= MARK_COUNT)
+        return NULL;
+    m = &shelfMarks[id];
+    themeId = thmGetGuiValue();
+    if (themeId != m->theme) {
+        m->theme = themeId;
+        m->state = 0;
     }
-    if (psLogoState == 0) {
+    if (m->state == 0) {
         char path[192];
         char *dir = thmGetFilePath(themeId);
 
-        psLogoState = -1;
+        m->state = -1;
         if (dir) {
-            snprintf(path, sizeof(path), "%spslogo", dir);
-            if (texDiscoverLoad(&psLogo, path, -1) == 0)
-                psLogoState = 1;
+            snprintf(path, sizeof(path), "%s%s", dir, m->file);
+            if (texDiscoverLoad(&m->tex, path, -1) == 0)
+                m->state = 1;
         }
     }
-    return (psLogoState == 1) ? &psLogo : NULL;
+    return (m->state == 1) ? &m->tex : NULL;
 }
 
 static void shelfDrawRail(int active)
@@ -317,7 +343,7 @@ static void shelfDrawRail(int active)
     rmDrawRect(SHELF_RAIL_W, 0, 1, 480, LAND_RULE);
 
     {
-        GSTEXTURE *logo = shelfLogo();
+        GSTEXTURE *logo = shelfMark(MARK_PSLOGO);
         if (logo)
             rmDrawPixmap(logo, (SHELF_RAIL_W - 18) / 2, 12, ALIGN_NONE, 24, 24,
                          SCALING_RATIO, LAND_INK);
@@ -678,15 +704,26 @@ static int shelfHint(int x, int y, int kind, const char *label)
        rounding i * 6 / 8 puts both half-steps in the same direction and the X
        comes out lopsided. This one mirrors exactly about the centre row. */
     static const unsigned char cross[9] = {0, 1, 2, 2, 3, 4, 4, 5, 6};
+    /* Half-width per scanline of the triangle, apex at the top. Tabulated for
+       the same reason the cross is: computing it rounds both sides of a row in
+       the same direction and the shape leans. */
+    static const unsigned char tri[9] = {0, 1, 1, 2, 2, 3, 3, 3, 3};
     const u64 col = LAND_INK;
     int cy = y + 4;          /* centre of the 9px label's glyph box */
     int i, w;
     /* Meaning to shape. Confirm draws whichever button actually confirms, so the
        footer cannot disagree with the input handler about which one to press. */
-    int shape = (kind == HINT_ALT) ? 2
+    int shape = (kind == HINT_FAV) ? 3
+              : (kind == HINT_ALT) ? 2
               : (kind == HINT_OK) == (gSelectButton == KEY_CROSS) ? 0 : 1;
 
-    if (shape == 2) {        /* square */
+    if (shape == 3) {        /* triangle */
+        for (i = 0; i < 8; i++) {
+            rmDrawRect(x + 3 - tri[i], cy - 4 + i, 1, 1, col);
+            rmDrawRect(x + 3 + tri[i], cy - 4 + i, 1, 1, col);
+        }
+        rmDrawRect(x, cy + 4, 7, 1, col);
+    } else if (shape == 2) { /* square */
         rmDrawRect(x, cy - 4, 7, 1, col);
         rmDrawRect(x, cy + 4, 7, 1, col);
         rmDrawRect(x, cy - 4, 1, 9, col);
@@ -1948,6 +1985,13 @@ static int infBack = GUI_SCREEN_SHELF_LIBRARY;
 static int infRail;                       /* which rail icon stays lit */
 static int infWide = -1;                  /* -1 unknown, 0 no patch, 1 patch */
 static int infBtn;                        /* 0 Play, 1 Settings */
+/* Frames left in the favourite bump. Counted down in the render, because the
+   input handler does not run during a screen transition and an animation that
+   only advances on input would freeze halfway. */
+#define INF_STAR_FRAMES 14
+#define INF_STAR_W      18                /* 18 across renders as wide as 24 down */
+#define INF_STAR_H      24
+static int infStarPulse;
 
 /* The attribute cells, gathered before they are placed. Values are copied
    rather than pointed at: configGetStr hands back a pointer into the config
@@ -1987,6 +2031,41 @@ static void infCheckWidescreen(void)
     }
 }
 
+/* Turn the favourite on or off, on the device.
+ *
+ * There ARE writes: oplStatsOnLaunch already rewrites this same file on every
+ * launch to keep PlayCount and LastPlayed, and configWrite preserves every key
+ * it parsed except empty ones and ones starting with '#'. So a plain Favorite=1
+ * survives, and the table is updated in step so the star flips this frame
+ * rather than on the next device rescan.
+ *
+ * gEnableWrite is OPL's own "may I touch the user's device" switch. With it off
+ * the star still toggles for the session but nothing is written, which is the
+ * honest behaviour -- silently doing nothing would be worse, and silently
+ * writing anyway would ignore the setting. */
+static void infToggleFavorite(void)
+{
+    item_list_t *list = menuGetActiveList();
+    lib_meta_t *m = libMetaGet(infIdx);
+    config_set_t *cfg;
+
+    if (!m || m->loaded != 1)
+        return;
+    m->favorite = !m->favorite;
+    if (m->favorite)
+        infStarPulse = INF_STAR_FRAMES;
+    sfxPlay(m->favorite ? SFX_CONFIRM : SFX_CANCEL);
+
+    if (!gEnableWrite || !list || !list->itemGetConfig)
+        return;
+    cfg = list->itemGetConfig(list, infIdx);
+    if (!cfg)
+        return;
+    configSetInt(cfg, "Favorite", m->favorite);
+    configWrite(cfg);
+    configFree(cfg);
+}
+
 void shelfInfoOpen(int idx, int back)
 {
     infIdx = idx;
@@ -1994,6 +2073,7 @@ void shelfInfoOpen(int idx, int back)
     infRail = (guiShelfPageIndex() >= 0) ? guiShelfPageIndex() : 1;
     infWide = -1;
     infBtn = 0;
+    infStarPulse = 0;
     libMetaIdx = -1;                      /* force a re-read for this item */
 }
 
@@ -2040,31 +2120,6 @@ static void infDrawCell(int x, int y, const char *label, const char *value)
  * deliberately: pslogo is flat shapes and holds up texel for texel, while a cog
  * is curves and 18 texels across cannot describe one. Drawing declared 24 by 24
  * with SCALING_RATIO puts it in an 18-wide rect that displays square. */
-static GSTEXTURE gearIcon;
-static int gearState;            /* 0 untried, 1 loaded, -1 absent */
-static int gearTheme = -1;
-
-static GSTEXTURE *shelfGearIcon(void)
-{
-    int themeId = thmGetGuiValue();
-
-    if (themeId != gearTheme) {
-        gearTheme = themeId;
-        gearState = 0;
-    }
-    if (gearState == 0) {
-        char path[192];
-        char *dir = thmGetFilePath(themeId);
-
-        gearState = -1;
-        if (dir) {
-            snprintf(path, sizeof(path), "%ssettings", dir);
-            if (texDiscoverLoad(&gearIcon, path, -1) == 0)
-                gearState = 1;
-        }
-    }
-    return (gearState == 1) ? &gearIcon : NULL;
-}
 
 /* Kept as the fallback for a theme that ships no settings icon, so the button is
    never an empty box. */
@@ -2189,6 +2244,36 @@ void shelfRenderInfo(void)
         if (v)
             fntRenderString(FNT_DEFAULT, INF_COL_X, INF_HERO_H - 58, ALIGN_NONE,
                             640 - 24 - 100 - INF_COL_X - 12, 0, v, lit);
+        /* The star sits after the title, in one place for both states so the
+           two files read as one control being switched rather than as two marks
+           swapping around. fntCalcDimensions is PHYSICAL and this layout is
+           VIRTUAL, which is why the width goes through rmUnscaleX -- measuring
+           in one space and placing in the other is an error proportional to the
+           length of the string, so it hides on short titles. */
+        {
+            GSTEXTURE *st = shelfMark(minf && minf->favorite ? MARK_STAR
+                                                            : MARK_STAR_OFF);
+            int w = v ? rmUnscaleX(fntCalcDimensions(FNT_DEFAULT, v)) : 0;
+            int sx = INF_COL_X + w + 12, sy = INF_HERO_H - 60;
+            int cap = 640 - 24 - 100 - INF_STAR_W - 8;
+
+            if (sx > cap)
+                sx = cap;
+            if (st) {
+                /* A brief swell on favouriting, easing back. Grown about its own
+                   centre so the star does not appear to jump left as it scales. */
+                int g = 0;
+                if (infStarPulse > 0) {
+                    int t = infStarPulse > INF_STAR_FRAMES / 2
+                            ? INF_STAR_FRAMES - infStarPulse : infStarPulse;
+                    g = t * 10 / (INF_STAR_FRAMES / 2);   /* 0..10 extra pixels */
+                    infStarPulse--;
+                }
+                rmDrawPixmap(st, sx - g * 2 / 3, sy - g / 2, ALIGN_NONE,
+                             (INF_STAR_W + g) * 4 / 3, INF_STAR_H + g,
+                             SCALING_RATIO, lit);
+            }
+        }
         if (list->itemGetStartup) {
             char *st = list->itemGetStartup(list, infIdx);
             if (st)
@@ -2295,7 +2380,7 @@ void shelfRenderInfo(void)
                         INF_BTN_Y + 11, ALIGN_HCENTER, 0, 0, "Play", ink);
         ink = infDrawButton(gx, INF_GEAR_W, infBtn == 1);
         {
-            GSTEXTURE *ico = shelfGearIcon();
+            GSTEXTURE *ico = shelfMark(MARK_SETTINGS);
             if (ico)
                 rmDrawPixmap(ico, gx + 3, INF_BTN_Y + 4, ALIGN_NONE, 24, 24,
                              SCALING_RATIO, ink);
@@ -2315,7 +2400,9 @@ void shelfRenderInfo(void)
     {
         int hx = CONTENT_X;
         hx += shelfHint(hx, LIB_FTR_TEXT, HINT_OK, "Select");
-        shelfHint(hx, LIB_FTR_TEXT, HINT_BACK, "Back");
+        hx += shelfHint(hx, LIB_FTR_TEXT, HINT_BACK, "Back");
+        shelfHint(hx, LIB_FTR_TEXT, HINT_FAV,
+                  (minf && minf->favorite) ? "Unfavourite" : "Favourite");
     }
 
     shelfDrawRail(infRail);
@@ -2334,6 +2421,10 @@ void shelfHandleInputInfo(void)
     if (shelfTrigger(0))
         return;
 
+    if (getKeyOn(SHELF_ALT)) {
+        infToggleFavorite();
+        return;
+    }
     if ((getKeyOn(KEY_UP) || getKeyOn(KEY_LEFT)) && infBtn > 0)
         infBtn--;
     else if ((getKeyOn(KEY_DOWN) || getKeyOn(KEY_RIGHT)) && infBtn < 1)

@@ -2453,9 +2453,16 @@ function shelfHintPv(x, y, kind, label) {
   // it only looks right in a browser because the browser substitutes.
   const ring = [[2,3],[1,1],[0,1],[0,1],[0,1],[0,1],[0,1],[1,1],[2,3]];
   const cross = [0,1,2,2,3,4,4,5,6];
+  const tri = [0,1,1,2,2,3,3,3,3];      // half-width per row, apex at the top
   const cy = y + 4;
   ctx.fillStyle = rgbHex(0x3A2E22);
-  if (kind === "square") {
+  if (kind === "triangle") {
+    for (let i = 0; i < 8; i++) {
+      ctx.fillRect(x + 3 - tri[i], cy - 4 + i, 1, 1);
+      ctx.fillRect(x + 3 + tri[i], cy - 4 + i, 1, 1);
+    }
+    ctx.fillRect(x, cy + 4, 7, 1);
+  } else if (kind === "square") {
     ctx.fillRect(x, cy - 4, 7, 1); ctx.fillRect(x, cy + 4, 7, 1);
     ctx.fillRect(x, cy - 4, 1, 9); ctx.fillRect(x + 6, cy - 4, 1, 9);
   } else if (kind === "cross") {
@@ -2863,11 +2870,38 @@ const GEAR_TOOTH = [[15,10,4,3],[13,18,3,3],[8,21,3,4],[2,18,3,3],
   [0,11,4,3],[2,3,3,3],[7,0,3,4],[13,3,3,3]];
 let infBtn = 0;                        // 0 Play, 1 Game Settings
 
-(function loadGearIcon() {
-  const i = new Image();
-  i.onload = () => { S.gearIcon = i; render(); };
-  i.src = "themes/thm_GridHard/settings.png";
+/* Tint a white-with-alpha mark, the way rmDrawPixmap does on the GS: the
+   texture's colour is multiplied by the vertex colour, so only the mark itself
+   takes the ink. "source-atop" on the main canvas cannot express that -- it
+   keeps the new paint wherever the EXISTING canvas is opaque, so over the hero
+   art it floods the whole rect. This composites in isolation, where the only
+   existing content is the mark. Cached per image+colour; there are four. */
+const _tintCache = new Map();
+function tintedMark(img, colour) {
+  if (!img || !img.complete || !img.naturalWidth) return null;
+  const key = img.src + ":" + colour;
+  let c = _tintCache.get(key);
+  if (!c) {
+    c = document.createElement("canvas");
+    c.width = img.naturalWidth; c.height = img.naturalHeight;
+    const x = c.getContext("2d");
+    x.drawImage(img, 0, 0);
+    x.globalCompositeOperation = "source-in";
+    x.fillStyle = rgbHex(colour);
+    x.fillRect(0, 0, c.width, c.height);
+    _tintCache.set(key, c);
+  }
+  return c;
+}
+
+(function loadMarks() {
+  for (const [k, f] of [["gearIcon","settings"],["starOn","star-on"],["starOff","star-off"]]) {
+    const i = new Image();
+    i.onload = () => { S[k] = i; render(); };
+    i.src = "themes/thm_GridHard/" + f + ".png";
+  }
 })();
+let infFav = false, infStarPulse = 0;
 
 function renderShelfInfo() {
   const games = gameList();
@@ -2899,6 +2933,22 @@ function renderShelfInfo() {
   if (cov) ctx.drawImage(cov, CONTENT_X, INF_COV_Y, INFP.COV_DW, INFP.COV_H);
   else R(CONTENT_X, INF_COV_Y, INFP.COV_DW, INFP.COV_H, 0xAA9F89);
   shelfText(INF_COL_X, INFP.HERO_H - 58, g.title || "—", 0xE8E2D2, SHELF_FNT);
+  {                                    // the star, in one place for both states
+    const st = infFav ? S.starOn : S.starOff;
+    useFont(SHELF_FNT);
+    const tw = textWidth(g.title || "—", SHELF_FNT);
+    let sx = Math.min(INF_COL_X + tw + 12, SCREEN_W - 24 - 75 - 18 - 8);
+    const sy = INFP.HERO_H - 60;
+    const tinted = tintedMark(st, 0xE8E2D2);
+    if (tinted) {
+      let gr = 0;
+      if (infStarPulse > 0) {
+        const t = infStarPulse > 7 ? 14 - infStarPulse : infStarPulse;
+        gr = t * 10 / 7; infStarPulse--;
+      }
+      ctx.drawImage(tinted, sx - gr * 2 / 3, sy - gr / 2, 18 + gr, 24 + gr);
+    }
+  }
   shelfText(INF_COL_X, INFP.HERO_H - 28, g.serial || "", 0xE8E2D2, SHELF_FNT_LBL);
 
   const cell = (x, y, label, value) => {
@@ -2961,15 +3011,9 @@ function renderShelfInfo() {
     const w = textWidth("Play", SHELF_FNT_SM);
     shelfText(CONTENT_X + pw / 2 - w / 2, INF_BTN_Y + 11, "Play", ink, SHELF_FNT_SM);
     ink = button(gx, INFP.GEAR_W, infBtn === 1);
-    const ico = S.gearIcon;
-    if (ico && ico.complete && ico.naturalWidth) {
-      ctx.save();                        // white-with-alpha, tinted at draw time
-      ctx.drawImage(ico, gx + 3, INF_BTN_Y + 4, 18, 24);
-      ctx.globalCompositeOperation = "source-atop";
-      ctx.fillStyle = rgbHex(ink);
-      ctx.fillRect(gx + 3, INF_BTN_Y + 4, 18, 24);
-      ctx.restore();
-    } else gear(gx + 3, INF_BTN_Y + 4, ink, infBtn === 1 ? 0x3A2E22 : 0xC9BFA6);
+    const ico = tintedMark(S.gearIcon, ink);
+    if (ico) ctx.drawImage(ico, gx + 3, INF_BTN_Y + 4, 18, 24);
+    else gear(gx + 3, INF_BTN_Y + 4, ink, infBtn === 1 ? 0x3A2E22 : 0xC9BFA6);
   }
 
   // description, full width
@@ -2995,7 +3039,8 @@ function renderShelfInfo() {
   {
     let hx = CONTENT_X;
     hx += shelfHintPv(hx, LIBP.FTR_TEXT, "circle", "Select");
-    shelfHintPv(hx, LIBP.FTR_TEXT, "cross", "Back");
+    hx += shelfHintPv(hx, LIBP.FTR_TEXT, "cross", "Back");
+    shelfHintPv(hx, LIBP.FTR_TEXT, "triangle", infFav ? "Unfavourite" : "Favourite");
   }
 
   shelfRailPv(1);
