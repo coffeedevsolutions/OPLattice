@@ -9,6 +9,8 @@ Replicates, exactly:
   atlas.c    allocPlace(): guillotine split, wider piece made longer
   gsKit      texture_size(): 256-byte blocks, block counts rounded 4x8
 """
+import os
+
 import freetype
 
 ATLAS, AMAX = 256, 4
@@ -78,11 +80,15 @@ def atlases_for(path, size, chars, variation=None):
 
 
 ASCII = "".join(chr(c) for c in range(32, 127))
-D = "/Users/blake/Downloads/"
+
+# Candidate faces to compare. The OPL font is read from this repository, so the
+# reference point is fixed; the rest are downloads. Point FONT_DIR at wherever
+# yours live -- these are Google Fonts archives, unpacked as they ship.
+REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+D = os.path.join(os.environ.get("FONT_DIR", os.path.expanduser("~/Downloads")), "")
 FONTS = {
     "PoeVeticaNew (embedded, today)":
-        ("/private/tmp/claude-501/-Users-blake-Desktop-Desktop-PS-Custom/"
-         "aa61462e-7075-4313-971a-662f708ad163/scratchpad/build06/thirdparty/PoeVeticaNew.ttf", None),
+        (os.path.join(REPO, "assets", "PoeVeticaNew.ttf"), None),
     "SUSEMono-Regular (static)": (D + "SUSE_Mono/static/SUSEMono-Regular.ttf", None),
     "SUSEMono variable (DEFAULT = Thin)": (D + "SUSE_Mono/SUSEMono-VariableFont_wght.ttf", None),
     "Asimovian-Regular": (D + "Asimovian/Asimovian-Regular.ttf", None),
