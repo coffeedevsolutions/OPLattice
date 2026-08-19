@@ -1149,25 +1149,6 @@ static char libMetaB[96];    /* #Media, #Format, Rating, #Size     */
 static char libMetaDesc[256];
 static char libMetaName[128];
 
-/* Join present values with the theme's separator, skipping absent ones so they
-   take their bullet with them -- the same rule AttributeList follows, because
-   this is meant to read as the same page. */
-static void libJoin(char *out, size_t n, config_set_t *cfg, const char **keys, int count)
-{
-    int i, used = 0;
-    out[0] = '\0';
-    for (i = 0; i < count; i++) {
-        const char *v = NULL;
-        if (!configGetStr(cfg, keys[i], &v) || !v || !*v)
-            continue;
-        if (!strcmp(keys[i], CONFIG_ITEM_SIZE))
-            used += snprintf(out + used, n - used, used ? "  \xc2\xb7  %s MiB" : "%s MiB", v);
-        else
-            used += snprintf(out + used, n - used, used ? "  \xc2\xb7  %s" : "%s", v);
-        if (used >= (int)n)
-            break;
-    }
-}
 
 /* Exactly the fields the theme's info page carries, read once per selection --
    itemGetConfig reads the game's CFG off the device, so per frame would be a
@@ -1179,30 +1160,174 @@ static int libAt(int pos)
     return (libOrder && pos >= 0 && pos < libCount) ? libOrder[pos] : pos;
 }
 
+
+/* ------------------------------------------------- the per-game metadata table
+ *
+ * Every field the shell shows about a game used to come from itemGetConfig, and
+ * itemGetConfig is not an accessor. It runs sbPopulateConfig, which allocates a
+ * config_set_t, opens the game's CFG on the device, reads it, and parses it into
+ * a linked list -- and hands back a pointer that nothing frees. There is no
+ * configFree anywhere on the BDM path.
+ *
+ * Home called it SIX times a frame: once for the hero and once for each of the
+ * five tiles. At sixty frames a second that is around 960 KB/s of leaked heap
+ * and about 360 file reads a second off a spinning disk, on the screen the
+ * console boots into. Thirty-two megabytes goes in roughly thirty-five seconds
+ * of rendering, which is what "it crashes after a minute on the home page" was.
+ * The details page leaked one a frame on top of that.
+ *
+ * So: read each game once, keep what is actually displayed, and free the config
+ * immediately. Everything downstream reads this table and touches no file.
+ *
+ * It is also what makes sorting and filtering possible at all. Ordering 250
+ * games by Metacritic or by playtime means comparing every game against every
+ * other, and that cannot be built on a call that costs a disk read.
+ *
+ * Entries load on demand -- browsing stays as cheap as it was -- and libMetaAll
+ * forces the rest in when a mode needs the whole set to order it. */
+#define LM_STR   26                       /* a cell clips at 25 glyphs anyway */
+
+typedef struct {
+    char loaded;                          /* 0 unread, 1 read, -1 no config */
+    char name[64];
+    char genre[LM_STR];
+    char release[LM_STR];
+    char developer[LM_STR];
+    char publisher[LM_STR];
+    char metacritic[LM_STR];
+    char rating[LM_STR];
+    char lastPlayed[16];
+    char desc[256];
+    short score;                          /* leading int of metacritic, -1 none */
+    short sizeMB;
+    int playtime;                         /* minutes */
+    int playcount;
+    char favorite;
+    char source;                          /* 0 unset, 1 burn, 2 share */
+} lib_meta_t;
+
+static lib_meta_t *libMeta;
+
+
+/* "92 / 100 (53 critics)" -> 92. "No entry (JP-only)" -> -1. Leading digits and
+   nothing cleverer: the field is written by hand and a score that does not lead
+   the string is a field that was not a score. */
+static short libScoreOf(const char *v)
+{
+    int n = 0;
+    if (!v || *v < '0' || *v > '9')
+        return -1;
+    while (*v >= '0' && *v <= '9')
+        n = n * 10 + (*v++ - '0');
+    return (short)(n > 100 ? -1 : n);
+}
+
+static void libMetaCopy(char *dst, size_t n, config_set_t *cfg, const char *key)
+{
+    const char *v = NULL;
+    if (configGetStr(cfg, key, &v) && v)
+        snprintf(dst, n, "%s", v);
+    else
+        dst[0] = '\0';
+}
+
+/* Read one game's config, keep the fields, free the config. The free is the
+   whole point: without it this is the same leak with an extra step. */
+static lib_meta_t *libMetaGet(int idx)
+{
+    lib_meta_t *m;
+    config_set_t *cfg;
+    int v;
+
+    if (!libMeta || idx < 0 || idx >= libCount)
+        return NULL;
+    m = &libMeta[idx];
+    if (m->loaded)
+        return m;
+
+    m->loaded = -1;
+    m->score = -1;
+    if (!libList || !libList->itemGetConfig)
+        return m;
+    cfg = libList->itemGetConfig(libList, idx);
+    if (!cfg)
+        return m;
+
+    libMetaCopy(m->name, sizeof(m->name), cfg, CONFIG_ITEM_NAME);
+    libMetaCopy(m->genre, sizeof(m->genre), cfg, "Genre");
+    libMetaCopy(m->release, sizeof(m->release), cfg, "Release");
+    libMetaCopy(m->developer, sizeof(m->developer), cfg, "Developer");
+    libMetaCopy(m->publisher, sizeof(m->publisher), cfg, "Publisher");
+    libMetaCopy(m->metacritic, sizeof(m->metacritic), cfg, "Metacritic");
+    libMetaCopy(m->rating, sizeof(m->rating), cfg, "Rating");
+    libMetaCopy(m->lastPlayed, sizeof(m->lastPlayed), cfg, "LastPlayed");
+    libMetaCopy(m->desc, sizeof(m->desc), cfg, "Description");
+    m->score = libScoreOf(m->metacritic);
+    v = 0; configGetInt(cfg, "Playtime", &v);  m->playtime = v;
+    v = 0; configGetInt(cfg, "PlayCount", &v); m->playcount = v;
+    v = 0; configGetInt(cfg, "Favorite", &v);  m->favorite = (char)(v != 0);
+    v = 0; configGetInt(cfg, CONFIG_ITEM_SIZE, &v); m->sizeMB = (short)v;
+    {
+        const char *src = NULL;
+        m->source = 0;
+        if (configGetStr(cfg, "Source", &src) && src && src[0]) {
+            if (src[0] == 'B' || src[0] == 'b') m->source = 1;
+            else if (src[0] == 'S' || src[0] == 's') m->source = 2;
+        }
+    }
+    m->loaded = 1;
+
+    /* The line this whole table exists for. configFree clears the key list,
+       frees the filename AND frees the set itself (config.c:260), so there is
+       no free() to add after it -- that would be a double free. */
+    configFree(cfg);
+    return m;
+}
+
+/* Force the whole set in. Sorting by anything the config holds needs every
+   game's value before it can order any of them. Costs one read per game, once,
+   where the old code paid six reads per FRAME. */
+static void libMetaAll(void)
+{
+    int i;
+    for (i = 0; i < libCount; i++)
+        libMetaGet(i);
+}
+
 static void libReadMeta(int idx)
 {
-    static const char *rowA[] = {"Genre", "Release", "Developer"};
-    static const char *rowB[] = {CONFIG_ITEM_MEDIA, CONFIG_ITEM_FORMAT, "Rating", CONFIG_ITEM_SIZE};
-    config_set_t *cfg;
-    const char *v = NULL;
+    lib_meta_t *m;
 
     if (idx == libMetaIdx)
         return;
     libMetaIdx = idx;
     libMetaA[0] = libMetaB[0] = libMetaDesc[0] = libMetaName[0] = '\0';
-    if (!libList || !libList->itemGetConfig)
-        return;
-    cfg = libList->itemGetConfig(libList, idx);
-    if (!cfg)
+    m = libMetaGet(idx);
+    if (!m || m->loaded != 1)
         return;
 
-    if (configGetStr(cfg, CONFIG_ITEM_NAME, &v) && v)
-        snprintf(libMetaName, sizeof(libMetaName), "%s", v);
-    libJoin(libMetaA, sizeof(libMetaA), cfg, rowA, 3);
-    libJoin(libMetaB, sizeof(libMetaB), cfg, rowB, 4);
-    v = NULL;
-    if (configGetStr(cfg, "Description", &v) && v)
-        snprintf(libMetaDesc, sizeof(libMetaDesc), "%s", v);
+    snprintf(libMetaName, sizeof(libMetaName), "%s", m->name);
+    snprintf(libMetaDesc, sizeof(libMetaDesc), "%s", m->desc);
+    /* The two attribute strips, joined from the table rather than re-read. The
+       separator and the skip-if-empty rule are what libJoin did. */
+    {
+        const char *a[3];
+        const char *b[3];
+        int i, n;
+        a[0] = m->genre; a[1] = m->release; a[2] = m->developer;
+        b[0] = m->rating; b[1] = m->publisher; b[2] = m->metacritic;
+        libMetaA[0] = libMetaB[0] = '\0';
+        for (i = 0, n = 0; i < 3; i++)
+            if (a[i][0]) {
+                if (n++) strncat(libMetaA, "   \xc2\xb7   ", sizeof(libMetaA) - strlen(libMetaA) - 1);
+                strncat(libMetaA, a[i], sizeof(libMetaA) - strlen(libMetaA) - 1);
+            }
+        for (i = 0, n = 0; i < 3; i++)
+            if (b[i][0]) {
+                if (n++) strncat(libMetaB, "   \xc2\xb7   ", sizeof(libMetaB) - strlen(libMetaB) - 1);
+                strncat(libMetaB, b[i], sizeof(libMetaB) - strlen(libMetaB) - 1);
+            }
+    }
 }
 
 /* Case-insensitive A-Z over the item names, as an index permutation.
@@ -1267,6 +1392,8 @@ static int libSync(void)
         free(libOrder);
         free(infCoverId);
         free(infCoverUid);
+        free(libMeta);
+        libMeta = NULL;
         libCacheId = libCacheUid = libHeroId = libHeroUid = NULL;
         libLogoId = libLogoUid = libBgId = libBgUid = libOrder = NULL;
         infCoverId = infCoverUid = NULL;
@@ -1282,9 +1409,10 @@ static int libSync(void)
             libOrder = malloc(count * sizeof(int));
             infCoverId = malloc(count * sizeof(int));
             infCoverUid = malloc(count * sizeof(int));
+            libMeta = calloc(count, sizeof(lib_meta_t));
             if (libCacheId && libCacheUid && libHeroId && libHeroUid &&
                 libLogoId && libLogoUid && libBgId && libBgUid && libOrder &&
-                infCoverId && infCoverUid) {
+                infCoverId && infCoverUid && libMeta) {
                 memset(libCacheId, -1, count * sizeof(int));
                 memset(libCacheUid, -1, count * sizeof(int));
                 memset(libHeroId, -1, count * sizeof(int));
@@ -1302,8 +1430,8 @@ static int libSync(void)
                 free(libLogoId); free(libLogoUid);
                 free(libBgId); free(libBgUid);
                 free(libOrder);
-                free(infCoverId); free(infCoverUid);
-                infCoverId = infCoverUid = NULL;
+                free(infCoverId); free(infCoverUid); free(libMeta);
+                infCoverId = infCoverUid = NULL; libMeta = NULL;
                 libLogoId = libLogoUid = libBgId = libBgUid = libOrder = NULL;
                 libCacheId = libCacheUid = libHeroId = libHeroUid = NULL;
                 count = 0;
@@ -1742,7 +1870,7 @@ void shelfHandleInputLibrary(void)
    forward declaration is cheaper than shuffling two hundred lines to satisfy
    the order of a file. */
 static int homeLocalTime(int *hh, int *mm, int *days);
-static void homeWhen(char *out, size_t n, config_set_t *cfg, int todayDays);
+static void homeWhen(char *out, size_t n, const char *lastPlayed, int todayDays);
 static void homeFormatTime(char *out, size_t n, int minutes);
 
 /* ------------------------------------------------------------- Details page
@@ -1989,7 +2117,7 @@ static u64 infDrawButton(int x, int w, int on)
 
 void shelfRenderInfo(void)
 {
-    config_set_t *cfg = NULL;
+    lib_meta_t *minf;
     item_list_t *list = menuGetActiveList();
     char buf[160], when[32];
     const char *v = NULL;
@@ -2003,8 +2131,9 @@ void shelfRenderInfo(void)
     libReadMeta(infIdx);
     if (infWide < 0)
         infCheckWidescreen();
-    if (list->itemGetConfig)
-        cfg = list->itemGetConfig(list, infIdx);
+    /* From the table, not the device. This line used to open, read and parse
+       the game's CFG every frame and leak the result. */
+    minf = libMetaGet(infIdx);
 
     rmDrawRect(0, 0, 640, 480, LAND_BG);
 
@@ -2070,32 +2199,26 @@ void shelfRenderInfo(void)
 
     /* ---- columns one and two: the game ------------------------------------ */
     infCellN = 0;
-    if (cfg) {
+    if (minf && minf->loaded == 1) {
         /* MEDIA and FORMAT used to sit here and were dropped. Every disc on
            this device is a DVD and an ISO, so those two cells said the same
            thing on all forty-six pages while the grid holds eight -- they were
            costing the two slots METACRITIC and PUBLISHER now use. OPL still
            derives both keys; nothing stops them coming back if a CD or a ZSO
            ever turns up. */
-        static const struct { const char *label, *key; } rows[] = {
-            {"GENRE",      "Genre"},
-            {"RELEASED",   "Release"},
-            {"DEVELOPER",  "Developer"},
-            {"PUBLISHER",  "Publisher"},
-            {"METACRITIC", "Metacritic"},
-            {"RATING",     "Rating"},
+        const struct { const char *label; const char *value; } rows[] = {
+            {"GENRE",      minf->genre},
+            {"RELEASED",   minf->release},
+            {"DEVELOPER",  minf->developer},
+            {"PUBLISHER",  minf->publisher},
+            {"METACRITIC", minf->metacritic},
+            {"RATING",     minf->rating},
         };
-        for (i = 0; i < (int)(sizeof(rows) / sizeof(rows[0])); i++) {
-            v = NULL;
-            if (configGetStr(cfg, rows[i].key, &v) && v && v[0])
-                infCell(rows[i].label, v);
-        }
-        {
-            int size = 0;
-            if (configGetInt(cfg, CONFIG_ITEM_SIZE, &size) && size > 0) {
-                snprintf(buf, sizeof(buf), "%d MiB", size);
-                infCell("SIZE", buf);
-            }
+        for (i = 0; i < (int)(sizeof(rows) / sizeof(rows[0])); i++)
+            infCell(rows[i].label, rows[i].value);
+        if (minf->sizeMB > 0) {
+            snprintf(buf, sizeof(buf), "%d MiB", minf->sizeMB);
+            infCell("SIZE", buf);
         }
     }
     /* The one line the classic page never had: whether the cheat engine will
@@ -2116,11 +2239,11 @@ void shelfRenderInfo(void)
         int count = 0, mins = 0;
 
         when[0] = '\0';
-        if (cfg) {
+        if (minf && minf->loaded == 1) {
             homeLocalTime(&hh, &mm, &days);
-            homeWhen(when, sizeof(when), cfg, days);
-            configGetInt(cfg, "PlayCount", &count);
-            configGetInt(cfg, "Playtime", &mins);
+            homeWhen(when, sizeof(when), minf->lastPlayed, days);
+            count = minf->playcount;
+            mins = minf->playtime;
         }
         fntRenderString(appsFontHead, cx, INF_HEAD_Y, ALIGN_NONE, 0, 0,
                         "PLAY HISTORY", LAND_DIM);
@@ -2516,15 +2639,15 @@ static int homeLocalTime(int *hh, int *mm, int *days)
 
 /** "yesterday", "3d ago", "today" -- day granularity, which is all the stored
  *  DD-MM-YYYY supports. Empty when the key is absent or unparseable. */
-static void homeWhen(char *out, size_t n, config_set_t *cfg, int todayDays)
+static void homeWhen(char *out, size_t n, const char *lastPlayed, int todayDays)
 {
-    const char *v = NULL;
+    const char *v = lastPlayed;
     int d, m, y, ago;
 
     out[0] = '\0';
     /* No date on the console, no "3d ago" -- the elapsed-time fallback in
        homeLocalTime gives a usable clock but a meaningless calendar. */
-    if (!homeDateOk || !cfg || !configGetStr(cfg, "LastPlayed", &v) || !v)
+    if (!homeDateOk || !v || !v[0])
         return;
     if (sscanf(v, "%d-%d-%d", &d, &m, &y) != 3 || m < 1 || m > 12 || d < 1 || d > 31)
         return;
@@ -2570,13 +2693,14 @@ static void homeScan(void)
     if (!list->itemGetConfig || !list->itemGetName)
         return;
 
+    libSync();                 /* so the table exists even if Library never has */
     for (i = 0; i < count; i++) {
-        config_set_t *cfg = list->itemGetConfig(list, i);
-        int mins = 0;
+        lib_meta_t *m = libMetaGet(i);
+        int mins;
         homeTotalTitles++;
-        if (!cfg)
+        if (!m)
             continue;
-        configGetInt(cfg, "Playtime", &mins);
+        mins = m->playtime;
         if (mins <= 0)
             continue;
         homeTotalMinutes += mins;
@@ -2660,11 +2784,16 @@ static int homeIndexOf(const char *startup)
     return -1;
 }
 
-static config_set_t *homeCfgOf(int recentIdx)
+/* The table entry for a recent-list position.
+ *
+ * This returned a freshly read config_set_t, and Home called it six times a
+ * frame -- once for the hero and once per tile -- allocating and leaking each
+ * one. It is a lookup now. homeIndexOf is still a linear scan of the item list,
+ * but that is memory, not the disk. */
+static lib_meta_t *homeMetaOf(int recentIdx)
 {
-    item_list_t *list = menuGetActiveList();
     int i = homeIndexOf(oplRecentStartup(recentIdx));
-    return (i >= 0 && list && list->itemGetConfig) ? list->itemGetConfig(list, i) : NULL;
+    return (i >= 0) ? libMetaGet(i) : NULL;
 }
 
 static GSTEXTURE *homeArt(image_cache_t *cache, int *ids, int *uids, int idx)
@@ -2847,15 +2976,11 @@ static void homeDrawDash(void)
     } else {
         GSTEXTURE *bg  = homeArt(homeHero, homeHeroId, homeHeroUid, 0);
         GSTEXTURE *cov = homeArt(homeCover, homeCovId, homeCovUid, 0);
-        config_set_t *cfg = homeCfgOf(0);
+        lib_meta_t *hm = homeMetaOf(0);
         const char *title = oplRecentTitle(0);
-        int mins = 0, plays = 0;
+        int mins = hm ? hm->playtime : 0, plays = hm ? hm->playcount : 0;
 
-        if (cfg) {
-            configGetInt(cfg, "Playtime", &mins);
-            configGetInt(cfg, "PlayCount", &plays);
-        }
-        homeWhen(when, sizeof(when), cfg, days);
+        homeWhen(when, sizeof(when), hm ? hm->lastPlayed : NULL, days);
 
         /* Focus lifts: the card grows a few pixels on every side and drifts a
            little more, which reads as coming forward rather than as changing
@@ -2934,7 +3059,7 @@ static void homeDrawDash(void)
                 int ty = 202 - lift;
                 int tww = dw + 2 * lift, thh = th + 2 * lift;
                 GSTEXTURE *bg2 = homeArt(homeCover, homeCovId, homeCovUid, idx);
-                config_set_t *c2 = homeCfgOf(idx);
+                lib_meta_t *c2 = homeMetaOf(idx);
                 int m2 = 0;
 
                 if (bg2) rmDrawPixmap(bg2, cx, ty, ALIGN_NONE, rmWidthUnscaled(tww), thh,
@@ -2964,8 +3089,8 @@ static void homeDrawDash(void)
                                            is clamped at 1. */
                                         idx == homeSel ? LAND_TEXT : LAND_MUTE);
                 }
-                if (c2) configGetInt(c2, "Playtime", &m2);
-                homeWhen(when, sizeof(when), c2, days);
+                if (c2) m2 = c2->playtime;
+                homeWhen(when, sizeof(when), c2 ? c2->lastPlayed : NULL, days);
                 homeFormatTime(t, sizeof(t), m2);
                 buf[0] = '\0';
                 if (when[0] && t[0]) snprintf(buf, sizeof(buf), "%s \xc2\xb7 %s", when, t);
