@@ -1,7 +1,7 @@
 ATVOffroadFury4_US.iso
   Serial       SCUS_974.79
   Title        ATV Offroad Fury 4
-  Genre        Off-road racing
+  Genre        Racing
   Release      31 October 2006 (NA)
   Developer    Climax Studios
   Publisher    SCEA
@@ -12,7 +12,7 @@ ATVOffroadFury4_US.iso
 BionicleHeroes_US.iso
   Serial       SLUS_214.28
   Title        Bionicle Heroes
-  Genre        Third-person shooter
+  Genre        Shooter
   Release      15 November 2006 (NA)
   Developer    Traveller's Tales
   Publisher    Eidos Interactive
@@ -23,7 +23,7 @@ BionicleHeroes_US.iso
 Cars_US.iso
   Serial       SLUS_211.51
   Title        Cars
-  Genre        Open-world racing
+  Genre        Racing
   Release      6 June 2006 (NA)
   Developer    Rainbow Studios
   Publisher    THQ
@@ -34,7 +34,7 @@ Cars_US.iso
 CoDWaWFinalFronts_US.iso
   Serial       SLUS_217.46
   Title        Call of Duty: World at War -- Final Fronts
-  Genre        First-person shooter
+  Genre        Shooter
   Release      10 November 2008 (NA)
   Developer    Rebellion
   Publisher    Activision
@@ -45,7 +45,7 @@ CoDWaWFinalFronts_US.iso
 DynastyWarriors3_JP.iso
   Serial       SLPM_650.53
   Title        Dynasty Warriors 3 / Shin Sangokumusou 2
-  Genre        Hack and slash
+  Genre        Hack & Slash
   Release      2001 (JP)
   Developer    Omega Force
   Publisher    Koei
@@ -56,7 +56,7 @@ DynastyWarriors3_JP.iso
 DynastyWarriors4_JP.iso
   Serial       SLPM_652.48
   Title        Dynasty Warriors 4 / Shin Sangokumusou 3
-  Genre        Hack and slash
+  Genre        Hack & Slash
   Release      27 February 2003 (JP)
   Developer    Omega Force
   Publisher    Koei
@@ -67,7 +67,7 @@ DynastyWarriors4_JP.iso
 DynastyWarriors5_JP.iso
   Serial       SLPM_658.90
   Title        Dynasty Warriors 5 / Shin Sangokumusou 4
-  Genre        Hack and slash
+  Genre        Hack & Slash
   Release      24 February 2005 (JP)
   Developer    Omega Force
   Publisher    Koei
@@ -78,7 +78,7 @@ DynastyWarriors5_JP.iso
 FinalFantasy10_JP.iso
   Serial       SLPS_250.50
   Title        Final Fantasy X
-  Genre        Role-playing
+  Genre        RPG
   Release      19 July 2001 (JP)
   Developer    SquareSoft
   Publisher    Square
@@ -89,7 +89,7 @@ FinalFantasy10_JP.iso
 FinalFantasy12_JP.iso
   Serial       SLPM_663.20
   Title        Final Fantasy XII
-  Genre        Role-playing
+  Genre        RPG
   Release      16 March 2006 (JP)
   Developer    Square Enix
   Publisher    Square Enix
@@ -111,7 +111,7 @@ FlushedAway_US.iso
 GTAViceCity_JP.iso
   Serial       SLPM_654.88
   Title        Grand Theft Auto: Vice City
-  Genre        Open world / action
+  Genre        Open World
   Release      29 October 2002 (NA)
   Developer    Rockstar North
   Publisher    Rockstar Games
@@ -122,7 +122,7 @@ GTAViceCity_JP.iso
 GranTurismo3_US.iso
   Serial       SCUS_971.02
   Title        Gran Turismo 3: A-Spec
-  Genre        Racing simulation
+  Genre        Racing
   Release      9 July 2001 (NA)
   Developer    Polyphony Digital
   Publisher    SCEA
@@ -133,7 +133,7 @@ GranTurismo3_US.iso
 Gundam1YearWar_JP.iso
   Serial       SLPS_254.78
   Title        Mobile Suit Gundam: The One Year War
-  Genre        Action / mecha
+  Genre        Action
   Release      7 April 2005 (JP)
   Developer    Namco
   Publisher    Bandai
@@ -144,7 +144,7 @@ Gundam1YearWar_JP.iso
 JakAndDaxter_JP.iso
   Serial       SCPS_150.21
   Title        Jak and Daxter: The Precursor Legacy
-  Genre        3D platformer
+  Genre        Platformer
   Release      4 December 2001 (NA)
   Developer    Naughty Dog
   Publisher    SCEA
@@ -155,7 +155,7 @@ JakAndDaxter_JP.iso
 KingdomHearts2_JP.iso
   Serial       SLPM_662.33
   Title        Kingdom Hearts II
-  Genre        Action role-playing
+  Genre        RPG
   Release      22 December 2005 (JP)
   Developer    Square Enix
   Publisher    Square Enix
@@ -166,7 +166,7 @@ KingdomHearts2_JP.iso
 KingdomHearts_FinalMix_JP.iso
   Serial       SLPS_251.98
   Title        Kingdom Hearts Final Mix
-  Genre        Action role-playing
+  Genre        RPG
   Release      26 December 2002 (JP)
   Developer    Square
   Publisher    Square / Disney
@@ -177,7 +177,7 @@ KingdomHearts_FinalMix_JP.iso
 LegoStarWars2_US.iso
   Serial       SLUS_214.09
   Title        LEGO Star Wars II: The Original Trilogy
-  Genre        Action platformer
+  Genre        Platformer
   Release      12 September 2006 (NA)
   Developer    Traveller's Tales
   Publisher    LucasArts
@@ -188,7 +188,7 @@ LegoStarWars2_US.iso
 LegoStarWars_US.iso
   Serial       SLUS_210.83
   Title        LEGO Star Wars: The Video Game
-  Genre        Action platformer
+  Genre        Platformer
   Release      2 April 2005 (NA)
   Developer    Traveller's Tales
   Publisher    Eidos Interactive
@@ -199,7 +199,7 @@ LegoStarWars_US.iso
 MGS2_JP.iso
   Serial       SLPM_650.78
   Title        Metal Gear Solid 2: Sons of Liberty
-  Genre        Stealth action
+  Genre        Stealth
   Release      12 November 2001 (NA)
   Developer    KCEJ
   Publisher    Konami
@@ -210,7 +210,7 @@ MGS2_JP.iso
 MGS3_JP.iso
   Serial       SLPM_657.90
   Title        Metal Gear Solid 3: Snake Eater
-  Genre        Stealth action
+  Genre        Stealth
   Release      17 November 2004 (NA)
   Developer    KCEJ
   Publisher    Konami
@@ -221,7 +221,7 @@ MGS3_JP.iso
 MidnightClub3_US.iso
   Serial       SLUS_213.55
   Title        Midnight Club 3: DUB Edition Remix
-  Genre        Arcade street racing
+  Genre        Racing
   Release      13 March 2006 (NA)
   Developer    Rockstar San Diego
   Publisher    Rockstar Games
@@ -232,7 +232,7 @@ MidnightClub3_US.iso
 MinnaNoGolf3_JP.iso
   Serial       SCPS_150.16
   Title        Minna no Golf 3 / Hot Shots Golf 3
-  Genre        Sports / golf
+  Genre        Sports
   Release      2001 (JP)
   Developer    Clap Hanz
   Publisher    SCE
@@ -243,7 +243,7 @@ MinnaNoGolf3_JP.iso
 NCAAFinalFour2004_US.iso
   Serial       SCUS_972.78
   Title        NCAA Final Four 2004
-  Genre        Sports / basketball
+  Genre        Sports
   Release      11 November 2003 (NA)
   Developer    989 Sports
   Publisher    SCEA
@@ -254,7 +254,7 @@ NCAAFinalFour2004_US.iso
 NFLStreet2_US.iso
   Serial       SLUS_211.18
   Title        NFL Street 2
-  Genre        Sports / football
+  Genre        Sports
   Release      22 December 2004 (NA)
   Developer    EA Tiburon
   Publisher    EA Sports BIG
@@ -287,7 +287,7 @@ NarutoHero3_JP.iso
 OnePieceRush_JP.iso
   Serial       SLPS_254.73
   Title        One Piece: Grand Battle! Rush!
-  Genre        Fighting / brawler
+  Genre        Fighting
   Release      17 March 2005 (JP)
   Developer    Ganbarion
   Publisher    Bandai
@@ -298,7 +298,7 @@ OnePieceRush_JP.iso
 Onimusha2_JP.iso
   Serial       SLPM_651.00
   Title        Onimusha 2: Samurai's Destiny
-  Genre        Action adventure
+  Genre        Action
   Release      28 August 2002 (NA)
   Developer    Capcom
   Publisher    Capcom
@@ -309,7 +309,7 @@ Onimusha2_JP.iso
 Onimusha_JP.iso
   Serial       SLPM_650.10
   Title        Onimusha: Warlords
-  Genre        Action adventure
+  Genre        Action
   Release      25 January 2001 (JP)
   Developer    Capcom
   Publisher    Capcom
@@ -320,7 +320,7 @@ Onimusha_JP.iso
 PacManWorld3_US.iso
   Serial       SLUS_212.19
   Title        Pac-Man World 3
-  Genre        3D platformer
+  Genre        Platformer
   Release      15 November 2005 (NA)
   Developer    Blitz Games
   Publisher    Namco
@@ -331,7 +331,7 @@ PacManWorld3_US.iso
 RapalaProFishing_US.iso
   Serial       SLUS_210.12
   Title        Rapala Pro Fishing
-  Genre        Sports / fishing
+  Genre        Sports
   Release      31 August 2004 (NA)
   Developer    FUN Labs
   Publisher    Activision Value
@@ -342,7 +342,7 @@ RapalaProFishing_US.iso
 RatchetClank1_JP.iso
   Serial       SCPS_150.37
   Title        Ratchet & Clank
-  Genre        3D platformer / shooter
+  Genre        Platformer
   Release      4 November 2002 (NA)
   Developer    Insomniac Games
   Publisher    SCEA
@@ -353,7 +353,7 @@ RatchetClank1_JP.iso
 RatchetClank2_JP.iso
   Serial       SCPS_150.56
   Title        Ratchet & Clank: Going Commando
-  Genre        3D platformer / shooter
+  Genre        Platformer
   Release      11 November 2003 (NA)
   Developer    Insomniac Games
   Publisher    SCEA
@@ -364,7 +364,7 @@ RatchetClank2_JP.iso
 RatchetClank3_JP.iso
   Serial       SCPS_150.84
   Title        Ratchet & Clank: Up Your Arsenal
-  Genre        3D platformer / shooter
+  Genre        Platformer
   Release      3 November 2004 (NA)
   Developer    Insomniac Games
   Publisher    SCEA
@@ -375,7 +375,7 @@ RatchetClank3_JP.iso
 RatchetClank4_JP.iso
   Serial       SCPS_150.99
   Title        Ratchet: Deadlocked / 4th: Gigax
-  Genre        Third-person shooter
+  Genre        Shooter
   Release      25 October 2005 (NA)
   Developer    Insomniac Games
   Publisher    SCEA
@@ -386,7 +386,7 @@ RatchetClank4_JP.iso
 SSX3.iso
   Serial       SLPM_654.49
   Title        SSX 3
-  Genre        Sports / snowboarding
+  Genre        Sports
   Release      20 October 2003 (NA)
   Developer    EA Canada
   Publisher    EA Sports BIG
@@ -397,7 +397,7 @@ SSX3.iso
 Scaler_US.iso
   Serial       SLUS_209.57
   Title        Scaler
-  Genre        3D platformer
+  Genre        Platformer
   Release      20 October 2004 (NA)
   Developer    Artificial Mind & Mvmt
   Publisher    Global Star Software
@@ -408,7 +408,7 @@ Scaler_US.iso
 ShadowOfTheColossus.iso
   Serial       SCPS_150.97
   Title        Shadow of the Colossus / Wanda to Kyozou
-  Genre        Action adventure
+  Genre        Adventure
   Release      18 October 2005 (NA)
   Developer    Team Ico
   Publisher    SCE
@@ -463,7 +463,7 @@ StarWarsBattlefront_US.iso
 Suikoden4_JP.iso
   Serial       SLPM_656.00
   Title        Suikoden IV
-  Genre        Role-playing
+  Genre        RPG
   Release      19 August 2004 (JP)
   Developer    Konami CE Tokyo
   Publisher    Konami
@@ -474,7 +474,7 @@ Suikoden4_JP.iso
 SuzukiTTSuperbikes_US.iso
   Serial       SLUS_209.12
   Title        Suzuki TT Superbikes: Real Road Racing
-  Genre        Motorcycle racing
+  Genre        Racing
   Release      2005
   Developer    Jester Interactive
   Publisher    Valcon Games
@@ -485,7 +485,7 @@ SuzukiTTSuperbikes_US.iso
 ThrillvilleOffTheRails_US.iso
   Serial       SLUS_216.11
   Title        Thrillville: Off the Rails
-  Genre        Park management
+  Genre        Simulation
   Release      9 October 2007 (NA)
   Developer    Frontier Developments
   Publisher    LucasArts
@@ -496,7 +496,7 @@ ThrillvilleOffTheRails_US.iso
 TonyHawkAW_US.iso
   Serial       SLUS_212.08
   Title        Tony Hawk's American Wasteland
-  Genre        Sports / skateboarding
+  Genre        Sports
   Release      18 October 2005 (NA)
   Developer    Neversoft
   Publisher    Activision
