@@ -1201,6 +1201,30 @@ static char libMetaName[128];
    filesystem hit for a line of text. */
 /* A display position to the device's own index. Everything the page shows is
    ordered; everything it asks the device for is not. */
+static int libAt(int pos);
+
+/* A padded slot: a game that is not there, so a category can start its own
+   row. libAt hands back -1 and every reader has to expect it. */
+static int libIsGap(int pos)
+{
+    return libAt(pos) < 0;
+}
+
+/* Nudge the cursor off a blank. Tries the direction of travel first, so moving
+   right over the tail of a section lands on the head of the next one rather
+   than bouncing back, then the other way for the end of the list. */
+static void libSettle(int dir)
+{
+    int i;
+
+    if (libViewCount <= 0)
+        return;
+    for (i = libSel; i >= 0 && i < libViewCount; i += dir)
+        if (!libIsGap(i)) { libSel = i; return; }
+    for (i = libSel; i >= 0 && i < libViewCount; i -= dir)
+        if (!libIsGap(i)) { libSel = i; return; }
+}
+
 static int libAt(int pos)
 {
     return (libOrder && pos >= 0 && pos < libViewCount) ? libOrder[pos] : pos;
@@ -1450,6 +1474,9 @@ static int libGenreN;
 static char libSectLabel[LIB_SECT_MAX][LIB_SECT_LBL];
 static int libSectStart[LIB_SECT_MAX];   /* first view position, -1 if empty */
 static int libSectN;
+/* Scratch for the row padding. 1024 covers a library four times the size of
+   this one; past that libRebuild skips the padding instead of overrunning. */
+static int libPad[1024];
 
 static const char *libSortName(void)
 {
@@ -1596,7 +1623,10 @@ static void libBuildSections(void)
     for (i = 0; i < libSectN; i++)
         libSectStart[i] = -1;
     for (i = libViewCount - 1; i >= 0; i--) {
-        int sec = libSectOf(libOrder[i]);
+        int sec;
+        if (libOrder[i] < 0)
+            continue;                                 /* padding belongs to nobody */
+        sec = libSectOf(libOrder[i]);
         if (sec >= 0 && sec < libSectN)
             libSectStart[sec] = i;                    /* last write wins = first */
     }
@@ -1626,9 +1656,40 @@ static void libRebuild(void)
             libOrder[j + 1] = libOrder[j];
         libOrder[j + 1] = key;
     }
+    /* Each category on its own row.
+     *
+     * Grouping without this reads as one long list that happens to be sorted:
+     * a row can hold the tail of Platformer and the head of RPG, and the only
+     * thing saying where one ends is the wheel. Starting each section on a
+     * fresh row makes the grouping the thing you SEE, and it means L2/R2 always
+     * lands on the first tile of a row rather than somewhere mid-run.
+     *
+     * Only for Category. A-Z and Metacritic are continuous -- there is no
+     * boundary between 79 and 78 worth spending half a row on. */
+    if (libSort == SORT_CAT && libViewCount > 0 &&
+        libViewCount <= (int)(sizeof(libPad) / sizeof(libPad[0]))) {
+        /* Capped, and it SKIPS rather than truncates. Running past the scratch
+           buffer would drop games off the end of the library; losing the row
+           breaks costs a visual grouping and nothing else. */
+        int out = 0, prev = -1;
+        int n = libViewCount;
+
+        for (i = 0; i < n; i++)
+            libPad[i] = libOrder[i];
+        for (i = 0; i < n; i++) {
+            int sec = libSectOf(libPad[i]);
+            if (prev >= 0 && sec != prev)
+                while (out % LIB_COLS)
+                    libOrder[out++] = -1;
+            prev = sec;
+            libOrder[out++] = libPad[i];
+        }
+        libViewCount = out;
+    }
     libBuildSections();
     if (libSel >= libViewCount)
         libSel = libViewCount > 0 ? libViewCount - 1 : 0;
+    libSettle(1);
     libMetaIdx = -1;
 }
 
@@ -1696,7 +1757,10 @@ static int libSync(void)
             libLogoUid = malloc(count * sizeof(int));
             libBgId = malloc(count * sizeof(int));
             libBgUid = malloc(count * sizeof(int));
-            libOrder = malloc(count * sizeof(int));
+            /* Room for the padding. Grouping by category starts each
+               section on a fresh row, which costs at most LIB_COLS - 1 blanks
+               per section. */
+            libOrder = malloc((count + LIB_SECT_MAX * LIB_COLS) * sizeof(int));
             infCoverId = malloc(count * sizeof(int));
             infCoverUid = malloc(count * sizeof(int));
             libMeta = calloc(count, sizeof(lib_meta_t));
@@ -1954,6 +2018,15 @@ static void libDrawWheel(int gridX)
     /* The mark on the centred row, so the eye has something to sit on that is
        not the text itself. */
     rmDrawRect(rx + 5, mid - 1, 4, 2, LAND_INK);
+
+    /* Which button moves the wheel, placed where the movement goes: L2 above
+       the top of it, R2 below the bottom. A control nobody can find is a
+       control that does not exist, and there is no shape in shelfHint that
+       reads as a shoulder button. */
+    fntRenderString(appsFontLabel, rx, mid - (LIB_WHEEL_SIDE + 1) * LIB_WHEEL_PITCH - 4,
+                    ALIGN_RIGHT, 0, 0, "L2", LAND_DIM);
+    fntRenderString(appsFontLabel, rx, mid + (LIB_WHEEL_SIDE + 1) * LIB_WHEEL_PITCH - 4,
+                    ALIGN_RIGHT, 0, 0, "R2", LAND_DIM);
 }
 
 static void libDrawAlphabet(int gridX, int total)
@@ -2079,15 +2152,17 @@ void shelfRenderLibrary(void)
 
     /* Hero first: one request against a row of covers, and asking last put it
        behind a queue they had just filled. */
-    if (total > 0)
+    if (total > 0 && !libIsGap(libSel))
         rmPrefetchTexture(libHero(libAt(libSel)));
     /* The row below the two on screen, and the row above. Both are one keypress
        away and the cache is big enough to hold them now, so the art is resident
        before the move rather than after it. */
     for (i = LIB_PER; i < LIB_PER + LIB_COLS * 2 && first + i < total; i++)
-        rmPrefetchTexture(libCover(libAt(first + i)));
+        if (!libIsGap(first + i))
+            rmPrefetchTexture(libCover(libAt(first + i)));
     for (i = 1; i <= LIB_COLS && first - i >= 0; i++)
-        rmPrefetchTexture(libCover(libAt(first - i)));
+        if (!libIsGap(first - i))
+            rmPrefetchTexture(libCover(libAt(first - i)));
 
     /* Two rows drawn, the second clipped by the grid box to half a cell. */
     for (n = 0; n < LIB_COLS * 2 && first + n < total; n++) {
@@ -2098,10 +2173,13 @@ void shelfRenderLibrary(void)
            clip -- it scales -- so the half row came out squashed rather than cut.
            The bottom row is drawn whole and the footer, drawn afterwards, covers
            whatever runs past it, which is what "continues off the page" means. */
-        GSTEXTURE *cov = libCover(libAt(idx));
+        GSTEXTURE *cov;
 
         if (cy >= LIB_FTR_Y)
             break;
+        if (libIsGap(idx))
+            continue;                 /* a category's row starts clean */
+        cov = libCover(libAt(idx));
 
         if (cov)
             rmDrawPixmap(cov, cx, cy, ALIGN_NONE, LIB_ART_W, LIB_ART_H,
@@ -2140,8 +2218,10 @@ void shelfRenderLibrary(void)
         /* Ordering under its own mark, then the filter under L1/R1. A control
            that cycles is useless without saying where it currently is. */
         hx += shelfHint(hx, LIB_FTR_TEXT, HINT_ALT, libSortName());
-        /* L2/R2 only means something when the bar has sections to step. */
-        if (libSectN > 1) {
+        /* L2/R2 is labelled on the wheel itself in Category, where it moves
+           something you can see. On the two scales it still steps a section, so
+           the footer carries it there. */
+        if (libSectN > 1 && libSort != SORT_CAT) {
             fntRenderString(appsFontLabel, hx, LIB_FTR_TEXT, ALIGN_NONE, 0, 0,
                             "L2/R2", LAND_MUTE);
             hx += rmUnscaleX(fntCalcDimensions(appsFontLabel, "L2/R2")) + 18;
@@ -2153,7 +2233,17 @@ void shelfRenderLibrary(void)
                         libFilterName(), LAND_TEXT);
         hx += rmUnscaleX(fntCalcDimensions(appsFontSmall, libFilterName())) + 18;
         if (total > 0) {
-            snprintf(buf, sizeof(buf), "%d of %d", libSel + 1, total);
+            /* Games, not slots. The padding is layout, and counting it
+               would report a library bigger than the one you have. */
+            {
+                int rank = 0, tot = 0, q;
+                for (q = 0; q < libViewCount; q++) {
+                    if (libIsGap(q)) continue;
+                    tot++;
+                    if (q <= libSel) rank = tot;
+                }
+                snprintf(buf, sizeof(buf), "%d of %d", rank, tot);
+            }
             w = rmUnscaleX(fntCalcDimensions(appsFontSmall, buf));
             /* Right-aligned, and only drawn if the hints have not reached it --
                overlapping is worse than omitting a count you can infer. The
@@ -2217,16 +2307,24 @@ void shelfHandleInputLibrary(void)
         return;
 
     was = libSel;
-    if (getKeyOn(KEY_LEFT) && libSel > 0)
+    if (getKeyOn(KEY_LEFT) && libSel > 0) {
         libSel--;
-    else if (getKeyOn(KEY_RIGHT) && libSel < total - 1)
+        libSettle(-1);
+    } else if (getKeyOn(KEY_RIGHT) && libSel < total - 1) {
         libSel++;
+        libSettle(1);
+    }
     /* One row, so up and down page: there is no row above or below to reach. */
     /* A row at a time, which is also what scrolls the grid. */
-    else if (getKeyOn(KEY_UP) && libSel >= LIB_COLS)
+    else if (getKeyOn(KEY_UP) && libSel >= LIB_COLS) {
         libSel -= LIB_COLS;
-    else if (getKeyOn(KEY_DOWN))
+        /* Settle LEFT on a vertical move: the blanks are always at the END of a
+           section's last row, so the nearest real tile is behind them. */
+        libSettle(-1);
+    } else if (getKeyOn(KEY_DOWN)) {
         libSel = (libSel + LIB_COLS < total) ? libSel + LIB_COLS : total - 1;
+        libSettle(-1);
+    }
     else if (getKeyOn(SHELF_OK)) {
         /* Select opens the game, it does not start it. Launching straight from
            a grid meant the only difference between reading about a disc and

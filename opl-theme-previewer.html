@@ -2388,6 +2388,10 @@ function libDrawAlphabetPv(gridX, total, sel, cols) {
                 secs[k], col, SHELF_FNT_LBL);
     }
     R(rx + 5, mid - 1, 4, 2, 0x3A2E22);
+    // Which button moves the wheel, where the movement goes: L2 above, R2 below.
+    for (const [lbl, dy] of [["L2", -4 * 21], ["R2", 4 * 21]])
+      shelfText(rx - textWidth(lbl, SHELF_FNT_LBL), mid + dy - 4, lbl,
+                0x8A806C, SHELF_FNT_LBL);
     return;
   }
   for (let i = 0; i < secs.length; i++) {
