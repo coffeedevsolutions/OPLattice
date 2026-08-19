@@ -73,6 +73,7 @@ void guiSwitchScreen(int target);
 int guiOnMainScreen(void);
 int guiOnShelfPage(void);
 int guiShelfPageIndex(void);
+int guiGetCurrentScreen(void);
 
 void guiReloadScreenExtents();
 

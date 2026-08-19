@@ -504,6 +504,13 @@ void shelfHandleInput(void)
          * panel open across it would composite over the transition. */
         sfxPlay(SFX_CONFIRM);
         state = SHELF_CLOSING;
+        /* Settings is a classic screen and does not know the shell exists, so
+           it is told where Back goes before it takes over. Without this its
+           only exit is the classic game list. */
+        if (route[selected] == GUI_SCREEN_MENU) {
+            int here = guiGetCurrentScreen();
+            guiSetInfoReturn(here >= GUI_SCREEN_SHELF_HOME ? here : GUI_SCREEN_SHELF_HOME);
+        }
         guiSwitchScreen(route[selected]);
         return;
     }
@@ -1661,8 +1668,7 @@ void shelfRenderLibrary(void)
     rmDrawRect(SHELF_RAIL_W, LIB_FTR_Y, 640 - SHELF_RAIL_W, 1, LAND_RULE);
     {
         int hx = CONTENT_X, w, rx = 605;
-        hx += shelfHint(hx, LIB_FTR_TEXT, HINT_OK, "Play");
-        shelfHint(hx, LIB_FTR_TEXT, HINT_ALT, "Details");
+        hx += shelfHint(hx, LIB_FTR_TEXT, HINT_OK, "Select");
         if (total > 0) {
             snprintf(buf, sizeof(buf), "%d of %d", libSel + 1, total);
             w = rmUnscaleX(fntCalcDimensions(appsFontSmall, buf));
@@ -1715,16 +1721,16 @@ void shelfHandleInputLibrary(void)
         libSel -= LIB_COLS;
     else if (getKeyOn(KEY_DOWN))
         libSel = (libSel + LIB_COLS < total) ? libSel + LIB_COLS : total - 1;
-    else if (getKeyOn(SHELF_ALT)) {
+    else if (getKeyOn(SHELF_OK)) {
+        /* Select opens the game, it does not start it. Launching straight from
+           a grid meant the only difference between reading about a disc and
+           committing the console to it was which button you pressed, on a page
+           where the cursor moves six games at a time. Details is now the single
+           door to Play, and Square no longer opens details because there is
+           nothing left for it to do that Select does not. */
         sfxPlay(SFX_CONFIRM);
-        /* The theme's info page, not a second rendering of it. menuSelectIndex
-           hands the selection to the classic screen, which owns that layout. */
         shelfInfoOpen(libAt(libSel), GUI_SCREEN_SHELF_LIBRARY);
         guiSwitchScreen(GUI_SCREEN_SHELF_INFO);
-    } else if (getKeyOn(SHELF_OK) && libList && libList->itemLaunch && libList->itemGetConfig) {
-        sfxPlay(SFX_CONFIRM);
-        libList->itemLaunch(libList, libAt(libSel),
-                            libList->itemGetConfig(libList, libAt(libSel)));
         return;
     }
     shelfSfxMoved(was, libSel);
@@ -2176,10 +2182,18 @@ void shelfRenderInfo(void)
         }
     }
 
-    /* ---- footer: Back only, now that Play is a control -------------------- */
+    /* ---- footer ----------------------------------------------------------
+       Select and Back. Select earns a mark here because the two controls above
+       are the only things on the shell you activate rather than navigate, and a
+       page whose buttons look like buttons should still say which key presses
+       them. */
     rmDrawRect(SHELF_RAIL_W, LIB_FTR_Y, 640 - SHELF_RAIL_W, LIB_FTR_H_DRAWN, LAND_BG);
     rmDrawRect(SHELF_RAIL_W, LIB_FTR_Y, 640 - SHELF_RAIL_W, 1, LAND_RULE);
-    shelfHint(CONTENT_X, LIB_FTR_TEXT, HINT_BACK, "Back");
+    {
+        int hx = CONTENT_X;
+        hx += shelfHint(hx, LIB_FTR_TEXT, HINT_OK, "Select");
+        shelfHint(hx, LIB_FTR_TEXT, HINT_BACK, "Back");
+    }
 
     shelfDrawRail(infRail);
 }

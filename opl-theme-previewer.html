@@ -2831,8 +2831,7 @@ function renderShelfLibrary() {
   ctx.fillStyle = rgbHex(0x726756);
   ctx.fillRect(RAIL_W, LIBP.FTR_Y, SCREEN_W - RAIL_W, 1);
   let hx = CONTENT_X;
-  hx += shelfHintPv(hx, LIBP.FTR_TEXT, "cross", "Play");
-  shelfHintPv(hx, LIBP.FTR_TEXT, "square", "Details");
+  hx += shelfHintPv(hx, LIBP.FTR_TEXT, "circle", "Select");
   const count = (sel + 1) + " of " + games.length;
   const cw = textWidth(count, SHELF_FNT_SM);
   if (605 - cw > hx + 8)
@@ -2993,7 +2992,11 @@ function renderShelfInfo() {
 
   R(RAIL_W, LIBP.FTR_Y, SCREEN_W - RAIL_W, SCREEN_H - LIBP.FTR_Y, 0xC9BFA6);
   R(RAIL_W, LIBP.FTR_Y, SCREEN_W - RAIL_W, 1, 0x726756);
-  shelfHintPv(CONTENT_X, LIBP.FTR_TEXT, "cross", "Back");
+  {
+    let hx = CONTENT_X;
+    hx += shelfHintPv(hx, LIBP.FTR_TEXT, "circle", "Select");
+    shelfHintPv(hx, LIBP.FTR_TEXT, "cross", "Back");
+  }
 
   shelfRailPv(1);
   ctx.restore();

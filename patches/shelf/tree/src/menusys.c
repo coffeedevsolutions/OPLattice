@@ -1141,8 +1141,21 @@ void menuHandleInputMenu()
     }
 
     if (getKeyOn(KEY_START) || getKeyOn(gSelectButton == KEY_CIRCLE ? KEY_CROSS : KEY_CIRCLE)) {
-        // Check if there is anything to show the user, at all.
-        if (gAPPStartMode || gETHStartMode || gBDMStartMode || gHDDStartMode || gMMCEStartMode) {
+        /* Back to whoever opened it. Reached from the shell's rail this used to
+           land on the classic game list -- a page the user had not been on, in a
+           style the shell replaced -- because the only exit written here was
+           GUI_SCREEN_MAIN. The shell sets its return before switching; anything
+           that does not set one still gets the old behaviour.
+
+           The device check below guards the classic list specifically: with no
+           device enabled there is nothing for it to show, so leaving the user
+           in Settings is deliberate. A shelf page has its own empty state and
+           does not need protecting from itself. */
+        int back = guiGetInfoReturn();
+
+        if (back >= GUI_SCREEN_SHELF_HOME) {
+            guiSwitchScreen(back);
+        } else if (gAPPStartMode || gETHStartMode || gBDMStartMode || gHDDStartMode || gMMCEStartMode) {
             guiSwitchScreen(GUI_SCREEN_MAIN);
             refreshMenuPosition();
         }

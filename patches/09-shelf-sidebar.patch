@@ -74,10 +74,10 @@ index a0699e9..bb9e7ae 100644
      CFG_ETHPREFIX,
      CFG_HDDSPINDOWN,
 diff --git a/include/gui.h b/include/gui.h
-index 79f256f..9544e9f 100644
+index 79f256f..5bfdf7f 100644
 --- a/include/gui.h
 +++ b/include/gui.h
-@@ -59,12 +59,28 @@ extern int guiFrameId;
+@@ -59,12 +59,29 @@ extern int guiFrameId;
  #define GUI_SCREEN_GAME_MENU 3
  #define GUI_SCREEN_APP_MENU  4
  
@@ -95,6 +95,7 @@ index 79f256f..9544e9f 100644
 +int guiOnMainScreen(void);
 +int guiOnShelfPage(void);
 +int guiShelfPageIndex(void);
++int guiGetCurrentScreen(void);
  
  void guiReloadScreenExtents();
  
@@ -317,7 +318,7 @@ index 35f50f1..3a56105 100644
  
      if (aligned & ALIGN_VCENTER) {
 diff --git a/src/gui.c b/src/gui.c
-index e82bd2c..199180b 100644
+index e82bd2c..0b007b5 100644
 --- a/src/gui.c
 +++ b/src/gui.c
 @@ -16,6 +16,7 @@
@@ -328,7 +329,7 @@ index e82bd2c..199180b 100644
  #include "include/ethsupport.h"
  #include "include/compatupd.h"
  #include "include/pggsm.h"
-@@ -87,13 +88,49 @@ static gui_screen_handler_t screenHandlers[] = {{&menuHandleInputMain, &menuRend
+@@ -87,13 +88,57 @@ static gui_screen_handler_t screenHandlers[] = {{&menuHandleInputMain, &menuRend
                                                  {&menuHandleInputMenu, &menuRenderMenu, 1},
                                                  {&menuHandleInputInfo, &menuRenderInfo, 1},
                                                  {&menuHandleInputGameMenu, &menuRenderGameMenu, 1},
@@ -359,6 +360,14 @@ index e82bd2c..199180b 100644
 +   page it can never be consumed, and must be held rather than left to run. */
 +/* 0 Home, 1 Library, 2 Apps -- the rail's order, so it can mark the current
 +   page without shelf.c needing to know the screen ids. -1 when not on one. */
++/* Which screen is on, as a GUI_SCREEN_* id. The shell needs this to say where
++   Back should go before it hands control to a classic screen; the classic
++   screens have never needed to ask. */
++int guiGetCurrentScreen(void)
++{
++    return (int)(screenHandler - &screenHandlers[0]);
++}
++
 +int guiShelfPageIndex(void)
 +{
 +    int i = (int)(screenHandler - &screenHandlers[0]);
@@ -379,7 +388,7 @@ index e82bd2c..199180b 100644
  static int transIndex;
  
  // Helper perlin noise data
-@@ -113,6 +150,39 @@ void guiReloadScreenExtents()
+@@ -113,6 +158,39 @@ void guiReloadScreenExtents()
      rmGetScreenExtents(&screenWidth, &screenHeight);
  }
  
@@ -419,7 +428,7 @@ index e82bd2c..199180b 100644
  void guiInit(void)
  {
      guiFrameId = 0;
-@@ -541,6 +611,7 @@ void guiShowConfig()
+@@ -541,6 +619,7 @@ void guiShowConfig()
      diaSetInt(diaConfig, CFG_HDDSPINDOWN, gHDDSpindown);
      diaSetString(diaConfig, CFG_BDMPREFIX, gBDMPrefix);
      diaSetString(diaConfig, CFG_ETHPREFIX, gETHPrefix);
@@ -427,7 +436,7 @@ index e82bd2c..199180b 100644
      diaSetInt(diaConfig, CFG_PLAYSTATS, gEnablePlayStats);
      diaSetVisible(diaConfig, CFG_LBL_PLAYSTATS, gEnableWrite);
      diaSetVisible(diaConfig, CFG_PLAYSTATS, gEnableWrite);
-@@ -566,6 +637,7 @@ void guiShowConfig()
+@@ -566,6 +645,7 @@ void guiShowConfig()
          diaGetString(diaConfig, CFG_EXITTO, gExitPath, sizeof(gExitPath));
          diaGetInt(diaConfig, CFG_ENWRITEOP, &gEnableWrite);
          diaGetInt(diaConfig, CFG_PLAYSTATS, &gEnablePlayStats);
@@ -435,7 +444,7 @@ index e82bd2c..199180b 100644
          diaGetInt(diaConfig, CFG_HDDSPINDOWN, &gHDDSpindown);
          diaGetString(diaConfig, CFG_BDMPREFIX, gBDMPrefix, sizeof(gBDMPrefix));
          diaGetString(diaConfig, CFG_ETHPREFIX, gETHPrefix, sizeof(gETHPrefix));
-@@ -1550,6 +1622,18 @@ static void guiReadPads()
+@@ -1550,6 +1630,18 @@ static void guiReadPads()
  // screen handlers. Fade transition code written by Maximus32
  static void guiShow()
  {
@@ -454,7 +463,7 @@ index e82bd2c..199180b 100644
      // is there a transmission effect going on or are
      // we in a normal rendering state?
      if (screenHandlerTarget) {
-@@ -1581,6 +1665,16 @@ static void guiShow()
+@@ -1581,6 +1673,16 @@ static void guiShow()
      } else
          // render with the set screen handler
          screenHandler->renderScreen();
@@ -587,7 +596,7 @@ index 8fa079a..9c0f9cf 100644
  
      // set gui settings.
 diff --git a/src/menusys.c b/src/menusys.c
-index 9cc2a8a..3282816 100644
+index 9cc2a8a..87113cf 100644
 --- a/src/menusys.c
 +++ b/src/menusys.c
 @@ -6,6 +6,7 @@
@@ -704,7 +713,31 @@ index 9cc2a8a..3282816 100644
  #ifdef PADEMU
                  guiGameSavePadEmuGlobalConfig(configGetByType(CONFIG_GAME));
                  guiGameSavePadMacroGlobalConfig(configGetByType(CONFIG_GAME));
-@@ -1133,6 +1198,31 @@ void menuHandleInputMain()
+@@ -1076,8 +1141,21 @@ void menuHandleInputMenu()
+     }
+ 
+     if (getKeyOn(KEY_START) || getKeyOn(gSelectButton == KEY_CIRCLE ? KEY_CROSS : KEY_CIRCLE)) {
+-        // Check if there is anything to show the user, at all.
+-        if (gAPPStartMode || gETHStartMode || gBDMStartMode || gHDDStartMode || gMMCEStartMode) {
++        /* Back to whoever opened it. Reached from the shell's rail this used to
++           land on the classic game list -- a page the user had not been on, in a
++           style the shell replaced -- because the only exit written here was
++           GUI_SCREEN_MAIN. The shell sets its return before switching; anything
++           that does not set one still gets the old behaviour.
++
++           The device check below guards the classic list specifically: with no
++           device enabled there is nothing for it to show, so leaving the user
++           in Settings is deliberate. A shelf page has its own empty state and
++           does not need protecting from itself. */
++        int back = guiGetInfoReturn();
++
++        if (back >= GUI_SCREEN_SHELF_HOME) {
++            guiSwitchScreen(back);
++        } else if (gAPPStartMode || gETHStartMode || gBDMStartMode || gHDDStartMode || gMMCEStartMode) {
+             guiSwitchScreen(GUI_SCREEN_MAIN);
+             refreshMenuPosition();
+         }
+@@ -1133,6 +1211,31 @@ void menuHandleInputMain()
       */
      int grid = menuRowStep() > 1;
  
@@ -736,7 +769,7 @@ index 9cc2a8a..3282816 100644
      if (getKey(KEY_LEFT)) {
          if (grid)
              menuPrevItem();
-@@ -1212,7 +1302,7 @@ void menuHandleInputInfo()
+@@ -1212,7 +1315,7 @@ void menuHandleInputInfo()
  {
      if (getKeyOn(KEY_CROSS)) {
          if (gSelectButton == KEY_CIRCLE)
@@ -745,7 +778,7 @@ index 9cc2a8a..3282816 100644
          else
              selected_item->item->execCross(selected_item->item);
      } else if (getKey(KEY_UP)) {
-@@ -1221,7 +1311,7 @@ void menuHandleInputInfo()
+@@ -1221,7 +1324,7 @@ void menuHandleInputInfo()
          menuNextV();
      } else if (getKeyOn(KEY_CIRCLE)) {
          if (gSelectButton == KEY_CROSS)
@@ -754,7 +787,7 @@ index 9cc2a8a..3282816 100644
          else
              selected_item->item->execCircle(selected_item->item);
      } else if (getKey(KEY_L1)) {
-@@ -1327,7 +1417,7 @@ void menuHandleInputGameMenu()
+@@ -1327,7 +1430,7 @@ void menuHandleInputGameMenu()
          if (menuID == GAME_COMPAT_SETTINGS) {
              guiGameShowCompatConfig(selected_item->item->current->item.id, selected_item->item->userdata, itemConfig);
          } else if (menuID == GAME_CHEAT_SETTINGS) {
@@ -763,7 +796,7 @@ index 9cc2a8a..3282816 100644
          } else if (menuID == GAME_GSM_SETTINGS) {
              guiGameShowGSConfig();
          } else if (menuID == GAME_VMC_SETTINGS) {
-@@ -1363,7 +1453,10 @@ void menuHandleInputGameMenu()
+@@ -1363,7 +1466,10 @@ void menuHandleInputGameMenu()
      }
  
      if (getKeyOn(KEY_START) || getKeyOn(gSelectButton == KEY_CIRCLE ? KEY_CROSS : KEY_CIRCLE)) {

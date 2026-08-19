@@ -114,6 +114,14 @@ int guiOnMainScreen(void)
    page it can never be consumed, and must be held rather than left to run. */
 /* 0 Home, 1 Library, 2 Apps -- the rail's order, so it can mark the current
    page without shelf.c needing to know the screen ids. -1 when not on one. */
+/* Which screen is on, as a GUI_SCREEN_* id. The shell needs this to say where
+   Back should go before it hands control to a classic screen; the classic
+   screens have never needed to ask. */
+int guiGetCurrentScreen(void)
+{
+    return (int)(screenHandler - &screenHandlers[0]);
+}
+
 int guiShelfPageIndex(void)
 {
     int i = (int)(screenHandler - &screenHandlers[0]);
