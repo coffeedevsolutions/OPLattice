@@ -74,8 +74,19 @@ done
 for f in "themes/$THEME"/*; do
     cmp -s "$f" "$V/THM/$THEME/$(basename "$f")" || { echo "  THEME differs: $(basename "$f")"; fail=1; }
 done
-cmp -s patches/build/OPNPS2LD-MMCE.ELF "$V/APPS/OPNPS2LD.ELF" || { echo "  ELF differs"; fail=1; }
-cmp -s patches/build/OPNPS2LD-MMCE.ELF "$V/APPS/OPL/OPNPS2LD.ELF" || { echo "  APPS/OPL ELF differs"; fail=1; }
+# The reference ELF is a build artefact and is not in the repository -- it ships
+# as a Release asset. Absent and differing are different failures, and `cmp`
+# reports both as a mismatch, so the missing case is named rather than reported
+# as a stale card that is actually fine.
+ref=patches/build/OPNPS2LD-MMCE.ELF
+if [ ! -f "$ref" ]; then
+    echo "  ELF reference missing: $ref"
+    echo "         download it from the project's Releases page into patches/build/"
+    fail=1
+else
+    cmp -s "$ref" "$V/APPS/OPNPS2LD.ELF" || { echo "  ELF differs"; fail=1; }
+    cmp -s "$ref" "$V/APPS/OPL/OPNPS2LD.ELF" || { echo "  APPS/OPL ELF differs"; fail=1; }
+fi
 cmp -s _deploy/APPS/OPL/title.cfg "$V/APPS/OPL/title.cfg" || { echo "  title.cfg differs"; fail=1; }
 
 # `find` exits nonzero when it cannot descend into the card's protected

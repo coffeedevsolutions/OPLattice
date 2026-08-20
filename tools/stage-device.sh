@@ -88,7 +88,9 @@ echo "  art       $cov COV (-> ${COV_W}x${COV_H}) + $cov COVHD (full size), $bg 
 # you know you are not using MMCE.
 build=${BUILD:-MMCE}
 elf="$root/patches/build/OPNPS2LD-$build.ELF"
-[ -f "$elf" ] || { echo "no such build: $elf" >&2; exit 1; }
+[ -f "$elf" ] || { echo "no such build: $elf" >&2
+                   echo "the loader ships as a Release asset; download it into patches/build/" >&2
+                   exit 1; }
 cp "$elf" "$out/APPS/OPNPS2LD.ELF"
 echo "  loader    $(du -h "$out/APPS/OPNPS2LD.ELF" | cut -f1 | tr -d ' ') ($build) -> APPS/"
 
