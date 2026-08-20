@@ -78,67 +78,129 @@ the element's drawn size does not reduce it. A 512×512 cover with `count=40` is
 ~31 MB against a 32 MB console — a theme that looks perfect in PCSX2 and
 black-screens on hardware.
 
-## Install
+## Getting it running
 
-### Prerequisites
+For someone who already has OPL booting on a PS2 and has never seen this code.
+Seven steps, ~15 minutes, no toolchain needed. Fuller detail in
+[`docs/INSTALL.md`](docs/INSTALL.md).
 
-| Tool | Needed for | |
-|---|---|---|
-| **Docker** | building the ELF | only if you build rather than download |
-| **ImageMagick** | the art pipeline | `brew install imagemagick` |
-| **Python 3** | `tools/*.py` | preinstalled on macOS |
-| **Node** | the test suite | `brew install node` |
+> **Keep a way back.** On an FMCB setup, booting with **no button held** runs the
+> OPL baked inside your memory card image, which nothing here touches. If a build
+> misbehaves, power-cycle without holding L1 and you are back on the old one.
+> Test on a setup you can recover.
 
-Nothing needs a local PS2 toolchain. The shell tools assume macOS (`sips`,
-`/Volumes/…`); the Python ones are portable.
+### Step 1 — Download the loader
 
-Full walkthrough in [`docs/INSTALL.md`](docs/INSTALL.md). The short version:
+Get the ELF from [Releases](../../releases). **Pick the right one:**
 
-**Use a prebuilt ELF.** Grab `OPNPS2LD.ELF` from
-[Releases](../../releases) and put it where your chip boots OPL from — usually
-`mc0:/OPL/OPNPS2LD.ELF`, or `mmce0:/APPS/` on an SD2PSX. Binaries are Release
-assets rather than repository files, because rebuilding two 1.3 MB ELFs on every
-commit had put 110 MB of dead weight in this history.
+| File | For |
+|---|---|
+| `OPNPS2LD-MMCE.ELF` | **Most people.** Supports memory-card SD devices — SD2PSX, MemCard PRO2 |
+| `OPNPS2LD-mainline.ELF` | Mainline OPL only |
 
-**Or build it.** Nothing here needs a local toolchain — the build runs in Docker:
+⚠️ A mainline ELF has **no MMCE support at all**. Flashing it on an SD2PSX makes
+the memory-card SD disappear entirely. When unsure, take the MMCE build.
 
-```bash
-git clone --depth 1 --branch OPL-MMCE-beta-2 \
-  https://github.com/ps2-mmce/Open-PS2-Loader opl-mmce
-cd opl-mmce
-python3 ../patches/04-mmce-fork-toolchain.py .
-for p in 01-opl-tile-grid 02-opl-sort-and-recent 03-opl-menu-tabs \
-         05-mmce-device-integration; do git apply --3way ../patches/$p.patch; done
-docker run --rm -v "$PWD":/src -w /src ps2dev/ps2dev:latest sh -c \
-  'apk add --no-cache make git bash python3 py3-yaml >/dev/null && \
-   git config --global --add safe.directory /src && make RELEASE=1'
-```
+### Step 2 — Put it where your console boots OPL from
 
-`04` must run first — the MMCE fork branched in January 2025 and never rebased,
-so it does not compile on a current toolchain until those fixes land. Build
-serially; under `-j` the export-table steps race and fail spuriously.
+Replace the `OPNPS2LD.ELF` your setup already launches. Usually
+`mc0:/OPL/OPNPS2LD.ELF`. On an SD2PSX under FMCB it is typically
+`mmce0:/APPS/OPNPS2LD.ELF`, reached by **holding L1 at boot**.
 
-Building against **mainline** instead is the same shape minus `04` and `05`, but
-note that a mainline ELF has no MMCE support at all — flashing one on an MMCE
-setup makes the memory-card SD disappear.
+Back up the ELF you are replacing first — that is your fallback.
 
-**Then install a theme.** Copy a folder from [`themes/`](themes/) next to your
-other OPL themes and pick it in **Settings → Theme**. The `thm_` prefix must
-stay; OPL only scans directories containing it.
+If you are unsure which file your console actually launches, read
+[`docs/BOOTING.md`](docs/BOOTING.md) before copying anything. Flashing the wrong
+one and booting the other is the most common way to conclude "nothing changed".
 
-## Using it
+On macOS, `export COPYFILE_DISABLE=1` before copying, or you will write `._`
+sidecar files onto exFAT.
 
-Open the sidebar with **L3**, from anywhere — or hold **Left** at the left edge
-of the main list. **L3** or Back closes it.
+### Step 3 — Boot, and confirm you are running this build
+
+Start OPL and go to **Settings**.
+
+**Scroll down and look for a row labelled `SHELF UI`.**
+
+- **Present** → you are running this build. Continue.
+- **Absent** → you booted a different ELF than the one you flashed. Back to
+  Step 2 and [`docs/BOOTING.md`](docs/BOOTING.md).
+
+This is the only reliable check. The About screen will *not* tell you — this
+build and stock OPL report the same version string, because they are the same
+upstream commit.
+
+### Step 4 — Turn SHELF on
+
+**SHELF ships disabled.** A fresh install looks exactly like ordinary OPL until
+you switch it on, which is deliberate — with the toggle off, no shell state is
+advanced and no shell draw is issued at all.
+
+1. **Settings** → scroll to **`SHELF UI`** (just below **Play Stats**)
+2. Set it to **On**
+3. Scroll to the bottom and choose **Save Changes** — OPL does not persist
+   settings until you do
+
+It is stored as `shelf_ui` in `conf_opl.cfg` if you prefer to set it by hand.
+
+### Step 5 — Open the sidebar
+
+Press **L3** (click the left stick). The sidebar slides in with **Home**,
+**Library**, **Apps** and **Settings**. **L3** again, or Back, closes it.
+
+You can also hold **Left** at the left edge of the main list.
+
+If L3 does nothing, SHELF is still off — recheck Step 4, including Save Changes.
+
+### Step 6 — Console settings
+
+For everything to behave as documented:
+
+| Setting | Value |
+|---|---|
+| BDM Start Mode | **Auto** |
+| BDM HDD | **On** |
+| Enable Write Operations | **On** — Play Stats is hidden without it |
+| Enable PS2RD Cheat Engine | On, if you want cheats |
+
+BDM Start Mode and BDM HDD are separate gates: the first decides whether BDM
+runs at all, the second whether the ATA device among them is shown. Turning on
+only the second does nothing.
+
+### Step 7 — Install a theme (optional)
+
+Copy a folder from [`themes/`](themes/README.md) next to your other OPL themes,
+then **Settings → Theme**.
+
+| Theme | Needs |
+|---|---|
+| `thm_UnifiedLibrary` | stock OPL — works on any build |
+| `thm_GridHard` | patches 01+02, i.e. this build |
+| `thm_GridGlass`, `thm_GridEditorial` | patch 01, i.e. this build |
+
+The `thm_` prefix must stay — OPL only scans directories containing it.
+
+### That's it
+
+You now have SHELF running. Everything below is optional.
+
+**Covers are blank?** That is expected — this repository ships no art. See
+[Supplying art](#supplying-art).
+
+**Something is wrong?** The troubleshooting table in
+[`docs/INSTALL.md`](docs/INSTALL.md#troubleshooting) maps symptoms to causes.
+
+## Controls
 
 | Where | Button | Does |
 |---|---|---|
-| Sidebar | Up / Down, then confirm | Home, Library, Apps, Settings |
+| Anywhere | **L3** | Open / close the sidebar |
+| Main list | **Hold Left** at the left edge | Open the sidebar |
 | Library | D-pad | Move through the grid |
 | Library | **Square** | Cycle ordering |
 | Library | **L1 / R1** | Change the filter |
 | Library | **L2 / R2** | Jump a section |
-| Details | **Triangle** | Favourite, written through to the game CFG |
+| Details | **Triangle** | Favourite — written through to the game CFG |
 | In game | **D-pad Up** | Screenshot to `mc1:` (needs GSM enabled for that title) |
 
 Confirm and Back are **not** hardcoded to X and O. Which button confirms is the
@@ -166,8 +228,33 @@ reading `BOOT2` out of `SYSTEM.CNF` — and checks that `ART/<STARTUP>_COV.png`
 exists under that exact name. Filenames on disk are irrelevant to OPL, and this
 is the one mismatch that silently produces a grid of placeholder tiles.
 
-Naming, patterns and exact texel dimensions are documented in
-[`_art-truecolor/README.md`](_art-truecolor/README.md).
+## Building it yourself
+
+Only if you want to change the code — Step 1 gives you a working binary. The
+build runs in Docker; no local PS2 toolchain is needed.
+
+```bash
+git clone --depth 1 --branch OPL-MMCE-beta-2 \
+  https://github.com/ps2-mmce/Open-PS2-Loader opl-mmce
+cd opl-mmce
+python3 ../patches/04-mmce-fork-toolchain.py .
+for p in 01-opl-tile-grid 02-opl-sort-and-recent 03-opl-menu-tabs \
+         05-mmce-device-integration; do git apply --3way ../patches/$p.patch; done
+docker run --rm -v "$PWD":/src -w /src ps2dev/ps2dev:latest sh -c \
+  'apk add --no-cache make git bash python3 py3-yaml >/dev/null && \
+   git config --global --add safe.directory /src && make RELEASE=1'
+```
+
+`04` must run first — the MMCE fork branched in January 2025 and never rebased,
+so it does not compile on a current toolchain until those fixes land. Build
+serially; under `-j` the export-table steps race and fail spuriously.
+
+Prerequisites: **Docker** to build, **ImageMagick** (`brew install imagemagick`)
+for the art pipeline, **Python 3** for `tools/*.py`, **Node** for the tests. The
+shell tools assume macOS (`sips`, `/Volumes/…`); the Python ones are portable.
+
+Mainline instead of MMCE, and full detail:
+[`docs/INSTALL.md`](docs/INSTALL.md).
 
 ## Designing a theme
 
