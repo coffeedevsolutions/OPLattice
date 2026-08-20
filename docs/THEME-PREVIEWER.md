@@ -157,7 +157,7 @@ Zero dependencies. Both this and `tests/tests.html` (open it over the local
 server) extract the core logic straight out of `opl-theme-previewer.html`
 between marker comments, so there is no second copy to drift.
 
-93 assertions covering both cfg forms, CRLF/BOM handling, `write(parse(x)) === x`
+99 assertions covering both cfg forms, CRLF/BOM handling, `write(parse(x)) === x`
 over every fixture *and* OPL's own `conf_theme_OPL.cfg`, surgical single-line
 edits, the numbering-gap/unknown-type/`enabled=0` scan outcomes, the per-type
 defaults table, `displayedItems` arithmetic, the decorator count guard, colour

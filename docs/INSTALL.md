@@ -160,6 +160,10 @@ valid-looking filename that no game ever loads.
 Naming, patterns and exact texel dimensions:
 [`_art-truecolor/README.md`](../_art-truecolor/README.md).
 
+**The full art walkthrough is [ART-PIPELINE.md](ART-PIPELINE.md)** — what to
+install, the `artmap.txt` format, the filenames the tools expect, and how to go
+from an empty folder to art on the console. This repository ships no art.
+
 ## 5. Install a theme
 
 Copy a folder from [`themes/`](../themes/README.md) next to your other OPL

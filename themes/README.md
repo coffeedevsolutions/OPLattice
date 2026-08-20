@@ -1,7 +1,7 @@
 # Themes
 
 Four themes. One runs on stock OPL; three need
-[`../patches/opl-tile-grid.patch`](../patches/README.md).
+[the grid patches](../patches/README.md).
 
 | Theme | Needs | Look |
 |---|---|---|

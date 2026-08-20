@@ -27,7 +27,7 @@ written. Everything here follows from fixing that.
 | [`tools/`](tools/) | Art conversion, ISO checking, device staging, card and HDD sync |
 | [`docs/`](docs/) | Format reference, the SHELF campaign record, booting notes |
 | [`fixtures/`](fixtures/) | Three test themes, including one with ten deliberate faults |
-| [`tests/`](tests/) | 93 assertions, zero dependencies |
+| [`tests/`](tests/) | 99 assertions, zero dependencies |
 
 ## Status
 
@@ -79,6 +79,18 @@ the element's drawn size does not reduce it. A 512×512 cover with `count=40` is
 black-screens on hardware.
 
 ## Install
+
+### Prerequisites
+
+| Tool | Needed for | |
+|---|---|---|
+| **Docker** | building the ELF | only if you build rather than download |
+| **ImageMagick** | the art pipeline | `brew install imagemagick` |
+| **Python 3** | `tools/*.py` | preinstalled on macOS |
+| **Node** | the test suite | `brew install node` |
+
+Nothing needs a local PS2 toolchain. The shell tools assume macOS (`sips`,
+`/Volumes/…`); the Python ones are portable.
 
 Full walkthrough in [`docs/INSTALL.md`](docs/INSTALL.md). The short version:
 
@@ -135,7 +147,12 @@ console's decision — `gSelectButton` is O on a Japanese machine and X elsewher
 
 ### Supplying art
 
-This repository ships no cover art. Point the tools at your own:
+This repository ships no cover art — it is publisher-owned and not ours to
+redistribute. **[`docs/ART-PIPELINE.md`](docs/ART-PIPELINE.md) is the full
+walkthrough**, from an empty folder to art on the console; it covers the
+`artmap.txt` format, the filenames the tools expect, and what to install first.
+
+The short version:
 
 ```bash
 tools/check-art.py <ps2-dir>          # verify every ISO has art under the name OPL will look for
@@ -171,7 +188,7 @@ No build step, no dependencies, no server. Full guide:
 node tests/run.mjs
 ```
 
-93 assertions, zero dependencies. The suite extracts the core logic straight out
+99 assertions, zero dependencies. The suite extracts the core logic straight out
 of `opl-theme-previewer.html` between marker comments, so there is no second
 copy to drift.
 
@@ -182,6 +199,7 @@ copy to drift.
 | [`docs/THEME-PREVIEWER.md`](docs/THEME-PREVIEWER.md) | The previewer: loading, editing, validation, known differences |
 | [`docs/THEME-FORMAT.md`](docs/THEME-FORMAT.md) | Theme format derived from OPL's source, including the 14 places the official guide and the code disagree |
 | [`docs/INSTALL.md`](docs/INSTALL.md) | Building, flashing, deploying to a device |
+| [`docs/ART-PIPELINE.md`](docs/ART-PIPELINE.md) | Getting cover art onto the console, from nothing |
 | [`docs/BOOTING.md`](docs/BOOTING.md) | FMCB channels, the L1 hold, and which build you are actually running |
 | [`docs/SHELF-CAMPAIGN.md`](docs/SHELF-CAMPAIGN.md) | Phase ledger and the decisions that changed the plan |
 | [`docs/HDD-LAYOUT.md`](docs/HDD-LAYOUT.md) | Partition layout |
