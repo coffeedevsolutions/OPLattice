@@ -70,9 +70,13 @@ def dims(path):
     # `magick identify`, not sips: sips is macOS-only and ImageMagick is already
     # a hard dependency of every other step in this file, so asking it costs
     # nothing and this script runs anywhere the rest of the pipeline does.
-    out = subprocess.run(["magick", "identify", "-format", "%w %h", path],
-                         capture_output=True, text=True).stdout.split()
-    return (int(out[0]), int(out[1])) if len(out) == 2 else (0, 0)
+    # -ping reads the header only, and the newline plus first-line take matter:
+    # identify repeats the format string once per frame, so a layered or
+    # multi-frame source would otherwise run two sets of numbers together.
+    out = subprocess.run(["magick", "identify", "-ping", "-format", "%w %h\n", path],
+                         capture_output=True, text=True).stdout.splitlines()
+    first = out[0].split() if out else []
+    return (int(first[0]), int(first[1])) if len(first) == 2 else (0, 0)
 
 
 dl = sys.argv[1] if len(sys.argv) > 1 else os.path.expanduser("~/Downloads")

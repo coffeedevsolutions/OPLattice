@@ -60,23 +60,32 @@ def artdir(root):
     return None
 
 
+def discs(d, prefix=""):
+    out = []
+    for fn in sorted(os.listdir(d)):
+        p = os.path.join(d, fn)
+        if os.path.isfile(p) and fn.lower().endswith((".iso", ".bin")):
+            out.append((prefix + fn, fn, p))
+    return out
+
+
 def isos(root):
-    """Every disc under root, as (label, filename, path). Flat in a staging
-    directory; under CD/ and DVD/ on a device. Both are walked, because a device
-    tree is a perfectly ordinary thing to point this at, and finding nothing
-    there looks exactly like finding nothing wrong."""
-    dirs = [("", root)]
+    """Every disc under root, as (label, filename, path).
+
+    A staging directory holds them flat; a device -- a USB stick, an SMB share --
+    holds them under CD/ and DVD/. The root is checked first and wins outright,
+    rather than the two being added together: a directory that is both a staging
+    area and a copy of the device tree would otherwise report every disc twice,
+    and one stub per disc would become two."""
+    flat = discs(root)
+    if flat:
+        return flat
+
+    out = []
     for name in sorted(os.listdir(root)):
         d = os.path.join(root, name)
         if name.upper() in ("CD", "DVD") and os.path.isdir(d):
-            dirs.append((name + "/", d))
-
-    out = []
-    for prefix, d in dirs:
-        for fn in sorted(os.listdir(d)):
-            p = os.path.join(d, fn)
-            if os.path.isfile(p) and fn.lower().endswith((".iso", ".bin")):
-                out.append((prefix + fn, fn, p))
+            out += discs(d, name + "/")
     return out
 
 
