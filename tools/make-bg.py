@@ -67,13 +67,16 @@ TOLERANCE = 0.03          # within 3% of the frame aspect, just resize
 
 
 def dims(path):
-    out = subprocess.run(["sips", "-g", "pixelWidth", "-g", "pixelHeight", path],
-                         capture_output=True, text=True).stdout
-    w = h = 0
-    for line in out.splitlines():
-        if "pixelWidth:" in line: w = int(line.split(":")[1])
-        elif "pixelHeight:" in line: h = int(line.split(":")[1])
-    return w, h
+    # `magick identify`, not sips: sips is macOS-only and ImageMagick is already
+    # a hard dependency of every other step in this file, so asking it costs
+    # nothing and this script runs anywhere the rest of the pipeline does.
+    # -ping reads the header only, and the newline plus first-line take matter:
+    # identify repeats the format string once per frame, so a layered or
+    # multi-frame source would otherwise run two sets of numbers together.
+    out = subprocess.run(["magick", "identify", "-ping", "-format", "%w %h\n", path],
+                         capture_output=True, text=True).stdout.splitlines()
+    first = out[0].split() if out else []
+    return (int(first[0]), int(first[1])) if len(first) == 2 else (0, 0)
 
 
 dl = sys.argv[1] if len(sys.argv) > 1 else os.path.expanduser("~/Downloads")

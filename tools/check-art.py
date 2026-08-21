@@ -48,22 +48,63 @@ def startup(path):
                 return None, "SYSTEM.CNF has no BOOT2"
         return None, "no SYSTEM.CNF in root"
 
+def artdir(root):
+    """Where the art is. `art-out/` is the staging directory the pipeline writes;
+    `ART/` is the device layout OPL creates for itself (supportbase.c:822) and is
+    what an SMB share, a USB stick or a staged _deploy/ actually holds. The same
+    library wants checking on both sides of the copy, so accept either."""
+    for name in ("art-out", "ART"):
+        d = os.path.join(root, name)
+        if os.path.isdir(d):
+            return d
+    return None
+
+
+def discs(d, prefix=""):
+    out = []
+    for fn in sorted(os.listdir(d)):
+        p = os.path.join(d, fn)
+        if os.path.isfile(p) and fn.lower().endswith((".iso", ".bin")):
+            out.append((prefix + fn, fn, p))
+    return out
+
+
+def isos(root):
+    """Every disc under root, as (label, filename, path).
+
+    A staging directory holds them flat; a device -- a USB stick, an SMB share --
+    holds them under CD/ and DVD/. The root is checked first and wins outright,
+    rather than the two being added together: a directory that is both a staging
+    area and a copy of the device tree would otherwise report every disc twice,
+    and one stub per disc would become two."""
+    flat = discs(root)
+    if flat:
+        return flat
+
+    out = []
+    for name in sorted(os.listdir(root)):
+        d = os.path.join(root, name)
+        if name.upper() in ("CD", "DVD") and os.path.isdir(d):
+            out += discs(d, name + "/")
+    return out
+
+
 root = sys.argv[1]
-art = {f.rsplit("_", 1)[0] for f in os.listdir(os.path.join(root, "art-out"))
-       if f.endswith("_COV.png")}
+adir = artdir(root)
+if adir is None:
+    sys.exit(f"no art directory under {root} -- expected art-out/ (staging) or ART/ (device)")
+art = {f.rsplit("_", 1)[0] for f in os.listdir(adir) if f.endswith("_COV.png")}
+print(f"art from {os.path.relpath(adir, root)}/\n")
 
 found, missing, broken = [], [], []
-for fn in sorted(os.listdir(root)):
-    p = os.path.join(root, fn)
-    if not os.path.isfile(p) or not fn.lower().endswith((".iso", ".bin")):
-        continue
+for label, fn, p in isos(root):
     s, err = startup(p)
     if err:
-        broken.append((fn, err))
+        broken.append((label, err))
     elif s in art:
         found.append((fn, s))
     else:
-        missing.append((fn, s))
+        missing.append((label, s))
 
 print(f"{len(found)} ISOs with matching art")
 for fn, s in found:

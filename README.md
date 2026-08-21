@@ -167,6 +167,11 @@ BDM Start Mode and BDM HDD are separate gates: the first decides whether BDM
 runs at all, the second whether the ATA device among them is shown. Turning on
 only the second does nothing.
 
+**Streaming from a PC over SMB instead?** That table is the wrong one for you —
+you want **ETH Start Mode → Auto** and **BDM Start Mode → Off**, and the reason
+the second one matters is specific enough to have its own page:
+[`docs/SMB-STREAMING.md`](docs/SMB-STREAMING.md).
+
 ### Step 7 — Install a theme (optional)
 
 Copy a folder from [`themes/`](themes/README.md) next to your other OPL themes,
@@ -250,8 +255,10 @@ so it does not compile on a current toolchain until those fixes land. Build
 serially; under `-j` the export-table steps race and fail spuriously.
 
 Prerequisites: **Docker** to build, **ImageMagick** (`brew install imagemagick`)
-for the art pipeline, **Python 3** for `tools/*.py`, **Node** for the tests. The
-shell tools assume macOS (`sips`, `/Volumes/…`); the Python ones are portable.
+for the art pipeline, **Python 3** for `tools/*.py`, **Node** for the tests. Only
+`tools/sync-card.sh` is macOS-specific (`/Volumes`, `diskutil`); the rest runs
+anywhere `bash`, Python 3 and ImageMagick do — on Windows, under WSL or Git Bash
+for the shell scripts, natively for the Python ones.
 
 Mainline instead of MMCE, and full detail:
 [`docs/INSTALL.md`](docs/INSTALL.md).
@@ -289,6 +296,7 @@ copy to drift.
 | [`docs/ART-PIPELINE.md`](docs/ART-PIPELINE.md) | Getting cover art onto the console, from nothing |
 | [`docs/BOOTING.md`](docs/BOOTING.md) | FMCB channels, the L1 hold, and which build you are actually running |
 | [`docs/SHELF-CAMPAIGN.md`](docs/SHELF-CAMPAIGN.md) | Phase ledger and the decisions that changed the plan |
+| [`docs/SMB-STREAMING.md`](docs/SMB-STREAMING.md) | Streaming from a PC over Ethernet, on a slim with no drive |
 | [`docs/HDD-LAYOUT.md`](docs/HDD-LAYOUT.md) | Partition layout |
 | [`docs/GENRES.md`](docs/GENRES.md) | The sixteen-value genre vocabulary |
 | [`patches/README.md`](patches/README.md) | Every key each patch adds, and why |

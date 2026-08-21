@@ -89,7 +89,9 @@ cp "$ELF" patches/build/OPNPS2LD-MMCE.ELF
 cp "$ELF" _deploy/APPS/OPNPS2LD.ELF
 cp "$ELF" _deploy/APPS/OPL/OPNPS2LD.ELF
 
-printf "staged  ELF %s bytes\n" "$(stat -f%z "$ELF")"
+# wc -c, not stat: -f%z is BSD and -c%s is GNU, and this is the only line in
+# the script that would have cared which machine it ran on.
+printf "staged  ELF %s bytes\n" "$(wc -c < "$ELF" | tr -d ' ')"
 printf "        patch %s bytes, %s files\n" \
     "$(wc -c < "$PATCH" | tr -d ' ')" \
     "$(grep -c '^diff --git' "$PATCH")"
