@@ -161,6 +161,33 @@ card-less off a boot disc.
 
 ## 5. Getting art and themes onto it
 
+### Which OS the PC can be
+
+All three, for both halves of the job — hosting the share and running the art
+pipeline. What differs is only how you get a POSIX shell:
+
+| | Share | `tools/*.py` | `tools/*.sh` |
+|---|---|---|---|
+| **Linux** | Samba, with the dialect note above | native | native |
+| **macOS** | built-in sharing, or Samba | native | native |
+| **Windows** | built-in sharing, or a dedicated OPL SMB server | native | **WSL or Git Bash** |
+
+The Python tools are the ones that matter most — `check-art.py`, `merge-cfg.py`,
+`make-logos.py`, `make-playbtn.py`, `import-igs.py`, `mcd-extract.py`,
+`make-metadata.py` and `make-stub-isos.py` are pure standard library and run
+anywhere Python 3 does, Windows included, no shell required. Four more
+(`make-bg.py`, `make-cover.py`, `make-screenshots.py`, `palettize-art.py`) shell
+out to ImageMagick, which has a Windows installer. Only `font-vram.py` wants a
+third-party module (`freetype`), and it is a font-budgeting tool you will
+probably never run.
+
+Of the shell scripts, exactly one is macOS-bound: **`tools/sync-card.sh`**, which
+uses `/Volumes` and `diskutil` to sync and eject a memory card. That is not your
+tool anyway — §5's rsync is — and nothing else in `tools/` calls a macOS-only
+command.
+
+### Two tools that used to say otherwise
+
 Two tools in this repository were macOS-only for no good reason and now are not:
 
 - `tools/stage-device.sh` guarded on `sips`, which it never called. Removed — it
@@ -168,6 +195,9 @@ Two tools in this repository were macOS-only for no good reason and now are not:
 - `tools/make-bg.py` read image dimensions with `sips`. It now uses
   `magick identify`, which was already a hard dependency of every other line in
   the file.
+- `tools/stage-build.sh` printed the staged ELF's size with `stat -f%z`, which is
+  BSD syntax and fails outright on GNU `stat`. It uses `wc -c` now. (That one is
+  a maintainer's tool, not part of installing anything.)
 
 `tools/check-art.py` — the one the README tells you to run first — assumed the
 author's staging directory: ISOs flat in the root, art in `art-out/`. Pointed at

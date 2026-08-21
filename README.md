@@ -257,7 +257,8 @@ serially; under `-j` the export-table steps race and fail spuriously.
 Prerequisites: **Docker** to build, **ImageMagick** (`brew install imagemagick`)
 for the art pipeline, **Python 3** for `tools/*.py`, **Node** for the tests. Only
 `tools/sync-card.sh` is macOS-specific (`/Volumes`, `diskutil`); the rest runs
-anywhere `bash`, Python 3 and ImageMagick do.
+anywhere `bash`, Python 3 and ImageMagick do — on Windows, under WSL or Git Bash
+for the shell scripts, natively for the Python ones.
 
 Mainline instead of MMCE, and full detail:
 [`docs/INSTALL.md`](docs/INSTALL.md).

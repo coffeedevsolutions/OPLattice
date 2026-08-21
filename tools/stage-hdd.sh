@@ -73,7 +73,7 @@ LGO_W=400 LGO_H=120
 command -v python3 >/dev/null || { echo "needs python3" >&2; exit 1; }
 if   command -v magick  >/dev/null 2>&1; then IM=magick
 elif command -v convert >/dev/null 2>&1; then IM=convert
-else echo "needs ImageMagick -- brew install imagemagick" >&2; exit 1
+else echo "needs ImageMagick (brew install imagemagick / apt install imagemagick)" >&2; exit 1
 fi
 
 mkdir -p "$OUT"
