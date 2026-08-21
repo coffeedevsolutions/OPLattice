@@ -15,7 +15,8 @@ matters.
 
 - A PS2 that can run homebrew — modchip, FMCB, or FHDB.
 - Somewhere for OPL to live: memory card, SD2PSX/MMCE, or internal HDD.
-- Somewhere for games to live: USB, MX4SIO, HDD, or SMB.
+- Somewhere for games to live: USB, MX4SIO, HDD, or an SMB share on a PC — see
+  [SMB-STREAMING.md](SMB-STREAMING.md) for that last one.
 - Docker, **only if you want to build the ELF yourself**. There is no need for a
   local PS2 toolchain.
 
@@ -221,6 +222,11 @@ For the build to behave as documented:
 - **BDM HDD** → On
 - **Enable PS2RD Cheat Engine** → On
 - **Settings → Cheat Settings (global)** → Enable Cheats, Auto-select, Save Changes
+
+> **Games on an SMB share rather than a local device?** The first two are wrong
+> for you. Set **ETH Start Mode → Auto** and **BDM Start Mode → Off** — leaving
+> BDM on pins SHELF's Library to an empty USB device at boot. Full walkthrough:
+> [SMB-STREAMING.md](SMB-STREAMING.md).
 
 In-game screenshots need **GSM enabled for that title**; then D-pad Up writes a
 BMP to `mc1:`. Nothing in OPL reads those back — they are BMPs, on the memory

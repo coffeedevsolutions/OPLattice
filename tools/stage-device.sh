@@ -32,7 +32,6 @@ out=${2:-$root/_deploy}
 
 [ -d "$art" ] || { echo "no art dir: $art" >&2; exit 1; }
 command -v magick >/dev/null || { echo "needs ImageMagick" >&2; exit 1; }
-command -v sips >/dev/null || { echo "needs sips (macOS)" >&2; exit 1; }
 
 echo "staging into $out"
 rm -rf "$out"

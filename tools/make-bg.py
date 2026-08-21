@@ -67,13 +67,12 @@ TOLERANCE = 0.03          # within 3% of the frame aspect, just resize
 
 
 def dims(path):
-    out = subprocess.run(["sips", "-g", "pixelWidth", "-g", "pixelHeight", path],
-                         capture_output=True, text=True).stdout
-    w = h = 0
-    for line in out.splitlines():
-        if "pixelWidth:" in line: w = int(line.split(":")[1])
-        elif "pixelHeight:" in line: h = int(line.split(":")[1])
-    return w, h
+    # `magick identify`, not sips: sips is macOS-only and ImageMagick is already
+    # a hard dependency of every other step in this file, so asking it costs
+    # nothing and this script runs anywhere the rest of the pipeline does.
+    out = subprocess.run(["magick", "identify", "-format", "%w %h", path],
+                         capture_output=True, text=True).stdout.split()
+    return (int(out[0]), int(out[1])) if len(out) == 2 else (0, 0)
 
 
 dl = sys.argv[1] if len(sys.argv) > 1 else os.path.expanduser("~/Downloads")
