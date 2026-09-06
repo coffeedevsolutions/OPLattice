@@ -223,9 +223,10 @@ For the build to behave as documented:
 - **Enable PS2RD Cheat Engine** → On
 - **Settings → Cheat Settings (global)** → Enable Cheats, Auto-select, Save Changes
 
-> **Games on an SMB share rather than a local device?** The first two are wrong
-> for you. Set **ETH Start Mode → Auto** and **BDM Start Mode → Off** — leaving
-> BDM on pins SHELF's Library to an empty USB device at boot. Full walkthrough:
+> **Games on an SMB share rather than a local device?** The first two do nothing
+> for you. Set **ETH Start Mode → Auto** and **BDM Start Mode → Off**: leaving BDM
+> on pins SHELF's Library to an empty USB device at boot, which is a bug in patch
+> 09 rather than a setting you got wrong. Full walkthrough:
 > [SMB-STREAMING.md](SMB-STREAMING.md).
 
 In-game screenshots need **GSM enabled for that title**; then D-pad Up writes a

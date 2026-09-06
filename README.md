@@ -167,9 +167,9 @@ BDM Start Mode and BDM HDD are separate gates: the first decides whether BDM
 runs at all, the second whether the ATA device among them is shown. Turning on
 only the second does nothing.
 
-**Streaming from a PC over SMB instead?** That table is the wrong one for you —
-you want **ETH Start Mode → Auto** and **BDM Start Mode → Off**, and the reason
-the second one matters is specific enough to have its own page:
+**Streaming from a PC over SMB instead?** You want **ETH Start Mode → Auto** and
+**BDM Start Mode → Off**. The second is a workaround for a bug SHELF introduced,
+not a preference, and it has its own page:
 [`docs/SMB-STREAMING.md`](docs/SMB-STREAMING.md).
 
 ### Step 7 — Install a theme (optional)
