@@ -7,8 +7,8 @@ an internal drive, so this is the page that reconciles the two.
 
 **The short answer: it works, and nothing here needs recompiling.** SHELF, the
 patches and the themes are all indifferent to where a game lives. What differs is
-one console setting — where [`INSTALL.md`](INSTALL.md) is actively wrong for this
-setup — plus a share that has to speak a protocol Windows stopped enabling by
+one console setting, which is a workaround for a bug SHELF introduced and §3
+explains, plus a share that has to speak a protocol Windows stopped enabling by
 default.
 
 ---
@@ -44,7 +44,7 @@ MMCE"), so take `OPNPS2LD-MMCE.ELF` unless you have a reason not to.
 Keep the ELF you are replacing. On a slim the fallback is whatever your boot
 method already launches — see [`BOOTING.md`](BOOTING.md).
 
-## 3. The one setting INSTALL.md gets wrong for you
+## 3. The one setting to change, and the SHELF bug behind it
 
 [`INSTALL.md`](INSTALL.md) §7 and the README's Step 6 say **BDM Start Mode →
 Auto** and **BDM HDD → On**. Both are for a machine with USB or an ATA drive.
@@ -53,16 +53,24 @@ On this setup:
 | Setting | Value | |
 |---|---|---|
 | **ETH Start Mode** | **Auto** | Not mentioned anywhere else in these docs. Without it there is no SMB device at all. |
-| **BDM Start Mode** | **Off** | See below. Leaving it on has a specific, confusing consequence. |
+| **BDM Start Mode** | **Off** | A workaround for the SHELF bug below, not a preference. |
 | BDM HDD | — | No effect. A slim has no ATA bus and no expansion bay. |
 | Enable Write Operations | On | Play Stats is hidden without it, and favourites cannot be written back to the share. |
 | Enable PS2RD Cheat Engine | On, if you want cheats | Unchanged. |
 
 ### Why BDM Start Mode has to be Off, and what it looks like if it isn't
 
-SHELF boots straight to Home (`src/opl.c:2401`) rather than passing through the
-classic device list. Which device is "active" at that moment is decided by
-registration order, not by which one has games:
+**This is SHELF's bug, not OPL's.** An earlier revision of this page implied the
+setting advice in `INSTALL.md` was at fault. It is not. Stock OPL cannot reach
+this state, and patch 09 is what makes it reachable.
+
+Upstream boots to `GUI_SCREEN_MENU` (`gui.c:93`), and every route from there to
+the game list either calls `refreshMenuPosition()` (`menusys.c:923`) or names the
+device outright (`GUI_OP_SELECT_MENU`, `gui.c:1030`). Passing through that screen
+is what normalises the active device, and upstream gives you no way around it.
+
+SHELF boots straight to Home (`src/opl.c:2401`), which skips the only place that
+normalising happens. The active device is then whatever registered first:
 
 - `initAllSupport()` (`src/opl.c:441-447`) registers BDM first, then ETH, HDD,
   APPS, MMCE.
@@ -90,6 +98,9 @@ first menu appended and therefore the active list from the first frame. Its
 support object is registered synchronously at boot even though the SMB logon is
 still in flight, and `libSync` (`src/shelf.c:1722`) re-reads the count every
 frame, so the grid fills itself in when the scan lands.
+
+That is a workaround. The fix is for SHELF to normalise the active device the way
+the screen it replaced does, which would delete this whole section — see §8.
 
 ## 4. The share
 
@@ -286,13 +297,17 @@ SMB-streaming slim is the machine to attempt it on.
 
 ## 8. What would still need code
 
-Nothing on this list blocks a working install; all four are the difference
-between "works" and "was designed for this".
+Nothing on this list blocks a working install. The first is a bug this project
+introduced; the other three are the difference between "works" and "was designed
+for this".
 
-1. **A device picker in the sidebar**, or a `refreshMenuPosition()` when a device
-   first becomes visible. That would make §3's BDM warning unnecessary rather
-   than merely documented. It is a change to shared boot-path code and wants
-   hardware testing, so it is proposed here, not shipped.
+1. **Normalise the active device when SHELF starts.** This is the one item on the
+   list that is a defect rather than a gap: patch 09 boots past
+   `refreshMenuPosition()`, which upstream guarantees runs before anyone sees a
+   game list, and §3 is the fallout. Calling it (or an equivalent) at SHELF start
+   would delete §3, and a device picker in the sidebar would close the rest of
+   the gap. It is a change to shared boot-path code and wants hardware testing,
+   so it is proposed here, not shipped.
 2. **A retry policy for cover art on a lossy transport** — give `libCover` the
    treatment `libHero` already has, or scope the `-2` marking so a transport
    error and a missing file are told apart.
